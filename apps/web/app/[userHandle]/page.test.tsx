@@ -128,13 +128,13 @@ describe("ScholarProfilePage (/@[userHandle])", () => {
             params: Promise.resolve({ userHandle: "@speedy" }),
          });
 
-         expect(metadata.title).toBe("@speedy | HoldMeToIt Scholar Profile");
+         expect(metadata.title).toBe("@speedy | HoldMeToIt Profile");
          expect(metadata.description).toContain("20h study");
          expect(metadata.description).toContain("2-day streak");
+         expect(metadata.description).not.toContain("tasks");
+         expect(metadata.description).not.toContain("Recruit");
          expect(metadata.themeColor).toBe("#f59e0b"); // Gold Scholar
-         expect(metadata.openGraph?.title).toBe(
-            "@speedy | HoldMeToIt Scholar Profile"
-         );
+         expect(metadata.openGraph?.title).toBe("@speedy | HoldMeToIt Profile");
          expect((metadata.twitter as any)?.card).toBe("summary");
       });
    });

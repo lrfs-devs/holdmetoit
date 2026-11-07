@@ -3019,7 +3019,12 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - Destination dynamically resolves the participant's user ID and platform username to build `/@<platformUsername>?challengeId=<id>&tab=history` while preserving any `view` or `tab` query parameters.
       - Configured canonical alternate URL in `generateMetadata`.
       - Updated `page.test.tsx` to verify the 308 redirect and query forwarding.
-   6. **Quality Gates & Verification:**
+   6. **Profile Embed Title & Description Refinements (`profile-embed.ts`):**
+      - Changed embed title from `@<handle> | HoldMeToIt Scholar Profile` to `@<handle> | HoldMeToIt Profile`.
+      - Removed `Recruit (x trophies)` and tasks completed from the description and Discord embed fields, focusing the social preview on pure study metrics (`⏱️ study hours`, `🔥 active streak`, `⚔️ challenges won/entered`, and `🎮 pokedex`).
+      - Preserved dynamic trophy rank border color stripe via `getRankThemeColor`.
+      - Updated unit test suites in `profile-embed.test.ts`, `app/[userHandle]/page.test.tsx`, and `app/profile/[userId]/page.test.tsx`.
+   7. **Quality Gates & Verification:**
       - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
       - `npm run test:web`: ✅ 255 test files (2,696 tests) passing 100% green.
 - **NEXT STEP:** Ready for review and merging into `dev`.

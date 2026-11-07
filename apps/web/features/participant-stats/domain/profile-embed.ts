@@ -49,7 +49,7 @@ export function buildProfileEmbedTitle(profile: GlobalUserProfile): string {
    const handle = profile.user.username
       ? `@${profile.user.username}`
       : profile.user.displayName || "Scholar";
-   return `${handle} | HoldMeToIt Scholar Profile`;
+   return `${handle} | HoldMeToIt Profile`;
 }
 
 /**
@@ -62,16 +62,12 @@ export function buildProfileEmbedDescription(
    const parts: string[] = [
       `⏱️ ${careerStats.lifetimeStudyHuman || "0h"} study`,
       `🔥 ${careerStats.currentStreak}-day streak`,
-      `🏆 ${careerStats.trophyRank} (${careerStats.trophyTotal} 🏆)`,
    ];
 
    if (careerStats.totalChallengesEntered > 0) {
       parts.push(
          `⚔️ ${careerStats.challengesCompleted}/${careerStats.totalChallengesEntered} challenges`
       );
-   }
-   if (careerStats.totalTasksCompleted > 0) {
-      parts.push(`✅ ${careerStats.totalTasksCompleted} tasks`);
    }
    return parts.join(" • ");
 }
@@ -102,18 +98,8 @@ export function buildProfileDiscordEmbed(
          inline: true,
       },
       {
-         name: "🏆 Trophy Rank",
-         value: `${profile.careerStats.trophyRank} (${profile.careerStats.trophyTotal} 🏆)`,
-         inline: true,
-      },
-      {
          name: "⚔️ Challenges",
          value: `${profile.careerStats.challengesCompleted} won / ${profile.careerStats.totalChallengesEntered} entered`,
-         inline: true,
-      },
-      {
-         name: "✅ Tasks Done",
-         value: `${profile.careerStats.totalTasksCompleted}`,
          inline: true,
       },
       {

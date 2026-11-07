@@ -195,8 +195,8 @@ Scholar profiles use the canonical format `https://holdmetoit.vercel.app/@<platf
    - Edge proxy permits social crawlers (`Discordbot`, `Twitterbot`, `facebookexternalhit`, etc.) to pass without session cookies.
    - `generateMetadata` serves dynamic OpenGraph and Twitter card meta tags for rich in-channel embed cards.
 5. **Rich Embed Domain Engine (`features/participant-stats/domain/profile-embed.ts`):**
-   - Title: `@{username} | HoldMeToIt Scholar Profile`
-   - Description: Format-aware career summary (`⏱️ {lifetimeHours} study • 🔥 {streak}-day streak • 🏆 {rank} ({trophies} 🏆) • ⚔️ {completed}/{entered} challenges • ✅ {tasks} tasks`)
+   - Title: `@{username} | HoldMeToIt Profile`
+   - Description: Format-aware career summary focused on pure study achievements (`⏱️ {lifetimeHours} study • 🔥 {streak}-day streak • ⚔️ {completed}/{entered} challenges`), omitting trophy rank/recruit labels and daily tasks completed.
    - Accent Color: Hex/integer theme color matching scholar trophy rank (Obsidian `#10b981`, Diamond `#38bdf8`, Platinum `#a78bfa`, Gold `#f59e0b`, Silver `#94a3b8`, Bronze `#d97706`).
 6. **Backwards Compatibility & Redirection:**
    - Legacy `/profile/[userId]` routes perform a canonical 308 permanent redirect to `/@<platformUsername>`.

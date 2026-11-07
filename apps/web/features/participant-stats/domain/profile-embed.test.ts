@@ -62,7 +62,7 @@ describe("profile-embed", () => {
    describe("buildProfileEmbedTitle", () => {
       it("uses platform username with @ prefix", () => {
          expect(buildProfileEmbedTitle(mockProfile)).toBe(
-            "@alice_s | HoldMeToIt Scholar Profile"
+            "@alice_s | HoldMeToIt Profile"
          );
       });
 
@@ -72,19 +72,20 @@ describe("profile-embed", () => {
             user: { ...mockProfile.user, username: null },
          };
          expect(buildProfileEmbedTitle(profileWithoutUsername)).toBe(
-            "Alice Scholar | HoldMeToIt Scholar Profile"
+            "Alice Scholar | HoldMeToIt Profile"
          );
       });
    });
 
    describe("buildProfileEmbedDescription", () => {
-      it("includes study time, streak, trophies, challenges, and tasks", () => {
+      it("includes study time, streak, and challenges while omitting trophies and tasks", () => {
          const description = buildProfileEmbedDescription(mockProfile);
          expect(description).toContain("⏱️ 42h study");
          expect(description).toContain("🔥 5-day streak");
-         expect(description).toContain("🏆 Gold Scholar (1200 🏆)");
          expect(description).toContain("⚔️ 2/3 challenges");
-         expect(description).toContain("✅ 25 tasks");
+         expect(description).not.toContain("🏆");
+         expect(description).not.toContain("tasks");
+         expect(description).not.toContain("Recruit");
       });
    });
 
@@ -100,7 +101,11 @@ describe("profile-embed", () => {
          expect(embed.thumbnail).toEqual({
             url: "https://example.com/avatar.png",
          });
-         expect(embed.fields).toHaveLength(6);
+         expect(embed.fields).toHaveLength(4);
+         expect(embed.fields.map((f) => f.name)).not.toContain(
+            "🏆 Trophy Rank"
+         );
+         expect(embed.fields.map((f) => f.name)).not.toContain("✅ Tasks Done");
          expect(embed.fields[0]).toEqual({
             name: "⏱️ Lifetime Study",
             value: "42h",
