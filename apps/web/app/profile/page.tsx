@@ -7,18 +7,21 @@ import {
 } from "@/features/participant-stats/data/global-profile.repository";
 import { GlobalProfileView } from "@/features/participant-stats/presentation/global-profile-view";
 import type { ParticipantStatsViewModel } from "@/features/participant-stats/domain/participant-stats.types";
+import { FEATURE_FLAG_KEYS } from "@/features/feature-flags/domain/feature-flag-keys";
+import { isFeatureEnabled } from "@/features/feature-flags/api/server";
 
 export const dynamic = "force-dynamic";
 
 interface ProfilePageProps {
-   searchParams?: {
+   searchParams?: Promise<{
       challengeId?: string;
       tab?: string;
-   };
+   }>;
 }
 
 /** Renders the current authenticated session user's global profile view. */
 export default async function ProfilePage({ searchParams }: ProfilePageProps) {
+   const query = (await searchParams) ?? {};
    const session = await auth();
 
    if (!session?.user?.id) {
@@ -33,7 +36,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
    }
 
    let initialSnapshot: ParticipantStatsViewModel | null = null;
-   let selectedChallengeId = searchParams?.challengeId;
+   let selectedChallengeId = query.challengeId;
 
    if (profile.challengeHistory.length > 0) {
       const match = profile.challengeHistory.find(
@@ -55,6 +58,12 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
       }
    }
 
+   const [isGlobalLeaderboardEnabled, isPlatformUsernameEnabled] =
+      await Promise.all([
+         isFeatureEnabled(FEATURE_FLAG_KEYS.globalLeaderboard),
+         isFeatureEnabled(FEATURE_FLAG_KEYS.platformUsername),
+      ]);
+
    return (
       <GlobalProfileView
          profile={profile}
@@ -64,6 +73,8 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
          isOwnProfile={true}
          viewerRole={session.user.role}
          initialYptId={profile.user.yptId}
+         isGlobalLeaderboardEnabled={isGlobalLeaderboardEnabled}
+         isPlatformUsernameEnabled={isPlatformUsernameEnabled}
       />
    );
 }
