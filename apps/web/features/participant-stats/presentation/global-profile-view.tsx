@@ -18,6 +18,7 @@ import {
    Shield,
    Share2,
    Check,
+   ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { buildUserProfileUrl } from "../domain/profile-url";
@@ -107,6 +108,8 @@ export function GlobalProfileView({
       const tabParam = searchParams?.get("tab");
       if (tabParam === "history") return "history";
       if (tabParam === "settings" && isOwnProfile) return "settings";
+      if (tabParam === "overview") return "overview";
+      if (selectedChallengeId) return "history";
       return "overview";
    });
 
@@ -433,7 +436,7 @@ export function GlobalProfileView({
                            className="rounded-xl shrink-0"
                         >
                            <Link
-                              href={`/challenge/${challengeHistory[0].challengeId}/participant/${challengeHistory[0].participantId}`}
+                              href={`/challenge/${challengeHistory[0].challengeId}`}
                            >
                               Open Challenge Cockpit
                            </Link>
@@ -481,6 +484,28 @@ export function GlobalProfileView({
                   />
                ) : (
                   <div className="space-y-6">
+                     {currentChallengeId && (
+                        <div className="flex items-center justify-between">
+                           <Link
+                              href={
+                                 searchParams?.get("view")
+                                    ? `/challenge/${currentChallengeId}?tab=leaderboard&view=${encodeURIComponent(searchParams.get("view")!)}`
+                                    : `/challenge/${currentChallengeId}?tab=leaderboard`
+                              }
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-tertiary hover:text-white transition-colors"
+                              data-testid="back-to-challenge-link"
+                           >
+                              <ArrowLeft className="h-3.5 w-3.5" />
+                              <span>
+                                 Back to{" "}
+                                 {currentSnapshot?.profile.challengeTitle
+                                    ? `${currentSnapshot.profile.challengeTitle} Leaderboard`
+                                    : "Challenge Leaderboard"}
+                              </span>
+                           </Link>
+                        </div>
+                     )}
+
                      {/* Selector Bar */}
                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-border-default bg-surface-primary">
                         <div className="min-w-0">

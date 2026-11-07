@@ -526,7 +526,9 @@ export function UserDirectoryView({
                                        {user.activeChallenges.map((ch) => (
                                           <Link
                                              key={ch.id}
-                                             href={`/challenge/${ch.id}/participant/${ch.participantId}`}
+                                             href={buildUserProfileUrl(user, {
+                                                challengeId: ch.id,
+                                             })}
                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-brand-1/10 border border-brand-1/30 text-brand-1 text-label font-medium hover:bg-brand-1/20 transition-colors"
                                              title={`View ${ch.title} participant stats`}
                                           >

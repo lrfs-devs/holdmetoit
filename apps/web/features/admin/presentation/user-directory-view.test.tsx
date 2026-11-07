@@ -119,7 +119,7 @@ describe("UserDirectoryView", () => {
       expect(html).toContain("24.5h");
       expect(html).toContain("Diamond");
       expect(html).toContain("October Sprint");
-      expect(html).toContain("/challenge/chal_oct/participant/part_alice");
+      expect(html).toContain('href="/@usr_alice?challengeId=chal_oct"');
 
       // Bob
       expect(html).toContain("Bob Host");

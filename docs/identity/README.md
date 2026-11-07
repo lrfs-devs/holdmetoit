@@ -201,8 +201,13 @@ Scholar profiles use the canonical format `https://holdmetoit.vercel.app/@<platf
 6. **Backwards Compatibility & Redirection:**
    - Legacy `/profile/[userId]` routes perform a canonical 308 permanent redirect to `/@<platformUsername>`.
    - Legacy `/profile` redirects authenticated scholars to their own canonical `/@<platformUsername>`.
+   - Legacy `/challenge/[id]/participant/[participantId]` routes perform a canonical 308 permanent redirect to `/@<platformUsername>?challengeId=<id>&tab=history` (preserving `view` query parameters).
    - CUID access via `/@<cuid>` canonical-redirects to `/@<platformUsername>` if the scholar has a registered platform username.
-7. **Share Profile Button & Live Address Bar Sync:**
+7. **Unified Navigation & Challenge Context:**
+   - All participant links across Challenge Overview tab, Challenge Leaderboard tab, Challenge Manage roster, and Admin User Directory link directly to `/@<platformUsername>?challengeId=<id>`.
+   - When navigating to `/@<platformUsername>?challengeId=<id>`, `GlobalProfileView` defaults to the `"history"` tab to display the challenge snapshot directly.
+   - A contextual "Back to Challenge Leaderboard" navigation link is rendered above the snapshot, preserving the origin `view` mode (`today`, `team`, or `individual`).
+8. **Share Profile Button & Live Address Bar Sync:**
    - `GlobalProfileView` includes a "Share Profile" button copying the canonical URL to the clipboard with Sonner toast feedback.
    - Updating the username via `EditUsernameDialog` calls `router.replace(`/@${newUsername}`)` to immediately sync the browser URL.
 

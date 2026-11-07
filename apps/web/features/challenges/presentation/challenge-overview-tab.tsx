@@ -35,6 +35,7 @@ import type {
 import { getTeamColorPalette } from "@/features/challenges/domain/team-colors";
 import { SickStatusBadge } from "@/features/participant-status/presentation/sick-status-badge";
 import { PunishmentWall } from "@/features/accountability/presentation/punishment-wall";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import { ChallengeBettingCard } from "./challenge-betting-card";
 import { ChallengeDescriptionContent } from "./challenge-description-content";
 import { WithdrawChallengeButton } from "./withdraw-challenge-modal";
@@ -294,7 +295,9 @@ export function ChallengeOverviewTab({
                            >
                               <div className="flex items-center gap-3 min-w-0">
                                  <Link
-                                    href={`/challenge/${challenge.id}/participant/${p.participantId}`}
+                                    href={buildUserProfileUrl(p, {
+                                       challengeId: challenge.id,
+                                    })}
                                     className="h-8 w-8 rounded-full bg-surface-nested border overflow-hidden flex items-center justify-center text-xs font-bold text-white shrink-0 transition-colors"
                                     style={{
                                        borderColor: pPalette.borderMuted,
@@ -319,7 +322,9 @@ export function ChallengeOverviewTab({
                                  <div className="min-w-0">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                        <Link
-                                          href={`/challenge/${challenge.id}/participant/${p.participantId}`}
+                                          href={buildUserProfileUrl(p, {
+                                             challengeId: challenge.id,
+                                          })}
                                           className="text-sm font-semibold text-white hover:underline truncate block"
                                        >
                                           {p.displayName}

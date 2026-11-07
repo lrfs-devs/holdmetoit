@@ -257,4 +257,32 @@ describe("GlobalProfileView", () => {
       expect(html).toContain('data-testid="share-profile-button"');
       expect(html).toContain("Share Profile");
    });
+
+   it("defaults to history tab and renders back-to-challenge link when selectedChallengeId is provided", () => {
+      const html = renderToStaticMarkup(
+         <GlobalProfileView
+            profile={mockProfile}
+            selectedChallengeId="chal_recent"
+         />
+      );
+
+      expect(html).toContain('data-testid="history-content"');
+      expect(html).toContain('data-testid="back-to-challenge-link"');
+      expect(html).toContain('href="/challenge/chal_recent?tab=leaderboard"');
+   });
+
+   it("preserves view searchParam in back-to-challenge link when present", () => {
+      mockSearchParams = new URLSearchParams("view=team");
+      const html = renderToStaticMarkup(
+         <GlobalProfileView
+            profile={mockProfile}
+            selectedChallengeId="chal_recent"
+         />
+      );
+
+      expect(html).toContain(
+         'href="/challenge/chal_recent?tab=leaderboard&amp;view=team"'
+      );
+      mockSearchParams = new URLSearchParams();
+   });
 });

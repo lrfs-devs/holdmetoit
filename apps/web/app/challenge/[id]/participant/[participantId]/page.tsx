@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect, RedirectType } from "next/navigation";
 import type { Metadata } from "next";
 
 import { ErrorState } from "@/components/state/error-state";
@@ -11,7 +11,7 @@ import {
    PARTICIPANT_PREVIEW_COOKIE,
 } from "@/features/auth/domain/preview-mode";
 import { getChallengeParticipantStats } from "@/features/participant-stats/data/participant-stats.repository";
-import { ParticipantStatsView } from "@/features/participant-stats/presentation/participant-stats-view";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import { logError, logEvents } from "@/core/observability/logger";
 
 interface ParticipantStatsPageProps {
@@ -22,14 +22,18 @@ interface ParticipantStatsPageProps {
    searchParams?: Promise<{
       as?: string;
       view?: string;
+      tab?: string;
+      [key: string]: string | undefined;
    }>;
 }
 
 /** Builds participant profile metadata for search and social previews. */
 export async function generateMetadata({
    params,
+   searchParams,
 }: ParticipantStatsPageProps): Promise<Metadata> {
    const { id, participantId } = await params;
+   const query = (await searchParams) ?? {};
    let stats: Awaited<ReturnType<typeof getChallengeParticipantStats>> = null;
    try {
       stats = await getChallengeParticipantStats(id, participantId);
@@ -50,13 +54,28 @@ export async function generateMetadata({
       };
    }
 
+   const canonicalUrl = buildUserProfileUrl(
+      {
+         userId: stats.profile.userId,
+         username: stats.profile.username,
+      },
+      {
+         challengeId: id,
+         view: query.view,
+         tab: query.tab ?? "history",
+      }
+   );
+
    return {
       title: `${stats.profile.displayName} — ${stats.profile.challengeTitle} | HoldMeToIt`,
       description: `View ${stats.profile.displayName}'s study stats, targets, daily history, and leaderboard standing in ${stats.profile.challengeTitle}.`,
+      alternates: {
+         canonical: canonicalUrl,
+      },
    };
 }
 
-/** Loads challenge-scoped participant statistics with recovery handling. */
+/** Loads challenge-scoped participant statistics and permanently redirects (308) to canonical scholar profile URL. */
 export default async function ParticipantStatsPage({
    params,
    searchParams,
@@ -118,5 +137,17 @@ export default async function ParticipantStatsPage({
       notFound();
    }
 
-   return <ParticipantStatsView stats={stats} viewParam={query.view} />;
+   const destination = buildUserProfileUrl(
+      {
+         userId: stats.profile.userId,
+         username: stats.profile.username,
+      },
+      {
+         challengeId: id,
+         view: query.view,
+         tab: query.tab ?? "history",
+      }
+   );
+
+   permanentRedirect(destination, RedirectType.replace);
 }

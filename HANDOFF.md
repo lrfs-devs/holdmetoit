@@ -4,7 +4,7 @@
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
 > **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-07 (Session 205 — feat(identity): implement canonical user profile URLs /@<platformUsername>, mandatory authentication, and rich Discord embeds)
+> **Last Updated:** 2026-11-07 (Session 206 — feat(identity): unify challenge participant profile navigation with canonical scholar URLs /@<platformUsername>?challengeId=<id>)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
@@ -2994,4 +2994,32 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
    8. **Quality Gates & Verification:**
       - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
       - `npm run test:web`: ✅ 255 test files (2,693 tests) passing 100% green.
-- **NEXT STEP:** Submit PR to `dev` for peer review and staging deployment.
+- **NEXT STEP:** Align challenge-scoped profile views with canonical scholar handle URLs.
+
+### Session 206 — 2026-11-07 (feat(identity): unify challenge participant profile navigation with canonical scholar URLs /@<platformUsername>?challengeId=<id> — on `implement_user_profile_urls`)
+
+- **Context & Objectives:** Unify the scholar profile experience across the entire application. Clicking a scholar from anywhere (Challenge Overview tab, Challenge Leaderboard tab, Manage tab, Admin User Directory) must navigate to the single canonical profile URL `/@<platformUsername>?challengeId=<id>` rather than maintaining a disconnected legacy route at `/challenge/[id]/participant/[participantId]`.
+- **Changes Completed:**
+   1. **Challenge Overview Tab Links (`challenge-overview-tab.tsx`):**
+      - Imported `buildUserProfileUrl` and replaced raw `/challenge/${challenge.id}/participant/${p.participantId}` links with `buildUserProfileUrl(p, { challengeId: challenge.id })` for both avatar and scholar display name.
+      - Added test coverage in `challenge-overview-tab.test.tsx` asserting canonical user profile URL rendering.
+   2. **Challenge Manage Tab Links (`challenge-manage-tab.tsx`):**
+      - Imported `buildUserProfileUrl` and updated roster participant avatar and display name links to `buildUserProfileUrl(participant, { challengeId: challenge.id })`.
+   3. **Admin User Directory Links (`user-directory-view.tsx`):**
+      - Updated active challenges badges to link to `buildUserProfileUrl(user, { challengeId: ch.id })`.
+      - Updated `user-directory-view.test.tsx` assertions to match.
+   4. **Challenge Snapshot & Global Profile History Defaulting (`challenge-snapshot.tsx` & `global-profile-view.tsx`):**
+      - In `challenge-snapshot.tsx`, pointed `cockpitUrl` to `/challenge/${profile.challengeId}` so "View Full Challenge Cockpit" navigates to the challenge page itself rather than creating a redirect cycle back to the profile.
+      - In `global-profile-view.tsx`, defaulted `activeTab` to `"history"` whenever `selectedChallengeId` is provided (unless `tab` query param explicitly requests `"overview"` or `"settings"`), ensuring the user immediately sees the target challenge snapshot.
+      - Added a contextual "Back to Challenge Leaderboard" header link above the snapshot with origin `view` preservation (`today`, `team`, `individual`).
+      - Updated "Open Challenge Cockpit" button on the overview card to link to `/challenge/${challengeHistory[0].challengeId}`.
+      - Updated unit test suites in `challenge-snapshot.test.tsx` and `global-profile-view.test.tsx`.
+   5. **Legacy Route Permanent 308 Redirect (`app/challenge/[id]/participant/[participantId]/page.tsx`):**
+      - Converted the legacy participant route to issue an HTTP 308 permanent redirect via Next.js `permanentRedirect(destination, RedirectType.replace)`.
+      - Destination dynamically resolves the participant's user ID and platform username to build `/@<platformUsername>?challengeId=<id>&tab=history` while preserving any `view` or `tab` query parameters.
+      - Configured canonical alternate URL in `generateMetadata`.
+      - Updated `page.test.tsx` to verify the 308 redirect and query forwarding.
+   6. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 255 test files (2,696 tests) passing 100% green.
+- **NEXT STEP:** Ready for review and merging into `dev`.

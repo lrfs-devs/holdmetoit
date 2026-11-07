@@ -156,7 +156,7 @@ describe("ChallengeSnapshot", () => {
       );
 
       expect(html).toContain("View Full Challenge Cockpit");
-      expect(html).toContain('href="/challenge/chal_1/participant/part_1"');
+      expect(html).toContain('href="/challenge/chal_1"');
    });
 
    it("omits cockpit link when showCockpitLink is false", () => {
