@@ -2,30 +2,30 @@
 
 > **Project:** HoldMeToIt (Gamified Study Accountability & Challenge Management Platform)  
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
-> **Integration/Deploy Branch:** `dev` (latest `c8f9447`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
+> **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-03 (Session 200 on `feat/wrapped-doodle-mascots-#241` · Session 199 on `dev`)
+> **Last Updated:** 2026-11-06 (Session 204 — fix(identity): enforce exact case-normalized username queries, race condition fix, and migration pre-check)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
 
 ## 1. Current State at a Glance
 
-| Gate                                                         | Result (2026-10-18 — Session 132 + `dev` merge @ `e257d2d`)                                                                                                                                                                                                                                                                                                                                                      |
-| :----------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run typecheck`                                          | ✅ 0 errors                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `npm run lint`                                               | ✅ 0 errors (design-token guard: no hex / no primitive access / no legacy aliases)                                                                                                                                                                                                                                                                                                                               |
-| `npm test`                                                   | ✅ 211 files green (2079/2079 tests passing)                                                                                                                                                                                                                                                                                                                                                                     |
-| `npm run build`                                              | ✅ 18 routes + Edge Middleware compiled (production build clean including `/leaderboard`, `/admin`, `/wallet`, `/pokemon`, `/pokedex`, `/devboard`, `/changelog`)                                                                                                                                                                                                                                                |
-| Phase 0 feature parity (vs `FEATURES.md`)                    | ✅ **100%** — Solo auto-punishment math, uncapped solo capacity, ⚡ Solo Scholar branding, Host Pardon modal (`FEAT-PUN-04`), Punishment Wall (`FEAT-PUN-02`), Solo lifecycle E2E suite; canonical route redirects + edge guard landed from `dev`                                                                                                                                                                |
-| Phase 0 Milestone Gate 1 (`ROADMAP.md` §3.4)                 | ❌ Not passed: no live pilot challenge has run; Vercel deployment not recorded in the repo                                                                                                                                                                                                                                                                                                                       |
-| Phase 1 (Economy Foundation)                                 | ✅ 100% Shipped & Verified: Wallets, immutable append-only ledger, study rewards (100 coins/hr with fractional carry), available vs. reserved balance tracking                                                                                                                                                                                                                                                   |
-| Phase 2 (YPT, Challenge Economy, & Betting)                  | ✅ 100% Shipped & Verified: YPT webhook ingest & account linking, incremental study rewards, challenge reward settlement on lock, virtual-coin betting on Solo/Duo/Team challenges with atomic stake reservation and idempotent settlement                                                                                                                                                                       |
-| Phase 2A (Pokémon Catalogue Data — DB-resident)              | ✅ Catalogue lives entirely in the DB (1,025 species + 326 forms). The one-off bundle importer, its CLI, and the 21-species seed were removed; the `metadata` JSON was normalized into `PokemonForm` / `PokemonAbility` tables + scalar columns via `20261022000000_normalize_pokemon_catalogue`. The DB is the source of truth; the offline seeder `npm run db:seed:pokemon` re-populates an empty environment. |
-| Phase 3 (Pokémon Catalogue, Collection & Progression Found.) | ✅ 100% Shipped & Verified: Normalized schema (`PokemonSpecies`, `UserPokemon`), 6-tier rarity hierarchy, pure domain progress engine, Pokédex catalogue & collection views at `/pokemon`, detail modal, idempotent seeding script, spectator support                                                                                                                                                            |
-| Phase 4 (Pokémon Acquisition, Gacha & Economy Integrity)     | ✅ 100% Shipped & Verified: Elimination of arbitrary manual adjustments, authoritative deduplicated study hours (capped at 43.2ks/day), 500h/1000h hidden lifetime progression gates, CSPRNG acquisition engine, pity lock preservation, atomic transactions                                                                                                                                                     |
-| Phase 5 (Verified YPT Identity & Trophy Ranking System)      | ✅ 100% Shipped & Verified: Searchable member selector dropdown, strict admin approval gate, 1:1 verified YPT identity protection, immutable TrophyTransaction ledger, Clash of Clans–style ranking (Recruit -> Champion), 3-layer progression profile                                                                                                                                                           |
-| Phase 6 (ypt-js Integration & Automated Study Sync)          | ✅ 100% Shipped & Verified (Session 137 rework): a shared YPT **service account** (`YPT_EMAIL`/`YPT_PASSWORD`/`YPT_GROUP_IDS`) reads the group roster; users pick their own account from the list (no email/password), DEV-only approval, and **no per-user tokens**. Live study-hour sync (1 coin / 36s, fractional carry) now runs through the service account.                                                |
+| Gate                                                         | Result (2026-10-18 — Session 132 + `dev` merge @ `e257d2d`)                                                                                                                                                                                                                                                                                                            |
+| :----------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck`                                          | ✅ 0 errors                                                                                                                                                                                                                                                                                                                                                            |
+| `npm run lint`                                               | ✅ 0 errors (design-token guard: no hex / no primitive access / no legacy aliases)                                                                                                                                                                                                                                                                                     |
+| `npm test`                                                   | ✅ 211 files green (2079/2079 tests passing)                                                                                                                                                                                                                                                                                                                           |
+| `npm run build`                                              | ✅ 18 routes + Edge Middleware compiled (production build clean including `/leaderboard`, `/admin`, `/wallet`, `/pokemon`, `/pokedex`, `/devboard`, `/changelog`)                                                                                                                                                                                                      |
+| Phase 0 feature parity (vs `FEATURES.md`)                    | ✅ **100%** — Solo auto-punishment math, uncapped solo capacity, ⚡ Solo Scholar branding, Host Pardon modal (`FEAT-PUN-04`), Punishment Wall (`FEAT-PUN-02`), Solo lifecycle E2E suite; canonical route redirects + edge guard landed from `dev`                                                                                                                      |
+| Phase 0 Milestone Gate 1 (`ROADMAP.md` §3.4)                 | ❌ Not passed: no live pilot challenge has run; Vercel deployment not recorded in the repo                                                                                                                                                                                                                                                                             |
+| Phase 1 (Economy Foundation)                                 | ✅ 100% Shipped & Verified: Wallets, immutable append-only ledger, study rewards (100 coins/hr with fractional carry), available vs. reserved balance tracking                                                                                                                                                                                                         |
+| Phase 2 (YPT, Challenge Economy, & Betting)                  | ✅ 100% Shipped & Verified: YPT webhook ingest & account linking, incremental study rewards, challenge reward settlement on lock, virtual-coin betting on Solo/Duo/Team challenges with atomic stake reservation and idempotent settlement                                                                                                                             |
+| Phase 2A (Pokémon Catalogue Data — DB-resident)              | ✅ Catalogue lives entirely in the DB (1,025 species + 326 forms). The one-off bundle importer, its CLI, and seeders were removed; the `metadata` JSON was normalized into `PokemonForm` / `PokemonAbility` tables + scalar columns via `20261022000000_normalize_pokemon_catalogue`. The DB is the source of truth; empty environments restore from DB snapshot/dump. |
+| Phase 3 (Pokémon Catalogue, Collection & Progression Found.) | ✅ 100% Shipped & Verified: Normalized schema (`PokemonSpecies`, `UserPokemon`), 6-tier rarity hierarchy, pure domain progress engine, Pokédex catalogue & collection views at `/pokemon`, detail modal, idempotent seeding script, spectator support                                                                                                                  |
+| Phase 4 (Pokémon Acquisition, Gacha & Economy Integrity)     | ✅ 100% Shipped & Verified: Elimination of arbitrary manual adjustments, authoritative deduplicated study hours (capped at 43.2ks/day), 500h/1000h hidden lifetime progression gates, CSPRNG acquisition engine, pity lock preservation, atomic transactions                                                                                                           |
+| Phase 5 (Verified YPT Identity & Trophy Ranking System)      | ✅ 100% Shipped & Verified: Searchable member selector dropdown, strict admin approval gate, 1:1 verified YPT identity protection, immutable TrophyTransaction ledger, Clash of Clans–style ranking (Recruit -> Champion), 3-layer progression profile                                                                                                                 |
+| Phase 6 (ypt-js Integration & Automated Study Sync)          | ✅ 100% Shipped & Verified (Session 137 rework): a shared YPT **service account** (`YPT_EMAIL`/`YPT_PASSWORD`/`YPT_GROUP_IDS`) reads the group roster; users pick their own account from the list (no email/password), DEV-only approval, and **no per-user tokens**. Live study-hour sync (1 coin / 36s, fractional carry) now runs through the service account.      |
 
 ### 1.1 Live Routes
 
@@ -155,7 +155,7 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 > [!IMPORTANT]
 > **EXACT NEXT STEP (For Incoming Agent):**
 >
-> 0. Validate Session 162's duo identity changes: run the full `npm run test:web` / `npm run build:web`, then manually exercise `/challenge/seed-duos-october-2026` (team-view default, no VS panel, edit name + emoji as `mock_duo_1`, invalid/multi-emoji rejection, dry-run clear-to-null, combined audit row, locked-results read-only) at 360px. Apply migration `20261029000000_team_active_name_ci_unique` to each environment (back up first; verify no active case-insensitive duplicate team names). The local DB migration history currently diverges from the repo, so resolve `prisma migrate status` before running `migrate deploy`.
+> 0. **Next.js 16 migration (Session 201, `chore/nextjs-16-upgrade`):** implementation is green — `typecheck:web`, `lint:web`, 2,451 web tests, and the Turbopack `build:web` all pass. Review the branch, run the manual J1–J6 + 360px checks in the PR, then open the PR to `dev` and move the issue to `In Review`. Do **not** mark it `Done` until merged into `dev` and the release PR reaches `main`. Rate limiting is now delegated to an external/platform limiter — configure it before public deploy (see `SECURITY.md` SEC-03).
 > 1. Create the `challenge_wrapped_v1` feature flag in the target DB via `/devboard` (key `challenge_wrapped_v1`, `isEnabled = true`, `rolloutMode = TARGETED` for testers → `GLOBAL` for everyone). Wrapped is fail-closed and stays dark until this row exists.
 > 2. Restore the remaining deleted P0 UIs:
 >    - Host pardon modal (`FEAT-PUN-04`) inside the Manage tab.
@@ -183,6 +183,83 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 ---
 
 ## 7. Session Changelog (Last 3–5 Sessions)
+
+### Session 203 — 2026-11-06 (Merge `origin/dev` @ `8de6b8d` into `chore/nextjs-16-upgrade`, resolving PR #252 and #254 integrations)
+
+- **Merge Integration:**
+   - Synchronized branch with `origin/dev` (`8de6b8d`), incorporating PR #252 (URL security & mention shield by Harsh) and PR #254 (Leaderboard Day Filter by Krish).
+   - Resolved explicit conflict in `apps/web/features/participant-stats/data/global-profile.repository.test.ts`: adopted `origin/dev`'s `{ toFake: ["Date"] }` fake timer freeze (`2026-10-30T12:00:00.000Z`) inside the Winter Sprint fixture window.
+   - Fixed Next.js 16 async `searchParams` compatibility in `apps/web/app/challenge/[id]/page.tsx`: updated `initialLeaderboardDay={query.day ?? query.date}` using the awaited `query` object rather than synchronous `searchParams`, and added `day?: string; date?: string;` to the `Promise` type.
+   - Retained removal of in-memory rate limiter in `apps/web/app/api/feedback/route.test.ts` while integrating `origin/dev`'s `AUTH_URL` environment stubbing and `afterEach` un-stubbing.
+- **Database TLS & Root CA Verification Hardening:**
+   - Updated `packages/database/src/index.ts` with `isLocalDatabaseHost(url)` and `resolveSslConfig(url, customSsl)` to support custom trusted root CAs via `DATABASE_SSL_CA` or `DATABASE_SSL_REJECT_UNAUTHORIZED`.
+   - Preserved unencrypted local connections on `localhost`, `127.0.0.1`, `::1` (`[::1]`), and `.local` hosts without breaking Vitest suites or local Docker containers.
+   - Preserved Supabase compatibility (which uses private intermediate CA `Supabase Intermediate 2021 CA` on pooler/direct connections) while allowing full TLS validation when the Supabase root CA is provided.
+   - Added unit test suite in `apps/web/core/db/index.test.ts` verifying host detection, SSL resolution, CA injection, and PrismaClient initialization.
+- **Review Finding Resolutions & Audit Reconciliation:**
+   - `prisma.config.ts`: Updated URL resolution to ensure empty/blank `DIRECT_URL` cleanly falls back to `DATABASE_URL`.
+   - `docs/tasks/README.md`: Added explicit operator STOP instruction before running `db:migrate` when duplicate categories exist, along with self-contained, deterministic transactional SQL cleanup statements.
+   - `ISSUES.md`: Verified `npm audit --omit=dev` reports 0 vulnerabilities; retired `DEP-01` (Prisma 7.10.1 & deepmerge-ts 8.0.2 upgrade) and updated open finding counters.
+- **Quality Gates:**
+   - `npm run build -w @holdmetoit/database`: ✅ 0 errors
+   - `npm run build -w @holdmetoit/discord`: ✅ 0 errors
+   - `npm run typecheck -w @holdmetoit/tasker`: ✅ 0 errors
+   - `npm run test -w @holdmetoit/tasker`: ✅ 5/5 test files, 84/84 tests passing
+   - `npm run typecheck -w @holdmetoit/web`: ✅ 0 errors (`tsc --noEmit` exits with 0)
+   - `npm run test -w @holdmetoit/web`: ✅ 248/248 test files, 2,597/2,597 tests passing (100% green)
+   - `npm run lint -w @holdmetoit/web`: ✅ 0 errors (design-token guard passed)
+   - `npm run build -w @holdmetoit/web`: ✅ Next.js 16.4.5 Turbopack production build clean across all 21 routes
+   - `bash scripts/check-schema-migration.sh origin/main`: ✅ Passed (`datamodel_changed=0, migrations_changed=0`)
+- **NEXT STEP:** Submit PR to `dev` for `chore/nextjs-16-upgrade` and transition Jira issue to `In Review`.
+
+### Session 202 — 2026-11-05 (Prisma 7.10.1 migration, @prisma/adapter-pg driver adapter, env gateways & script cleanup on `chore/nextjs-16-upgrade`)
+
+- **Prisma 7.10.1 Upgrade & Config:**
+   - Upgraded `@prisma/client` and `prisma` to `7.10.1` across `packages/database`, `apps/web`, and `apps/tasker`. Added `@prisma/adapter-pg` (`7.10.1`), `pg` (`^8.16.3`), `zod`, and `dotenv`.
+   - Removed deprecated `url` and `directUrl` properties from `datasource db` in `schema.prisma`.
+   - Created `packages/database/prisma.config.ts` using `defineConfig` to wire `DIRECT_URL ?? DATABASE_URL` for CLI migrations and seeds.
+   - Preserved stable `prisma-client-js` generator as planned, ensuring seamless compatibility across monorepo packages.
+- **Runtime Driver Adapter:**
+   - Implemented `@prisma/adapter-pg` driver adapter in `packages/database/src/index.ts` wrapped with `withConnectionTimeouts`.
+   - Standardized client instantiation via `createPrismaClient(connectionString)` with automatic fail-fast in production and local fallback for test environments.
+   - Updated all direct `new PrismaClient` call sites (`packages/database/prisma/seed.ts`, `packages/database/prisma/run-seed-feature-flags.ts`, and `apps/tasker/src/scripts/backfill-tasker-data.ts`). Only the shared factory in `packages/database/src/index.ts` remains.
+- **One-off Script Cleanup:**
+   - Permanently deleted all 5 one-off scripts in `apps/web/scripts/` (`dedupe-categories.ts`, `dedupe-punishment-records.ts`, `repair-task-invariants.ts`, `seed-pokemon-catalogue.ts`, `verify-lock-concurrency.ts`).
+   - Removed `db:seed:pokemon` script aliases from root and web `package.json`.
+   - Cleaned up obsolete documentation references in `README.md`, `docs/accountability/README.md`, `docs/pokemon/README.md`, and `docs/tasks/README.md`.
+- **Centralized Typed Env Gateways:**
+   - Web: Created `apps/web/core/env/server.ts` (`getServerEnv()`) and `client.ts` (`publicEnv`) using Zod schemas with lazy, safe parsing.
+   - Database: Created `packages/database/src/env.ts` (`getDatabaseEnv()`) for runtime DB configuration.
+   - Migrated direct `process.env` calls across web services: `core/auth`, `proxy.ts`, layouts, `core/storage`, `core/observability` (`logger.ts`, `logrocket.ts`), `features/auth`, `features/ypt`, `features/feedback` (Jira, GitHub, Discord services), and `features/wrapped`.
+   - Updated `apps/web/.env.example` documenting pooled `DATABASE_URL` (PgBouncer, port 6543) vs unpooled `DIRECT_URL` (direct PostgreSQL, port 5432) plus missing variables.
+- **Test Fixes:**
+   - Fixed time-dependent fixture expiration in `features/participant-stats/data/global-profile.repository.test.ts` by freezing mock system time to `2026-10-26` during the run.
+- **Review Finding Resolutions & Hardening:**
+   - Database Connection Timeout: Configured `connectionTimeoutMillis: 30_000` on `PrismaPg` adapter initialization to enforce bounded connection attempts.
+   - Seed URL Resolution: Added fallback to `DIRECT_URL` when `DATABASE_URL` is unset in `resolveConnectionString()`, and made seed URL resolution explicit in `seed.ts` and `run-seed-feature-flags.ts`.
+   - CI Schema Migration Guard: Enhanced `scripts/check-schema-migration.sh` with an `awk` AST filter ignoring comments and `generator`/`datasource` configuration blocks so non-datamodel schema changes do not trigger false migration errors.
+   - Documentation Correction: Updated `README.md` `npm run db:seed` description to accurately document that it seeds the sample challenge and system feature flags without claiming test participants.
+- **Quality Gates:**
+   - `npm run build -w @holdmetoit/database`: ✅ 0 errors
+   - `npm run build -w @holdmetoit/discord`: ✅ 0 errors
+   - `npm run typecheck -w @holdmetoit/tasker`: ✅ 0 errors
+   - `npm run test -w @holdmetoit/tasker`: ✅ 5/5 test files, 84/84 tests passing
+   - `npm run typecheck -w @holdmetoit/web`: ✅ 0 errors
+   - `npm run test -w @holdmetoit/web`: ✅ 246/246 test files, 2,451/2,451 tests passing (100% green)
+   - `npm run build -w @holdmetoit/web`: ✅ Next.js 16.4.5 Turbopack production build clean
+   - `npm run lint -w @holdmetoit/web`: ✅ 0 errors
+- **NEXT STEP:** Open PR to `dev` for `chore/nextjs-16-upgrade` combining Next.js 16 and Prisma 7.10.1 upgrades; run deployment smoketests on preview environment.
+
+### Session 201 — 2026-11-04 (Next.js 14 → 16 migration + rate-limiter removal on `chore/nextjs-16-upgrade`)
+
+- **Framework/UI:** `next@16.4.5`, `react@19.3.1`, `react-dom@19.3.1`, `@types/react(-dom)@19.3.0`, `eslint@9.39.5`, `eslint-config-next@16.4.5`. Root `@types/react`/`@types/react-dom` and React 19 are hoisted so hoisted Radix declarations type-check and the web app uses a single React copy.
+- **Async request APIs:** all 8 pages and 3 `generateMetadata` functions now await `params`/`searchParams`; `preview-mode.actions.ts` awaits `cookies()`; `revalidateTag` uses `{ expire: 0 }`; `middleware.ts` → `proxy.ts` (`proxy` export, Node runtime).
+- **Rate limiting removed:** deleted `core/security/rate-limiter.ts` + `client-ip.ts` (and tests); removed the 429 block from `POST /api/feedback`, the attachment `enforceRateLimit` guards, and the YPT roster/claim checks. Rate limiting is delegated to the external/platform limiter (track `SECURITY.md` SEC-03).
+- **React 19 fixes:** `DialogContentProps`/`UserAvatarProps` became type aliases (conditional `ComponentPropsWithoutRef` extension loses members); `challenge-images.test.tsx` uses `ReactElement<any>`; new `eslint-config-next@16` React Hooks v6 rules are explicitly deferred with a follow-up.
+- **Tooling:** flat `eslint.config.mjs`; `next lint` replaced with `eslint app components core features lib types`; `next.config.mjs` keys promoted (`serverExternalPackages`, `outputFileTracingIncludes`, `eslint` removed); `next-env.d.ts`/`tsconfig.json` regenerated.
+- **Verification:** `typecheck:web` ✅; `lint:web` ✅ (0 errors, warnings only); web tests ✅ 246 files / 2,451 tests; Turbopack `build:web` ✅; `git grep` confirms no in-app rate-limiter references remain.
+- **Docs:** `SECURITY.md` SEC-02 resolved / SEC-03 mitigated; `docs/ypt/README.md` §6; `docs/nextjs-16-migration/README.md` aligned.
+- **NEXT STEP:** review/open the PR to `dev`, run manual J1–J6 + 360px checks, and configure the external rate limiter before public deploy. Keep the issue in `In Review` until merged.
 
 ### Session 190 — 2026-11-02 (Cockpit task visibility on `afnan-jr`)
 
@@ -2789,3 +2866,100 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - `npm run lint:web`: ✅ 0 errors (design-token guard passed).
       - Unit test suites: ✅ 100% green exit across all wrapped tests (17 files, 126 tests) and profile tests.
 - **NEXT STEP:** PR #242 submitted to `dev`, Jira issue KAN-93 transitioned to `In Review`. Ready for peer review and merge into `dev`.
+
+### Session 201 — 2026-11-05 (feat(identity): platform usernames backend engine, UI unification, and feature flag gating — on `untitled-worktree`)
+
+- **Context & Objectives:** Implement fullstack platform usernames with case-preserving storage and case-insensitive uniqueness, 7-day cooldown engine, `platform_username` feature flag gating, edit username dialog with real-time debounced availability check, complete UI identity unification removing duplicate display names and separate `@username` sub-lines across profiles, challenge leaderboards, and trophy leaderboards, and gating profile trophy rank badges behind `global_leaderboard`:
+   1. **Backend Engine & Migration (Commit `4a698f8`):**
+      - Added declarative migration `20261105000000_user_username_ci_unique` creating partial PostgreSQL expression index: `CREATE UNIQUE INDEX User_lower_username_key ON "User" (LOWER("username")) WHERE "username" IS NOT NULL;`.
+      - Added `usernameChangedAt DateTime?` field to `User` model in `packages/database/prisma/schema.prisma`.
+      - Seeded `platform_username` feature flag in `packages/database/prisma/seed-feature-flags.ts` and registered in `apps/web/features/feature-flags/domain/feature-flag-keys.ts`.
+      - Hydrated `username: string | null` in Auth.js Session and User types (`types/next-auth.d.ts` and `core/auth/index.ts`).
+      - Created pure domain logic in `features/auth/domain/username.ts` (syntax validation regex `USERNAME_REGEX = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|_(?![_]))*[a-zA-Z0-9]$/`, length 3–20 characters via `USERNAME_MAX_LENGTH = 20`, single underscores only with no leading, trailing, or consecutive underscores, reserved keywords blacklist, 7-day cooldown calculator, Zod schema; 25/25 unit tests green).
+      - Added user repository methods in `features/auth/data/user.repository.ts` (`findUserByUsername`, `isUsernameAvailable`, `updateUsername`, `provisionInitialUsername`, non-destructive `syncUserFromDiscordProfile`; 16/16 unit tests green).
+      - Built server actions `checkUsernameAvailabilityAction` and `updateUsernameAction` in `features/auth/api/username.actions.ts` with flag checks, authentication assertions, cooldown enforcement, audit logging (`USERNAME_UPDATED`), and cache revalidation (10/10 unit tests green).
+      - Extended `global-profile.repository.ts` to resolve profiles by CUID or case-insensitive `@handle`.
+      - Added migration safety script `apps/web/scripts/dedupe-usernames.ts`.
+   2. **Phase 1: Edit Username Dialog (Commit `0708bc0`):**
+      - Created `apps/web/features/auth/presentation/edit-username-dialog.tsx` featuring debounced availability check, inline valid/invalid feedback, 7-day cooldown rules notice, transition pending state, and toast notifications (5/5 unit tests green).
+   3. **Phase 2: Profile Header & Trophy Gating (Commit `8843081`):**
+      - Updated `features/participant-stats/presentation/global-profile-view.tsx` to render a single unified platform username (`currentUsername || user.displayName`).
+      - Added pencil icon trigger (`EditUsernameDialog`) adjacent to username when `isOwnProfile && isPlatformUsernameEnabled`.
+      - Gated `Recruit (0 trophies)` badge behind `isGlobalLeaderboardEnabled`.
+      - Removed duplicate separate `@username` subline from profile header (7/7 unit tests green).
+      - Hydrated `isGlobalLeaderboardEnabled` and `isPlatformUsernameEnabled` in `app/profile/page.tsx` and `app/profile/[userId]/page.tsx`.
+   4. **Phase 3: Leaderboard UI Identity Unification (Commit `de9bb68`):**
+      - Updated `features/leaderboard/presentation/challenge-leaderboard-tab.tsx`:
+         - Podiums (Rank 1, 2, 3): Render `{top.username || top.displayName}`.
+         - Main standings table: Line 1 clickable link renders `{entry.username || entry.displayName}`.
+         - Line 2: Removed redundant `@username` text, maintaining a clean 2-line layout housing `SickStatusBadge` and `PaceBadge`.
+         - Unassigned scholars table and mobile flat list / team roster cards updated to prioritize platform username with duplicate handle sublines removed.
+      - Updated `features/trophies/presentation/trophy-leaderboard-view.tsx`:
+         - Row title displays `{entry.username || entry.displayName}`.
+         - Meta subline removed duplicate `@{entry.username}`, cleanly focusing on career record: `{wins}W / {losses}L ({winRate}%)`.
+      - All 178 tests across `features/trophies/` and `features/leaderboard/` green.
+   5. **Phase 4: Cockpit & Global Header Unification (Commit `b9453f7`):**
+      - Updated `features/study-logs/presentation/home-cockpit-view.tsx` to prioritize `user?.username || cockpit?.participant.username` in `effectiveDisplayName`, rendering "Welcome {username}".
+      - Updated `components/ui/header.tsx` user capsule to prioritize `user.username || user.displayName || user.name || "Companion"`.
+      - All 26 tests across cockpit and header green.
+   6. **Phase 5: Architecture Documentation & Verification:**
+      - Created comprehensive feature and architecture documentation in `docs/identity/README.md`.
+      - Fully verified TypeScript compilation and Vitest suites.
+- **NEXT STEP:** Create Pull Request from feature branch to `dev` for peer review and staging deployment.
+
+### Session 202 — 2026-11-06 (refactor(profile): remove redundant sync avatar button from profile views — on `untitled-worktree`)
+
+- **Context & Objectives:** Remove the redundant manual "Sync Avatar" button from participant profile views as Discord avatars and metadata already synchronize automatically upon each login session via Auth.js (`core/auth/index.ts`).
+- **Changes Completed:**
+   1. **`global-profile-view.tsx`:** Removed `<RefreshAvatarButton />` and its right-actions container from the profile header card (lines 193–203). Cleaned up unused import.
+   2. **`participant-profile-header.tsx`:** Removed `<RefreshAvatarButton />` from challenge participant profile headers (lines 189–195). Cleaned up unused import.
+   3. **`user-inspector-sheet.tsx`:** Preserved `<RefreshAvatarButton />` for admin user inspector controls where manual host troubleshooting may be warranted.
+   4. **Test Suite Aligned:** Updated `features/participant-stats/presentation/global-profile-view.test.tsx` to assert that the Settings tab renders while omitting the Sync Avatar button (`expect(html).not.toContain("Sync Avatar")`).
+   5. **Verification & Quality Gates:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 100% green exit across all participant-stats (10 files, 93 tests) and auth test suites (14 files, 136 tests).
+- **NEXT STEP:** Submit PR to `dev` for peer review.
+
+### Session 203 — 2026-11-06 (refactor(settings): merge preferences into profile settings tab, remove navbar button, and deduplicate wrapped companion — on `untitled-worktree`)
+
+- **Context & Objectives:** Unify all participant configuration into a single, cohesive Settings tab under `/profile?tab=settings`, deduplicate the Wrapped Mascot Companion selector, remove the standalone `/preferences` navbar pill and route, and eliminate dead mock sections (Themes & Aesthetics, Notifications & Reminders).
+- **Changes Completed:**
+   1. **Phase 1: Pure Domain & Storage Pruning (Commit `f0a2b07`):**
+      - Pruned `ThemePreferences`, `NotificationPreferences`, `ThemeId`, and fields `theme` and `notifications` from `user-preferences.ts` and `DEFAULT_USER_PREFERENCES`.
+      - Streamlined `sanitizeUserPreferences()` to focus strictly on sound feedback (`todoCompletionSfx`, `volume`, `soundPack`).
+      - Updated domain unit tests in `user-preferences.test.ts` and `preferences-storage.test.ts` (17/17 tests passing green).
+   2. **Phase 2: Extract `AudioSettingsCard` & Retire `PreferencesView` (Commit `1456d39`):**
+      - Created modular `<AudioSettingsCard />` (`apps/web/features/preferences/presentation/audio-settings-card.tsx`) featuring sound switch toggle, audio preview button, and Obsidian status badges.
+      - Added unit tests in `audio-settings-card.test.tsx` verifying opt-in muted defaults, toggle state persistence, and preview audio triggering (4/4 tests passing green).
+      - Safely deleted legacy `preferences-view.tsx` and its test file.
+   3. **Phase 3: Profile Settings Tab Integration & Deduplication (Commit `dd97b93`):**
+      - Integrated `<AudioSettingsCard />` into `global-profile-view.tsx` inside the owner's Settings tab between `<YptSettingsCard />` and `<WrappedMascotPreferenceCard />`.
+      - Wrapped Mascot Companion is now exclusively rendered inside the profile Settings tab, eliminating duplication.
+      - Added tests in `global-profile-view.test.tsx` asserting all three settings cards render when `activeTab === "settings"` for the owner (8/8 tests passing green).
+   4. **Phase 4: Navbar & Route Cleanup (Commit `fcb29b2`):**
+      - Removed the Preferences button and unused `Settings` icon from `AppHeader` in `apps/web/components/ui/header.tsx`.
+      - Updated `header.test.tsx` to assert that the Preferences button is omitted from the top navigation bar (14/14 tests passing green).
+      - Deleted `apps/web/app/preferences/` route directory.
+      - Added permanent redirect from `/preferences` $\to$ `/profile?tab=settings` in `apps/web/next.config.mjs`.
+   5. **Phase 5: Documentation & Quality Gates Verification:**
+      - Updated `docs/preferences/README.md` and `docs/wrapped/README.md` with unified Settings architecture.
+      - `npm run test:web`: ✅ 252 test files (2,660 tests) passing 100% green.
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run build:web`: ✅ Production build cleanly compiled all 21 routes.
+- **NEXT STEP:** Submit PR to `dev` for peer review and staging deployment.
+
+### Session 204 — 2026-11-06 (fix(identity): enforce exact case-normalized username queries and fix race conditions — on `feat/platform-username`)
+
+- **Context & Objectives:** Address 6 CodeRabbit code review findings on the `feat/platform-username` branch: eliminate SQL `ILIKE` underscore/percent wildcard ambiguities in username lookups, prevent async race conditions in debounced username availability checks, ensure typesafe `usernameChangedAt` serialization on global profiles, and standardize database client access in deduplication scripts.
+- **Changes Completed:**
+   1. **Exact Username Queries in `user.repository.ts`:** Replaced pattern-based Prisma `mode: "insensitive"` in `findUserByUsername` and `isUsernameAvailable` with parameterized `$queryRaw` comparing `LOWER("username") = ${canonical}`, ensuring underscore (`_`) and percent (`%`) characters are treated literally rather than as SQL pattern wildcards, and leveraging the `User_lower_username_key` expression index. Updated repository tests to mock `$queryRaw` (16/16 tests green).
+   2. **Race Condition Prevention in `edit-username-dialog.tsx`:** Added an effect-scoped `cancelled` token in `EditUsernameDialog`'s debounced availability checking effect to discard responses from obsolete requests when candidate input changes quickly (5/5 tests green).
+   3. **Fallback Username Lookup in `global-profile.repository.ts`:** Updated global profile resolution to query user ID via parameterized `SELECT "id" FROM "User" WHERE LOWER("username") = ${canonical} LIMIT 1` rather than pattern-based insensitive findFirst. Updated repository tests to mock `$queryRaw` (5/5 tests green).
+   4. **Typesafe `usernameChangedAt` Propagation:** Added `usernameChangedAt?: string | null` to `GlobalUserProfileIdentity`, selected `usernameChangedAt: true` in `global-profile.repository.ts` with ISO serialization, and passed `user.usernameChangedAt` directly to `EditUsernameDialog` without `(user as any)` casting.
+   5. **Shared Prisma Client in Deduplication Script:** Replaced direct `new PrismaClient()` construction in `apps/web/scripts/dedupe-usernames.ts` with the shared client from `@holdmetoit/database`.
+   6. **Exact Case-Normalized Comparison in Deduplication Script:** Replaced `mode: "insensitive"` in duplicate group queries and collision probes with parameterized `$queryRaw` comparing `LOWER("username") = ${...}`.
+   7. **Migration Pre-Check & Deduplication Documentation:** Updated `20261105000000_user_username_ci_unique/migration.sql` with a PL/pgSQL pre-check asserting that zero case-insensitive duplicate usernames exist in `User` before creating `User_lower_username_key`, failing fast with a descriptive error directing to `scripts/dedupe-usernames.ts`. Documented the pre-migration deduplication procedure in `packages/database/prisma/migrations/README.md`.
+   8. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 252 test files (2,660 tests) passing 100% green.
+- **NEXT STEP:** Submit PR to `dev` for peer review and staging deployment.
