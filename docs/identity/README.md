@@ -174,7 +174,46 @@ For existing databases with legacy conflicting Discord handles, a dry-run/apply 
 
 ---
 
-## 6. Verification & Quality Gates
+## 7. Canonical Profile URLs & Social Link Embeds (`/@<platformUsername>`)
+
+### 7.1 Canonical URL Routing (`app/[userHandle]/page.tsx`)
+
+Scholar profiles use the canonical format `https://holdmetoit.vercel.app/@<platformUsername>`:
+
+1. **Route Segment Pattern:** Implemented via `app/[userHandle]/page.tsx` with an immediate prefix guard:
+   ```ts
+   if (!decoded.startsWith("@")) notFound();
+   ```
+2. **Pure Domain Profile URL Generator (`features/participant-stats/domain/profile-url.ts`):**
+   - Governed by Law L7 (Zero framework imports).
+   - Generates `/@${cleanUsername}`, falling back to `/@${cleanId}` or `/profile`.
+   - Preserves search parameters (`challengeId`, `tab`, `view`, `day`).
+3. **Mandatory Authentication:**
+   - Both proxy middleware (`proxy.ts`) and Server Component (`[userHandle]/page.tsx`) enforce authentication.
+   - Unauthenticated human visitors are redirected to `/`.
+4. **Discord Crawler Embed Exception:**
+   - Edge proxy permits social crawlers (`Discordbot`, `Twitterbot`, `facebookexternalhit`, etc.) to pass without session cookies.
+   - `generateMetadata` serves dynamic OpenGraph and Twitter card meta tags for rich in-channel embed cards.
+5. **Rich Embed Domain Engine (`features/participant-stats/domain/profile-embed.ts`):**
+   - Title: `@{username} | HoldMeToIt Profile`
+   - Description: Format-aware career summary focused on pure study achievements (`⏱️ {lifetimeHours} study • 🔥 {streak}-day streak • ⚔️ {completed}/{entered} challenges`), omitting trophy rank/recruit labels and daily tasks completed.
+   - Accent Color: Hex/integer theme color matching scholar trophy rank (Obsidian `#10b981`, Diamond `#38bdf8`, Platinum `#a78bfa`, Gold `#f59e0b`, Silver `#94a3b8`, Bronze `#d97706`).
+6. **Backwards Compatibility & Redirection:**
+   - Legacy `/profile/[userId]` routes perform a canonical 308 permanent redirect to `/@<platformUsername>`.
+   - Legacy `/profile` redirects authenticated scholars to their own canonical `/@<platformUsername>`.
+   - Legacy `/challenge/[id]/participant/[participantId]` routes perform a canonical 308 permanent redirect to `/@<platformUsername>?challengeId=<id>&tab=history` (preserving `view` query parameters).
+   - CUID access via `/@<cuid>` canonical-redirects to `/@<platformUsername>` if the scholar has a registered platform username.
+7. **Unified Navigation & Challenge Context:**
+   - All participant links across Challenge Overview tab, Challenge Leaderboard tab, Challenge Manage roster, and Admin User Directory link directly to `/@<platformUsername>?challengeId=<id>`.
+   - When navigating to `/@<platformUsername>?challengeId=<id>`, `GlobalProfileView` defaults to the `"history"` tab to display the challenge snapshot directly.
+   - A contextual "Back to Challenge Leaderboard" navigation link is rendered above the snapshot, preserving the origin `view` mode (`today`, `team`, or `individual`).
+8. **Share Profile Button & Live Address Bar Sync:**
+   - `GlobalProfileView` includes a "Share Profile" button copying the canonical URL to the clipboard with Sonner toast feedback.
+   - Updating the username via `EditUsernameDialog` calls `router.replace(`/@${newUsername}`)` to immediately sync the browser URL.
+
+---
+
+## 8. Verification & Quality Gates
 
 | Test Suite                                              | Scope                                           | Status |
 | :------------------------------------------------------ | :---------------------------------------------- | :----- |
@@ -182,8 +221,16 @@ For existing databases with legacy conflicting Discord handles, a dry-run/apply 
 | `features/auth/data/user.repository.test.ts`            | DB queries, CI unique lookups, updates          | Pass   |
 | `features/auth/api/username.actions.test.ts`            | Flag gating, cooldown rejection, audit logs     | Pass   |
 | `features/auth/presentation/edit-username-dialog.test.` | Modal rendering, availability check, save flows | Pass   |
-| `features/participant-stats/.../global-profile-view.`   | Header name, pencil toggle, trophy flag gating  | Pass   |
-| `features/leaderboard/.../challenge-leaderboard-tab.`   | Podiums, table rows, mobile cards, team view    | Pass   |
-| `features/trophies/.../trophy-leaderboard-view.`        | Row title, record line, pagination              | Pass   |
-| `features/study-logs/.../home-cockpit-view.`            | Welcome header link username prioritization     | Pass   |
-| `components/ui/header.test.tsx`                         | User capsule username prioritization            | Pass   |
+| `features/participant-stats/domain/profile-url.test.`   | Handle URL formatting, query param retention    | Pass   |
+| `features/participant-stats/domain/profile-embed.test.` | OpenGraph title, description, rank color math   | Pass   |
+| `proxy.test.ts`                                         | Edge gatekeeping, crawler pass-through          | Pass   |
+| `app/[userHandle]/page.test.tsx`                        | Canonical handle route, auth redirect, embeds   | Pass   |
+| `app/profile/[userId]/page.test.tsx`                    | Legacy CUID 308 redirect to handle URL          | Pass   |
+| `app/profile/page.test.tsx`                             | `/profile` redirect to own handle URL           | Pass   |
+| `features/participant-stats/.../global-profile-view.`   | Header name, pencil, share button, flags        | Pass   |
+| `features/leaderboard/.../challenge-leaderboard-tab.`   | Handle links across podiums, rows, mobile cards | Pass   |
+| `features/trophies/.../trophy-leaderboard-view.`        | Handle links on competitor rows                 | Pass   |
+| `features/study-logs/.../home-cockpit-view.`            | Welcome header link canonical handle resolution | Pass   |
+| `features/admin/.../user-directory-view.`               | Admin directory profile links                   | Pass   |
+| `features/admin/.../user-directory.actions.`            | User role update cache revalidation             | Pass   |
+| `components/ui/header.test.tsx`                         | User capsule handle URL resolution              | Pass   |

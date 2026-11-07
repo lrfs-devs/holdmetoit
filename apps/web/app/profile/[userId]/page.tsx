@@ -1,17 +1,13 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect, RedirectType } from "next/navigation";
 import type { Metadata } from "next";
 import { auth } from "@/core/auth";
-import { hasAdminPrivileges } from "@/features/auth/domain/auth-roles";
+import { getGlobalUserProfile } from "@/features/participant-stats/data/global-profile.repository";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import {
-   getGlobalUserProfile,
-   getChallengeSnapshotForUser,
-} from "@/features/participant-stats/data/global-profile.repository";
-import { canViewFullProfileHistory } from "@/features/participant-stats/domain/profile-privacy";
-import { checkAreAcceptedFriends } from "@/features/participant-stats/data/profile-privacy.repository";
-import { GlobalProfileView } from "@/features/participant-stats/presentation/global-profile-view";
-import type { ParticipantStatsViewModel } from "@/features/participant-stats/domain/participant-stats.types";
-import { FEATURE_FLAG_KEYS } from "@/features/feature-flags/domain/feature-flag-keys";
-import { isFeatureEnabled } from "@/features/feature-flags/api/server";
+   buildProfileEmbedDescription,
+   buildProfileEmbedTitle,
+   getRankThemeColor,
+} from "@/features/participant-stats/domain/profile-embed";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +21,7 @@ interface UserProfilePageProps {
    }>;
 }
 
-/** Generates social and search metadata for public user profiles. */
+/** Generates social and search metadata for legacy user profile URLs. */
 export async function generateMetadata({
    params,
 }: UserProfilePageProps): Promise<Metadata> {
@@ -38,20 +34,35 @@ export async function generateMetadata({
       };
    }
 
-   const { user, careerStats } = profile;
-   const scholarHandle = user.username || user.displayName || "scholar";
+   const title = buildProfileEmbedTitle(profile);
+   const description = buildProfileEmbedDescription(profile);
+   const { hex } = getRankThemeColor(profile.careerStats.trophyRank);
+   const imageUrl = profile.user.image ?? undefined;
+
    return {
-      title: `${scholarHandle} — Profile & Career Stats | HoldMeToIt`,
-      description: `View ${scholarHandle}'s HoldMeToIt study record: ${careerStats.lifetimeStudyHuman} lifetime study hours, ${careerStats.currentStreak}-day streak, ${careerStats.trophyRank} rank with ${careerStats.trophyTotal} trophies.`,
+      title,
+      description,
       openGraph: {
-         title: `${scholarHandle} | HoldMeToIt Scholar Profile`,
-         description: `${careerStats.lifetimeStudyHuman} study hours · ${careerStats.totalChallengesEntered} challenges · ${careerStats.trophyRank} rank`,
-         images: user.image ? [{ url: user.image }] : [],
+         type: "profile",
+         siteName: "HoldMeToIt",
+         title,
+         description,
+         images: imageUrl ? [{ url: imageUrl, width: 256, height: 256 }] : [],
       },
+      twitter: {
+         card: "summary",
+         title,
+         description,
+         images: imageUrl ? [imageUrl] : [],
+      },
+      themeColor: hex,
    };
 }
 
-/** Renders the Global User Profile and Career Statistics page. */
+/**
+ * Legacy Profile Route (/profile/[userId]).
+ * Permanently redirects scholars to their canonical /@<platformUsername> profile URL.
+ */
 export default async function UserProfilePage({
    params,
    searchParams,
@@ -60,6 +71,12 @@ export default async function UserProfilePage({
    const query = (await searchParams) ?? {};
    const session = await auth();
 
+   // Gate: mandatory authentication required
+   if (!session?.user?.id) {
+      redirect("/");
+      return;
+   }
+
    const targetUserId =
       userId === "me" && session?.user?.id ? session.user.id : userId;
 
@@ -67,63 +84,9 @@ export default async function UserProfilePage({
 
    if (!profile) {
       notFound();
+      return;
    }
 
-   const isOwnProfile = Boolean(
-      session?.user?.id && session.user.id === targetUserId
-   );
-   const isAcceptedFriend = await checkAreAcceptedFriends(
-      session?.user?.id,
-      targetUserId
-   );
-
-   const isAuthorizedHistory = canViewFullProfileHistory({
-      viewerId: session?.user?.id,
-      viewerRole: session?.user?.role,
-      targetUserId,
-      isAcceptedFriend,
-   });
-
-   let initialSnapshot: ParticipantStatsViewModel | null = null;
-   let selectedChallengeId = query.challengeId;
-
-   if (isAuthorizedHistory && profile.challengeHistory.length > 0) {
-      const match = profile.challengeHistory.find(
-         (c) => c.challengeId === selectedChallengeId
-      );
-      if (!match) {
-         selectedChallengeId = profile.challengeHistory[0].challengeId;
-      }
-
-      if (selectedChallengeId) {
-         initialSnapshot = await getChallengeSnapshotForUser(
-            targetUserId,
-            selectedChallengeId,
-            {
-               currentUserId: session?.user?.id,
-               isAdmin: hasAdminPrivileges(session?.user?.role),
-            }
-         );
-      }
-   }
-
-   const [isGlobalLeaderboardEnabled, isPlatformUsernameEnabled] =
-      await Promise.all([
-         isFeatureEnabled(FEATURE_FLAG_KEYS.globalLeaderboard),
-         isFeatureEnabled(FEATURE_FLAG_KEYS.platformUsername),
-      ]);
-
-   return (
-      <GlobalProfileView
-         profile={profile}
-         initialChallengeSnapshot={initialSnapshot}
-         selectedChallengeId={selectedChallengeId}
-         isAuthorizedHistory={isAuthorizedHistory}
-         isOwnProfile={isOwnProfile}
-         viewerRole={session?.user?.role}
-         initialYptId={isOwnProfile ? profile.user.yptId : undefined}
-         isGlobalLeaderboardEnabled={isGlobalLeaderboardEnabled}
-         isPlatformUsernameEnabled={isPlatformUsernameEnabled}
-      />
-   );
+   const canonicalUrl = buildUserProfileUrl(profile.user, query);
+   redirect(canonicalUrl, RedirectType.replace);
 }

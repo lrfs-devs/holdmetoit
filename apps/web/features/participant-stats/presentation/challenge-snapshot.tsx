@@ -125,7 +125,7 @@ export function ChallengeSnapshot({
    const statusBadge = getParticipantStatusBadge(stats);
    const dateRange = formatChallengeDateRange(stats);
 
-   const cockpitUrl = `/challenge/${profile.challengeId}/participant/${profile.participantId}`;
+   const cockpitUrl = `/challenge/${profile.challengeId}`;
 
    return (
       <div

@@ -220,6 +220,8 @@ describe("user-directory.actions", () => {
          expect(revalidatePath).toHaveBeenCalledWith("/admin/users");
          expect(revalidatePath).toHaveBeenCalledWith("/admin");
          expect(revalidatePath).toHaveBeenCalledWith("/profile/user_2");
+         expect(revalidatePath).toHaveBeenCalledWith("/[userHandle]", "page");
+         expect(revalidatePath).toHaveBeenCalledWith("/@bob_tag");
       });
 
       it("updates role to ADMIN when newRole is HOST or ADMIN", async () => {

@@ -20,6 +20,7 @@ import {
    updateUserRoleAction,
    getUserAuditLogsAction,
 } from "../api/user-directory.actions";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import type {
    AdminRosterRole,
    AdminUserRosterItem,
@@ -215,7 +216,7 @@ export function UserInspectorSheet({
                         size="sm"
                         className="h-8 gap-1.5 text-xs text-text-secondary hover:text-white"
                      >
-                        <Link href={`/profile/${user.id}`} target="_blank">
+                        <Link href={buildUserProfileUrl(user)} target="_blank">
                            <span>Profile</span>
                            <ExternalLink className="h-3 w-3" />
                         </Link>

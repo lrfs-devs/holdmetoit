@@ -352,12 +352,12 @@ describe("HomeCockpitView", () => {
       );
 
       expect(html).toContain("Welcome");
-      expect(html).toContain('href="/profile?challengeId=chal-beta"');
+      expect(html).toContain('href="/@user-beta?challengeId=chal-beta"');
       expect(html).toContain("NrGSIayeR");
       expect(html).toContain('title="View profile for NrGSIayeR"');
    });
 
-   it("renders username next to Welcome as a link to /profile when logged in without challenge context", () => {
+   it("renders username next to Welcome as a link to canonical profile URL when logged in without challenge context", () => {
       const html = renderToStaticMarkup(
          createElement(HomeCockpitView, {
             user: { id: "user-beta", displayName: "NrGSIayeR" },
@@ -366,7 +366,7 @@ describe("HomeCockpitView", () => {
       );
 
       expect(html).toContain("Welcome");
-      expect(html).toContain('href="/profile"');
+      expect(html).toContain('href="/@user-beta"');
       expect(html).toContain("NrGSIayeR");
       expect(html).toContain('title="View profile for NrGSIayeR"');
    });
@@ -491,5 +491,6 @@ describe("HomeCockpitView", () => {
       expect(html).toContain("afnan_prime");
       expect(html).not.toContain("Afnan Legacy");
       expect(html).toContain('title="View profile for afnan_prime"');
+      expect(html).toContain('href="/@afnan_prime"');
    });
 });
