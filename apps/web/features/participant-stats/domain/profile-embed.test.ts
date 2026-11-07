@@ -101,11 +101,12 @@ describe("profile-embed", () => {
          expect(embed.thumbnail).toEqual({
             url: "https://example.com/avatar.png",
          });
-         expect(embed.fields).toHaveLength(4);
+         expect(embed.fields).toHaveLength(3);
          expect(embed.fields.map((f) => f.name)).not.toContain(
             "🏆 Trophy Rank"
          );
          expect(embed.fields.map((f) => f.name)).not.toContain("✅ Tasks Done");
+         expect(embed.fields.map((f) => f.name)).not.toContain("🎮 Pokedex");
          expect(embed.fields[0]).toEqual({
             name: "⏱️ Lifetime Study",
             value: "42h",

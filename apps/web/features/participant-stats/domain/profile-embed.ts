@@ -102,11 +102,6 @@ export function buildProfileDiscordEmbed(
          value: `${profile.careerStats.challengesCompleted} won / ${profile.careerStats.totalChallengesEntered} entered`,
          inline: true,
       },
-      {
-         name: "🎮 Pokedex",
-         value: `${profile.careerStats.pokedexCount} Pokemon`,
-         inline: true,
-      },
    ];
 
    return {

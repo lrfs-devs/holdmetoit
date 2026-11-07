@@ -3021,7 +3021,7 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - Updated `page.test.tsx` to verify the 308 redirect and query forwarding.
    6. **Profile Embed Title & Description Refinements (`profile-embed.ts`):**
       - Changed embed title from `@<handle> | HoldMeToIt Scholar Profile` to `@<handle> | HoldMeToIt Profile`.
-      - Removed `Recruit (x trophies)` and tasks completed from the description and Discord embed fields, focusing the social preview on pure study metrics (`⏱️ study hours`, `🔥 active streak`, `⚔️ challenges won/entered`, and `🎮 pokedex`).
+      - Removed `Recruit (x trophies)`, tasks completed, and Pokédex from the description and Discord embed fields, focusing the social preview strictly on core study metrics (`⏱️ Lifetime Study`, `🔥 Active Streak`, and `⚔️ Challenges`).
       - Preserved dynamic trophy rank border color stripe via `getRankThemeColor`.
       - Updated unit test suites in `profile-embed.test.ts`, `app/[userHandle]/page.test.tsx`, and `app/profile/[userId]/page.test.tsx`.
    7. **Quality Gates & Verification:**
