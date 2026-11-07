@@ -20,6 +20,7 @@ import {
    SickModeQuickToggle,
    SickReminderBanner,
 } from "@/features/participant-status/presentation";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 
 export interface HomeCockpitViewProps {
    displayName?: string;
@@ -102,9 +103,13 @@ export function HomeCockpitView({
 
    const activeProfileUrl =
       profileUrl ??
-      (cockpit?.challengeId
-         ? `/profile?challengeId=${cockpit.challengeId}`
-         : "/profile");
+      buildUserProfileUrl(
+         {
+            id: user?.id ?? cockpit?.participant.userId,
+            username: user?.username ?? cockpit?.participant.username,
+         },
+         cockpit?.challengeId ? { challengeId: cockpit.challengeId } : undefined
+      );
 
    const effectiveTodaySeconds = cockpit
       ? cockpit.todayLoggedSeconds

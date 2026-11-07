@@ -16,7 +16,11 @@ import {
    User,
    History,
    Shield,
+   Share2,
+   Check,
 } from "lucide-react";
+import { toast } from "sonner";
+import { buildUserProfileUrl } from "../domain/profile-url";
 import type {
    GlobalUserProfile,
    ParticipatedChallengeItem,
@@ -71,6 +75,30 @@ export function GlobalProfileView({
 
    const { user, careerStats, challengeHistory } = profile;
    const [currentUsername, setCurrentUsername] = useState(user.username);
+   const [hasCopied, setHasCopied] = useState(false);
+
+   const handleShareProfile = async () => {
+      try {
+         const canonicalPath = buildUserProfileUrl({
+            username: currentUsername,
+            id: user.id,
+         });
+         const origin =
+            typeof window !== "undefined" && window.location?.origin
+               ? window.location.origin
+               : "";
+         const shareUrl = `${origin}${canonicalPath}`;
+
+         if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(shareUrl);
+         }
+         setHasCopied(true);
+         toast.success("Profile link copied to clipboard!");
+         setTimeout(() => setHasCopied(false), 2000);
+      } catch {
+         toast.error("Failed to copy profile link.");
+      }
+   };
 
    // Active tab state
    const [activeTab, setActiveTab] = useState<
@@ -153,9 +181,10 @@ export function GlobalProfileView({
                               <EditUsernameDialog
                                  currentUsername={currentUsername}
                                  usernameChangedAt={user.usernameChangedAt}
-                                 onUsernameUpdated={(newUsername) =>
-                                    setCurrentUsername(newUsername)
-                                 }
+                                 onUsernameUpdated={(newUsername) => {
+                                    setCurrentUsername(newUsername);
+                                    router.replace(`/@${newUsername}`);
+                                 }}
                               />
                            )}
                         </h1>
@@ -188,6 +217,30 @@ export function GlobalProfileView({
                         <span>Member since {joinDateFormatted}</span>
                      </p>
                   </div>
+               </div>
+
+               {/* Share Profile Action */}
+               <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end shrink-0">
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     size="sm"
+                     onClick={handleShareProfile}
+                     className="gap-2 text-xs font-semibold bg-surface-elevated hover:bg-surface-nested border border-border-subtle"
+                     data-testid="share-profile-button"
+                  >
+                     {hasCopied ? (
+                        <>
+                           <Check className="h-3.5 w-3.5 text-feedback-success" />
+                           <span>Copied!</span>
+                        </>
+                     ) : (
+                        <>
+                           <Share2 className="h-3.5 w-3.5" />
+                           <span>Share Profile</span>
+                        </>
+                     )}
+                  </Button>
                </div>
             </div>
          </div>

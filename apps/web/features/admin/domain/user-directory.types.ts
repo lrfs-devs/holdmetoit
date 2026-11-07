@@ -18,6 +18,7 @@ export interface ActiveChallengeItem {
 
 export interface AdminUserRosterItem {
    id: string;
+   username?: string | null;
    discordId: string | null;
    name: string;
    discordTag: string;

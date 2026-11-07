@@ -248,4 +248,13 @@ describe("GlobalProfileView", () => {
       // In overview tab, career cards are still visible
       expect(html).toContain("Lifetime Career Statistics");
    });
+
+   it("renders Share Profile button in header card", () => {
+      const html = renderToStaticMarkup(
+         <GlobalProfileView profile={mockProfile} isOwnProfile={false} />
+      );
+
+      expect(html).toContain('data-testid="share-profile-button"');
+      expect(html).toContain("Share Profile");
+   });
 });

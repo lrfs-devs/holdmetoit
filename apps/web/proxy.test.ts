@@ -11,21 +11,25 @@ describe("Proxy", () => {
 
    function createRequest(
       pathname: string,
-      cookies: Record<string, string> = {}
+      cookies: Record<string, string> = {},
+      headers: Record<string, string> = {}
    ): NextRequest {
       const url = `https://holdmetoit.com${pathname}`;
-      const request = new NextRequest(url);
+      const request = new NextRequest(url, { headers });
       for (const [key, value] of Object.entries(cookies)) {
          request.cookies.set(key, value);
       }
       return request;
    }
 
-   it("has matcher configured for /admin, /devboard, and /profile", () => {
+   it("has matcher configured for /admin, /devboard, /profile, and platform handles", () => {
       expect(config.matcher).toEqual([
          "/admin/:path*",
          "/devboard/:path*",
          "/profile",
+         "/profile/:path*",
+         "/@:username",
+         "/%40:username",
       ]);
    });
 
@@ -105,6 +109,47 @@ describe("Proxy", () => {
       const request = createRequest("/profile", {
          "authjs.session-token": "valid_user_session",
       });
+      const response = proxy(request);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("location")).toBeNull();
+   });
+
+   it("redirects unauthenticated requests to /@username to /", () => {
+      const request = createRequest("/@speedy_scholar");
+      const response = proxy(request);
+
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe("https://holdmetoit.com/");
+   });
+
+   it("redirects unauthenticated requests to /profile/[userId] to /", () => {
+      const request = createRequest("/profile/usr_123");
+      const response = proxy(request);
+
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe("https://holdmetoit.com/");
+   });
+
+   it("allows /@username through when authjs.session-token is present", () => {
+      const request = createRequest("/@speedy_scholar", {
+         "authjs.session-token": "valid_user_session",
+      });
+      const response = proxy(request);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("location")).toBeNull();
+   });
+
+   it("allows social crawlers (Discordbot) through without session cookies to scrape embed metadata", () => {
+      const request = createRequest(
+         "/@speedy_scholar",
+         {},
+         {
+            "user-agent":
+               "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+         }
+      );
       const response = proxy(request);
 
       expect(response.status).toBe(200);

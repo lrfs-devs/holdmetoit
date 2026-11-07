@@ -128,7 +128,7 @@ describe("UserDirectoryView", () => {
       expect(html).toContain("80h");
       expect(html).toContain("Platinum");
       expect(html).toContain("Unenrolled");
-      expect(html).toContain("/profile/usr_bob");
+      expect(html).toContain('href="/@usr_bob"');
    });
 
    it("renders empty state when no users are returned", () => {

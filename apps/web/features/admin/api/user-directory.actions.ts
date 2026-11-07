@@ -157,6 +157,10 @@ export async function updateUserRoleAction(input: UpdateUserRoleInput): Promise<
       revalidatePath("/admin/users");
       revalidatePath("/admin");
       revalidatePath(`/profile/${targetUserId}`);
+      revalidatePath("/[userHandle]", "page");
+      if (targetUser.username) {
+         revalidatePath(`/@${targetUser.username}`);
+      }
 
       return {
          ok: true,
