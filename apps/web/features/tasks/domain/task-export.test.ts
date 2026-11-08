@@ -276,5 +276,55 @@ describe("task-export domain", () => {
             "> 📊 **Progress:** 1/1 completed (100%) • *HoldMeToIt*"
          );
       });
+
+      it("handles weekly export with zero tasks or empty categories", () => {
+         const output = formatWeeklyTasksExport({
+            weekRangeLabel: "Nov 2, 2026 – Nov 8, 2026",
+            categories: [{ name: "", tasks: [] }],
+            style: "markdown",
+         });
+
+         expect(output).toContain("*(No tasks scheduled)*");
+         expect(output).toContain(
+            "> 📊 **Progress:** 0/0 tasks • *HoldMeToIt*"
+         );
+      });
+
+      it("falls back to 'General' when category name is empty or missing", () => {
+         const output = formatDailyTasksExport({
+            dateKey: "2026-11-09",
+            dayNumber: 0,
+            categories: [
+               {
+                  name: "",
+                  tasks: [
+                     { text: "Task in unnamed category", completed: true },
+                  ],
+               },
+            ],
+            style: "markdown",
+         });
+
+         expect(output).toContain("### 📂 General");
+         expect(output).toContain("- [x] Task in unnamed category");
+         // Since dayNumber is 0, suffix should not be included
+         expect(output).not.toContain("(Day 0)");
+
+         const weeklyOutput = formatWeeklyTasksExport({
+            weekRangeLabel: "Nov 2, 2026 – Nov 8, 2026",
+            weekNumber: 0,
+            categories: [
+               {
+                  name: "",
+                  tasks: [{ text: "Weekly unnamed task", status: "TODO" }],
+               },
+            ],
+            style: "emoji",
+         });
+
+         expect(weeklyOutput).toContain("**📂 General**");
+         expect(weeklyOutput).toContain("⬜ Weekly unnamed task");
+         expect(weeklyOutput).not.toContain("(Week 0)");
+      });
    });
 });

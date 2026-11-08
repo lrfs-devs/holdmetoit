@@ -2813,7 +2813,9 @@ export function CockpitTasksSection({
          return formatDailyTasksExport({
             dateKey: selectedDateKey,
             dateLabel: formatFullDayDate(selectedDateKey),
-            dayNumber: hasChallengeContext ? selectedDayNumber : undefined,
+            dayNumber: hasChallengeContext
+               ? activeDayOption?.dayNumber
+               : undefined,
             categories: exportCategories,
             style,
          });
@@ -2823,14 +2825,14 @@ export function CockpitTasksSection({
          selectedDateKey,
          getTaskDateKey,
          hasChallengeContext,
-         selectedDayNumber,
+         activeDayOption,
          linkableChallengeId,
       ]
    );
 
    const handleExportWeekly = useCallback(
       (style: TaskExportStyle) => {
-         const exportCategories = weeklyCategories.map((cat) => ({
+         const exportCategories = visibleWeeklyCategories.map((cat) => ({
             id: cat.id,
             name: cat.name,
             tasks: cat.tasks.filter(isTaskInWeeklyWeek).map((t) => ({
@@ -2852,7 +2854,7 @@ export function CockpitTasksSection({
          });
       },
       [
-         weeklyCategories,
+         visibleWeeklyCategories,
          isTaskInWeeklyWeek,
          weeklyRangeLabel,
          linkableChallengeId,

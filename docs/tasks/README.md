@@ -337,7 +337,7 @@ Enables users to export their Daily and Weekly Todo lists with a single click fr
 ### 7.1 Architecture & Domain Isolation (Law L7)
 
 - **Pure Formatter:** [`features/tasks/domain/task-export.ts`](../../apps/web/features/tasks/domain/task-export.ts) formats task category groups into clean Discord markdown or high-contrast emoji text with zero UI or framework dependencies.
-- **Presentation Component:** [`features/tasks/presentation/task-export-button.tsx`](../../apps/web/features/tasks/presentation/task-export-button.tsx) provides a dropdown button in the Daily and Weekly board headers with 1-click copy, inline `Copied! ✓` feedback, sonner toast notifications, and `localStorage` preference persistence (`holdmetoit_task_export_style`).
+- **Presentation Component:** [`features/tasks/presentation/task-export-button.tsx`](../../apps/web/features/tasks/presentation/task-export-button.tsx) provides a split button in Row 2 of both Daily and Weekly boards. The primary button triggers instant 1-click copying of the preferred format with inline `Copied! ✓` feedback and sonner toast notifications. The adjacent chevron control allows switching between Markdown and High-Contrast Emojis with `localStorage` persistence (`holdmetoit_task_export_style`). Includes non-secure context fallback with `try/finally` cleanup and copy error detection.
 
 ### 7.2 Export Formats
 
