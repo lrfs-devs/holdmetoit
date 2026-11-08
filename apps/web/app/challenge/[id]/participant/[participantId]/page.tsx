@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { notFound, permanentRedirect, RedirectType } from "next/navigation";
+import { notFound, redirect, RedirectType } from "next/navigation";
 import type { Metadata } from "next";
 
 import { ErrorState } from "@/components/state/error-state";
@@ -149,5 +149,5 @@ export default async function ParticipantStatsPage({
       }
    );
 
-   permanentRedirect(destination, RedirectType.replace);
+   redirect(destination, RedirectType.replace);
 }

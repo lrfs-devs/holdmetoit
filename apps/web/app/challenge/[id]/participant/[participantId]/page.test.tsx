@@ -4,16 +4,16 @@ import ParticipantStatsPage, { generateMetadata } from "./page";
 import { getChallengeParticipantStats } from "@/features/participant-stats/data/participant-stats.repository";
 import { auth } from "@/core/auth";
 import { cookies } from "next/headers";
-import { notFound, permanentRedirect, RedirectType } from "next/navigation";
+import { notFound, redirect, RedirectType } from "next/navigation";
 import { PARTICIPANT_PREVIEW_COOKIE } from "@/features/auth/domain/preview-mode";
 
 vi.mock("next/navigation", () => ({
    notFound: vi.fn(() => {
       throw new Error("NEXT_NOT_FOUND");
    }),
-   permanentRedirect: vi.fn((url: string, type?: any) => {
+   redirect: vi.fn((url: string, type?: any) => {
       const err = new Error(`NEXT_REDIRECT:${url}`);
-      (err as any).digest = `NEXT_REDIRECT;replace;${url};308;`;
+      (err as any).digest = `NEXT_REDIRECT;replace;${url};307;`;
       throw err;
    }),
    RedirectType: {
@@ -125,7 +125,7 @@ describe("ParticipantStatsPage", () => {
       },
    };
 
-   it("permanently redirects (308) to canonical scholar profile URL with challengeId", async () => {
+   it("redirects to canonical scholar profile URL with challengeId", async () => {
       vi.mocked(getChallengeParticipantStats).mockResolvedValue(
          mockStats as any
       );
@@ -139,7 +139,7 @@ describe("ParticipantStatsPage", () => {
          "NEXT_REDIRECT:/@bob?challengeId=chal_1&tab=history&view=today"
       );
 
-      expect(permanentRedirect).toHaveBeenCalledWith(
+      expect(redirect).toHaveBeenCalledWith(
          "/@bob?challengeId=chal_1&tab=history&view=today",
          RedirectType.replace
       );

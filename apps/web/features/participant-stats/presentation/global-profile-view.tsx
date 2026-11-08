@@ -90,9 +90,11 @@ export function GlobalProfileView({
                : "";
          const shareUrl = `${origin}${canonicalPath}`;
 
-         if (navigator?.clipboard?.writeText) {
-            await navigator.clipboard.writeText(shareUrl);
+         if (!navigator?.clipboard?.writeText) {
+            toast.error("Clipboard is not available in this browser.");
+            return;
          }
+         await navigator.clipboard.writeText(shareUrl);
          setHasCopied(true);
          toast.success("Profile link copied to clipboard!");
          setTimeout(() => setHasCopied(false), 2000);

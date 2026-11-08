@@ -199,12 +199,12 @@ Scholar profiles use the canonical format `https://holdmetoit.vercel.app/@<platf
    - Description: Format-aware career summary focused on pure study achievements (`⏱️ {lifetimeHours} study • 🔥 {streak}-day streak • ⚔️ {completed}/{entered} challenges`), omitting trophy rank/recruit labels and daily tasks completed.
    - Accent Color: Hex/integer theme color matching scholar trophy rank (Obsidian `#10b981`, Diamond `#38bdf8`, Platinum `#a78bfa`, Gold `#f59e0b`, Silver `#94a3b8`, Bronze `#d97706`).
 6. **Backwards Compatibility & Redirection:**
-   - Legacy `/profile/[userId]` routes perform a canonical 308 permanent redirect to `/@<platformUsername>`.
-   - Legacy `/profile` redirects authenticated scholars to their own canonical `/@<platformUsername>`.
-   - Legacy `/challenge/[id]/participant/[participantId]` routes perform a canonical 308 permanent redirect to `/@<platformUsername>?challengeId=<id>&tab=history` (preserving `view` query parameters).
+   - Legacy `/profile/[userId]` routes perform a canonical 308 permanent redirect to `/@<platformUsername>` (or fallback `/@<userId>`).
+   - Legacy `/profile` redirects authenticated scholars to their own canonical `/@<platformUsername>` (or fallback `/@<userId>`).
+   - Legacy `/challenge/[id]/participant/[participantId]` routes perform a temporary redirect (`RedirectType.replace`) to `/@<platformUsername>?challengeId=<id>&tab=history` (or fallback `/@<userId>?challengeId=<id>&tab=history`), preserving `view` parameters while avoiding stale permanent browser caching.
    - CUID access via `/@<cuid>` canonical-redirects to `/@<platformUsername>` if the scholar has a registered platform username.
 7. **Unified Navigation & Challenge Context:**
-   - All participant links across Challenge Overview tab, Challenge Leaderboard tab, Challenge Manage roster, and Admin User Directory link directly to `/@<platformUsername>?challengeId=<id>`.
+   - All participant links across Challenge Overview tab, Challenge Leaderboard tab, Challenge Manage roster, and Admin User Directory link directly to `/@<platformUsername>?challengeId=<id>` (or fallback `/@<userId>?challengeId=<id>`).
    - When navigating to `/@<platformUsername>?challengeId=<id>`, `GlobalProfileView` defaults to the `"history"` tab to display the challenge snapshot directly.
    - A contextual "Back to Challenge Leaderboard" navigation link is rendered above the snapshot, preserving the origin `view` mode (`today`, `team`, or `individual`).
 8. **Share Profile Button & Live Address Bar Sync:**
