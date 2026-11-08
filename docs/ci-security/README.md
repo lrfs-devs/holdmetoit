@@ -18,7 +18,7 @@ Before this slice, CI ran typecheck, lint, tests, and build only. Nothing scanne
 | `.github/workflows/security.yml` | `npm audit` for production dependencies (push, PR, weekly) and dependency review on pull requests.                                        |
 | `.github/workflows/codeql.yml`   | CodeQL static analysis for JavaScript/TypeScript (push, PR, weekly) with the `security-extended` query suite.                             |
 | `.github/dependabot.yml`         | Weekly grouped npm and GitHub Actions update PRs with a 7-day cooldown on brand-new releases.                                             |
-| `.github/CODEOWNERS`             | Single owner (`@Afnanpathan2004`), with the security-sensitive paths listed explicitly.                                                   |
+| `.github/CODEOWNERS`             | Two owners (`@Afnanpathan2004` and `lrfs-devs/maintainers`), with the security-sensitive paths listed explicitly.                                                   |
 
 ### 2.1 Action pinning
 
@@ -57,7 +57,7 @@ The lockfile was clean when this gate was added, after the Next.js 16 and Prisma
 
 - The previous file was `*@Afnanpathan2004` with no space, so GitHub read it as a pattern with no owner and enforced nothing. The corrected default is `* @Afnanpathan2004`.
 - Security-sensitive paths are listed explicitly with the same owner so they stay visible: `.github/`, `apps/web/core/auth/`, `apps/web/features/auth/`, `apps/web/app/api/auth/`, `apps/web/core/security/`, `apps/web/middleware.ts`, and `packages/database/prisma/`. Adding another handle lets that person approve, but GitHub accepts approval from any one listed owner, so it does not require a second approval. To require two reviewers, also raise the required approval count to two in branch protection (section 5.2).
-- **Single-owner limitation:** GitHub does not let a PR author approve their own PR. With one code owner and **Require review from Code Owners** enabled, that owner's own PRs touching owned paths cannot get a valid code-owner approval and need an admin override or a ruleset bypass entry. Listing a second owner removes the need for the override.
+- **Single-owner limitation:** GitHub does not let a PR author approve their own PR. With one code owner and **Require review from Code Owners** enabled, that owner's own PRs touching owned paths cannot get a valid code-owner approval and need a bypass, which must be scoped as described in section 5.2 so it cannot skip the security checks. Listing a second owner removes the need for the bypass.
 - Code owners only take effect when **Require review from Code Owners** is enabled in branch protection (section 5). Owners must have write access to the repository. When the team changes, edit the handles in `.github/CODEOWNERS`.
 
 ## 5. Repository Settings (Admin Checklist)
@@ -81,7 +81,7 @@ Settings → Rules (or Branches) → protect `main` and `dev` with the same rule
 
 - [ ] Require a pull request before merging.
 - [ ] Require at least 1 approving review.
-- [ ] Require review from Code Owners. Enable this only after a second code owner is listed in `.github/CODEOWNERS`, or after adding the sole owner as a bypass actor (ruleset, pull requests only) so their own PRs can still merge; note each bypass in the PR. See the single-owner limitation in section 4.
+- [ ] Require review from Code Owners. Enable this only after a second code owner is listed in `.github/CODEOWNERS` (a user, or a team that exists, is visible, and has write access), or after setting up the scoped bypass described below so the sole owner's own PRs can still merge.
 - [ ] Dismiss stale approvals when new commits are pushed.
 - [ ] Require status checks to pass: `quality-gates`, `npm audit (production)`, `Dependency review`, `Analyze (javascript-typescript)`.
 - [ ] Require conversations to be resolved.
@@ -89,6 +89,15 @@ Settings → Rules (or Branches) → protect `main` and `dev` with the same rule
 - [ ] Block branch deletion.
 
 Status check names are the job names shown in the Actions UI. A check only becomes selectable after it has run once on the repository.
+
+#### Scoped bypass for a sole code owner
+
+A bypass actor is exempt from every rule in a ruleset they can bypass, and pull-request-only mode does not narrow which rules they skip. If one ruleset holds both the code-owner requirement and the security checks, bypassing the first also lets the owner merge with failed or pending checks and without the general approval. Use two rulesets instead:
+
+1. **Ruleset A, no bypass actors:** require a pull request with at least 1 approval, dismiss stale approvals, require the status checks listed above, require conversations to be resolved, block force pushes, and block branch deletion. Leave **Require review from Code Owners** off here.
+2. **Ruleset B, code owners only:** a pull-request rule with at least 1 approval and **Require review from Code Owners** on, and nothing else. Add the sole owner as a bypass actor on this ruleset only.
+
+With this layout the owner's own PRs skip only the code-owner requirement. Ruleset A still needs the checks to pass and one approval from another collaborator with write access. Note each bypass in the PR.
 
 ### 5.3 Actions settings
 
