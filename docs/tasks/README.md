@@ -284,3 +284,28 @@ npx tsx --env-file=packages/database/.env apps/web/scripts/repair-task-invariant
   category model is replaced, remove the index together with the create/revive logic.
 - Follow-ups: conflict UI, default-category naming alignment (`General` vs `Default`),
   and extending the `FOR SHARE` guard to the remaining admin writers.
+
+---
+
+## 7. Todo List Export for Discord (GH #260 / Jira KAN-97)
+
+Enables users to export their Daily and Weekly Todo lists with a single click from the cockpit headers and paste them directly into Discord channels.
+
+### 7.1 Architecture & Domain Isolation (Law L7)
+
+- **Pure Formatter:** [`features/tasks/domain/task-export.ts`](../../apps/web/features/tasks/domain/task-export.ts) formats task category groups into clean Discord markdown or high-contrast emoji text with zero UI or framework dependencies.
+- **Presentation Component:** [`features/tasks/presentation/task-export-button.tsx`](../../apps/web/features/tasks/presentation/task-export-button.tsx) provides a dropdown button in the Daily and Weekly board headers with 1-click copy, inline `Copied! ✓` feedback, sonner toast notifications, and `localStorage` preference persistence (`holdmetoit_task_export_style`).
+
+### 7.2 Export Formats
+
+1. **Standard Markdown Checklist (Default):**
+   - Uses native Discord checkboxes `- [ ]` and `- [x]`.
+   - Supports in-progress (`- [ ] ⏳`), crossed-out (`- [ ] ~~...~~`), and challenge goals (`🏆`).
+   - Daily includes full weekday and date (plus challenge day number when active): `## 📋 Daily Todos — Monday, Nov 9, 2026 (Day 2)`.
+   - Weekly includes explicit date range: `## 🗓️ Weekly Todos — Nov 2, 2026 – Nov 8, 2026`.
+   - Work items are grouped under category headers (`### 📂 Category Name`), skipping empty categories.
+   - Includes progress summary footer: `> 📊 **Progress:** X/Y completed (Z%) • *HoldMeToIt*`.
+
+2. **High-Contrast Emojis:**
+   - Visual emojis for Discord servers: `⬜` (TODO), `✅` (Completed), `⏳` (In Progress), `❌ ~~...~~` (Crossed Out), `🏆` (Challenge Goal).
+   - Category headers formatted as `**📂 Category Name**`.

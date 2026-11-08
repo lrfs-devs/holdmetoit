@@ -47,6 +47,13 @@ import {
    ROLLOVER_SNOOZE_COOKIE,
    ROLLOVER_SNOOZE_STORAGE_PREFIX,
 } from "./cockpit-tasks-storage";
+import { TaskExportButton } from "@/features/tasks/presentation/task-export-button";
+import {
+   formatDailyTasksExport,
+   formatWeeklyTasksExport,
+   formatFullDayDate,
+   type TaskExportStyle,
+} from "@/features/tasks/domain/task-export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -2783,6 +2790,74 @@ export function CockpitTasksSection({
       [visibleWeeklyCategories, isTaskInWeeklyWeek]
    );
 
+   const handleExportDaily = useCallback(
+      (style: TaskExportStyle) => {
+         const exportCategories = dailyCategories.map((cat) => ({
+            id: cat.id,
+            name: cat.name,
+            tasks: cat.tasks
+               .filter((t) => getTaskDateKey(t) === selectedDateKey)
+               .map((t) => ({
+                  id: t.id,
+                  text: t.text,
+                  completed: t.completed,
+                  status: getTaskStatus(t),
+                  challengeId: t.challengeId,
+                  isChallengeGoal: Boolean(
+                     linkableChallengeId &&
+                     t.challengeId === linkableChallengeId
+                  ),
+               })),
+         }));
+
+         return formatDailyTasksExport({
+            dateKey: selectedDateKey,
+            dateLabel: formatFullDayDate(selectedDateKey),
+            dayNumber: hasChallengeContext ? selectedDayNumber : undefined,
+            categories: exportCategories,
+            style,
+         });
+      },
+      [
+         dailyCategories,
+         selectedDateKey,
+         getTaskDateKey,
+         hasChallengeContext,
+         selectedDayNumber,
+         linkableChallengeId,
+      ]
+   );
+
+   const handleExportWeekly = useCallback(
+      (style: TaskExportStyle) => {
+         const exportCategories = weeklyCategories.map((cat) => ({
+            id: cat.id,
+            name: cat.name,
+            tasks: cat.tasks.filter(isTaskInWeeklyWeek).map((t) => ({
+               id: t.id,
+               text: t.text,
+               completed: t.completed,
+               status: getTaskStatus(t),
+               challengeId: t.challengeId,
+               isChallengeGoal: Boolean(
+                  linkableChallengeId && t.challengeId === linkableChallengeId
+               ),
+            })),
+         }));
+
+         return formatWeeklyTasksExport({
+            weekRangeLabel: weeklyRangeLabel || "Active Week",
+            categories: exportCategories,
+            style,
+         });
+      },
+      [
+         weeklyCategories,
+         isTaskInWeeklyWeek,
+         weeklyRangeLabel,
+         linkableChallengeId,
+      ]
+   );
    const handleAddTodoSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       if (!newTodoText.trim()) return;
@@ -4430,8 +4505,8 @@ export function CockpitTasksSection({
                      </div>
                   </div>
 
-                  {/* Row 2: Calendar Week Navigator (Fixed row directly above the 7-day pill switcher) */}
-                  <div className="flex items-center justify-start gap-2 pt-0.5">
+                  {/* Row 2: Calendar Week Navigator & Export */}
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
                      <CockpitWeekNavigator
                         selectedDateKey={selectedDateKey}
                         todayDateKey={effectiveTodayDate}
@@ -4442,6 +4517,11 @@ export function CockpitTasksSection({
                         activeWeekDateKeys={activeWeekDateKeys}
                         showToday={!isActiveDayToday}
                         onJumpToToday={handleJumpToToday}
+                     />
+                     <TaskExportButton
+                        onExport={handleExportDaily}
+                        scopeLabel="Daily"
+                        dataTestId="daily-tasks-export-button"
                      />
                   </div>
 
@@ -5700,8 +5780,8 @@ export function CockpitTasksSection({
                      </div>
                   </div>
 
-                  {/* Row 2: Calendar Week Navigator for Weekly Todos (Adapted for weekly system) */}
-                  <div className="flex items-center justify-start gap-2 pt-0.5">
+                  {/* Row 2: Calendar Week Navigator & Export for Weekly Todos */}
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
                      <CockpitWeekNavigator
                         selectedDateKey={activeWeeklyAnchorDateKey}
                         todayDateKey={effectiveTodayDate}
@@ -5713,6 +5793,11 @@ export function CockpitTasksSection({
                         mode="weekly"
                         showToday={!isViewingCurrentWeeklyWeek}
                         onJumpToToday={handleWeeklyJumpToCurrentWeek}
+                     />
+                     <TaskExportButton
+                        onExport={handleExportWeekly}
+                        scopeLabel="Weekly"
+                        dataTestId="weekly-tasks-export-button"
                      />
                   </div>
 

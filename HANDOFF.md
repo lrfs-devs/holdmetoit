@@ -184,6 +184,34 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 
 ## 7. Session Changelog (Last 3–5 Sessions)
 
+### Session 202 — 2026-11-08 (Feat: 1-Click Discord Todo Export for Daily & Weekly Tasks on `krish` · GH #260 / Jira KAN-97)
+
+- **Scope & Objectives:** Implemented 1-click clipboard export for Daily and Weekly todos from the website directly to Discord-ready text. Linked with GitHub Issue #260 and Jira Ticket KAN-97 (assigned to Krish Jaiswal).
+- **Domain Layer (`features/tasks/domain/task-export.ts` — Law L7):**
+   - Pure calculation and text generation without React/Next.js/Prisma imports.
+   - Supports two Discord-optimized formats:
+      1. **Standard Markdown Checklist (Default):** Native Discord markdown task list `- [ ]` and `- [x]`, in-progress `- [ ] ⏳`, crossed out `- [ ] ~~...~~`, and challenge goal indicator `🏆`.
+      2. **High-Contrast Emojis:** Visual status markers (`⬜`, `✅`, `⏳`, `❌ ~~...~~`, `🏆`).
+   - Daily export: includes full day of week, date, and challenge day number (e.g. `## 📋 Daily Todos — Monday, Nov 9, 2026 (Day 2)`).
+   - Weekly export: includes explicit date range (e.g. `## 🗓️ Weekly Todos — Nov 2, 2026 – Nov 8, 2026`).
+   - Category grouping: work items grouped under `### 📂 Category Name` headers (skipping empty categories).
+   - Progress summary footer: includes completed/total count and completion percentage in a clean blockquote.
+   - 19 unit tests passing in Vitest (`task-export.test.ts`).
+- **Presentation Layer (`features/tasks/presentation/task-export-button.tsx` & `cockpit-tasks-section.tsx`):**
+   - Added `TaskExportButton` with dropdown menu for format selection in both Daily Todos and Weekly Todos headers.
+   - 1-click clipboard copy (`navigator.clipboard.writeText`) with fallback for non-secure contexts.
+   - Inline feedback: switches to emerald `Copied! ✓` state for 2 seconds.
+   - Toast confirmation via `sonner` (`Copied Daily (Markdown Checklist) to clipboard!`).
+   - Remembers user's preferred format in `localStorage` (`holdmetoit_task_export_style`).
+   - 4 unit tests passing in Vitest (`task-export-button.test.tsx`).
+- **Documentation:**
+   - Added Section 7 to `docs/tasks/README.md` covering architecture, format specifications, and developer usage.
+- **Quality Gates:**
+   - `npm run typecheck:web`: 0 errors.
+   - `npm run lint:web`: 0 errors.
+   - 23/23 unit tests green across `task-export` suites; 108/108 tests passing in `cockpit-tasks` suites.
+- **Jira Status:** `KAN-97` transitioned to `In Progress` (Stage 1).
+
 ### Session 190 — 2026-11-02 (Cockpit task visibility on `afnan-jr`)
 
 - **Visibility rule:** daily shows every task, including `COMPLETED` and `CROSSED_OUT`. Weekly hides only tasks bound to a results-locked challenge (`completedChallengeIds` from `Challenge.resultsLockedAt`); all other weekly tasks stay visible/editable. Hiding is presentation-only; no queue/delete or result rewrite.
