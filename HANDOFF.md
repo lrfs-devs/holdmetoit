@@ -184,6 +184,26 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 
 ## 7. Session Changelog (Last 3–5 Sessions)
 
+### Session 204 — 2026-11-08 (CI security scanning & supply-chain hardening, SEC-19 / #237)
+
+- **Workflow Hardening:**
+   - `.github/workflows/ci.yml` now declares `permissions: contents: read`, pins `actions/checkout` and `actions/setup-node` (v4.4.0) to commit SHAs, and sets `persist-credentials: false`.
+- **New Scanning Workflows:**
+   - `.github/workflows/security.yml`: `npm audit --package-lock-only --omit=dev --audit-level=high` (push, PR, weekly cron) and `actions/dependency-review-action` on pull requests (fails on newly introduced high/critical advisories).
+   - `.github/workflows/codeql.yml`: CodeQL for JavaScript/TypeScript with the `security-extended` queries (push, PR, weekly cron).
+   - Every action is pinned to a full SHA of a release at least two weeks old, each verified against its tag.
+- **Audit Gate Is Blocking:**
+   - The lockfile is clean (0 production advisories) after the Next.js 16 and Prisma 7 migration (PR #253), so the audit step fails the build on any high or critical advisory with no advisory-mode escape hatch.
+- **Dependabot & CODEOWNERS:**
+   - `.github/dependabot.yml`: weekly grouped npm and GitHub Actions updates, 7-day cooldown, `chore(deps)` / `chore(ci)` commit prefixes.
+   - `.github/CODEOWNERS` previously read `*@Afnanpathan2004` (no space) and enforced nothing. Fixed it and listed the security-sensitive paths explicitly under the same owner: `.github/`, auth, `core/security`, `middleware.ts`, and `packages/database/prisma/`.
+- **Not In The Repository (admin must apply):**
+   - Secret scanning with push protection, Dependabot alerts and security updates, and branch protection on `main` and `dev` (require Code Owner review and the four checks). Checklist in `docs/ci-security/README.md` §5.
+- **Left Unchanged:**
+   - Husky `prepare: husky || true`, because Docker builds run `npm ci` without a `.git` directory.
+- **Validation:** `actionlint` clean, all YAML parses, every `uses:` is a 40-character SHA, and the audit command exits 0 on the current lockfile. No application code changed.
+- **NEXT:** apply the repository-settings checklist and make `npm audit (production)`, `Dependency review`, `Analyze (javascript-typescript)`, and `quality-gates` required checks.
+
 ### Session 203 — 2026-11-06 (Merge `origin/dev` @ `8de6b8d` into `chore/nextjs-16-upgrade`, resolving PR #252 and #254 integrations)
 
 - **Merge Integration:**
