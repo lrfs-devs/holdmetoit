@@ -258,3 +258,32 @@ export async function fetchGuildMember(
       return null;
    }
 }
+
+export type GuildMemberLookup =
+   | { status: "found"; member: DiscordGuildMember }
+   | { status: "not_found" }
+   | { status: "unavailable" };
+
+/**
+ * Like {@link fetchGuildMember}, but distinguishes "the user is not in the
+ * guild" (HTTP 404) from "Discord could not be reached or refused the call".
+ * Security-sensitive callers (role revalidation) must not treat an outage as a
+ * missing member, nor a missing member as an outage.
+ */
+export async function lookupGuildMember(
+   input: FetchGuildMemberInput
+): Promise<GuildMemberLookup> {
+   if (!getDiscordToken()) return { status: "unavailable" };
+
+   try {
+      const member = await requestDiscord<DiscordGuildMember>(
+         Routes.guildMember(input.guildId, input.userId) as `/${string}`
+      );
+      return { status: "found", member };
+   } catch (error) {
+      if (error instanceof DiscordAPIError && error.status === 404) {
+         return { status: "not_found" };
+      }
+      return { status: "unavailable" };
+   }
+}

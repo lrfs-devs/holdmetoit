@@ -4,7 +4,7 @@
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
 > **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-08 (Session 207 — fix(identity): resolve code review findings for redirects, clipboard safety, and documentation accuracy)
+> **Last Updated:** 2026-11-09 (Session 208 — fix(auth): revalidate Discord roles, shorten sessions, restrict admin role editing; GH #227)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
@@ -55,6 +55,7 @@
 - `DEV` → Discord snowflake listed in `DEV_DISCORD_IDS` (JSON array; legacy alias `DISCORD_DEV_IDS` still read).
 - `ADMIN` → user holds a role in `DISCORD_ADMIN_ROLE_IDS` within `DISCORD_GUILD_ID` (looked up with `DISCORD_BOT_TOKEN`; OAuth scope stays `identify`).
 - `PARTICIPANT` → everyone else. The `DISCORD_ADMIN_IDS` whitelist has been removed.
+- **Revalidation (GH #227):** `ADMIN`/`DEV` sessions are re-checked against Discord at most every 5 minutes per process and **demoted** (never promoted) when Discord no longer grants the role. Sessions last 7 days (`updateAge` 1 day). The `/admin/users` role editor is revoke-only and cannot touch `DEV` users. Details: `docs/security/README.md` §5.
 - **Global Participant Preview:** Admins and devs can toggle a global cookie (`holdmetoit_preview_as_participant`) from the header next to "Admin Console". When active, all pages (`/`, `/challenge/[id]`, etc.) render exactly as regular participants see them (hiding Manage tab, Event Audit tab, host override controls, and DEV badge).
 
 ---
@@ -183,6 +184,23 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 ---
 
 ## 7. Session Changelog (Last 3–5 Sessions)
+
+### Session 208 — 2026-11-09 (Discord role revalidation, shorter sessions, revoke-only role editor, SEC-05 / SEC-20 / GH #227 on `fix/auth-role-revalidation-227`)
+
+- **Revalidation:**
+   - New `features/auth/data/role-revalidation.service.ts` re-checks `ADMIN`/`DEV` users against Discord from the Auth.js `session` callback, cached 5 minutes per user per process, and persists demotions. Outages keep the stored role and retry after 30s.
+   - New `checkDiscordAdminRole` (`discord-guild.service.ts`) and `lookupGuildMember` (`packages/discord`) distinguish "left the server" (404 → demote) from "Discord unavailable" (keep role). The old `fetchGuildMember` is unchanged.
+   - Removed the fire-and-forget DEV `prisma.user.update` from the `session` callback.
+- **Sessions:** `maxAge` 7 days, `updateAge` 1 day (was the 30-day default).
+- **Role editor:** `updateUserRoleAction` is revoke-only; granting `ADMIN` returns `ROLE_GRANT_FORBIDDEN`, any change to a `DEV` target returns `DEV_ROLE_PROTECTED`. The inspector sheet only offers "revoke". Pure rules in `features/auth/domain/role-policy.ts`.
+- **Docs:** `docs/security/README.md` §5 (source of truth, windows, `AUTH_URL` / no blanket `AUTH_TRUST_HOST` policy).
+- **Deviations from the issue text (needs team sign-off):**
+   - DEV targets are immutable for _every_ actor, not just non-DEV ones, because `DEV` is re-derived from `DEV_DISCORD_IDS` and an edit would be silently reverted.
+   - Admins cannot be _granted_ by anyone through the editor (the issue offered "DEV may grant ADMIN" as an alternative), because Discord is the source of truth and a manual grant would be removed by the next revalidation.
+   - Revalidation is demote-only so a manual revoke is not undone within minutes. A revoked user who still holds the Discord role regains `ADMIN` at next sign-in.
+- **Behavior change:** a `PARTICIPANT` newly added to `DEV_DISCORD_IDS` becomes `DEV` at next sign-in (previously the session callback elevated them immediately). An existing `ADMIN` is promoted within the window.
+- **Validation:** web auth/admin suites green (199 tests) incl. new policy, revalidation, guild-service and action tests; `lint:web` 0 errors; Prettier clean. `typecheck:web` and the full `test:web` were **not** run to completion in the authoring sandbox (Prisma engine download blocked, so no generated client): the type error count did not increase versus `dev`. Re-run both in CI or locally.
+- **NEXT:** run `npm run typecheck:web` and `npm run test:web` with a generated Prisma client; open PR `fix/auth-role-revalidation-227` → `dev` and move #227 to `In Review` (not `Done` until merged to `dev` and released to `main`). Ensure `AUTH_URL` is set in every deployed environment.
 
 ### Session 204 — 2026-11-08 (CI security scanning & supply-chain hardening, SEC-19 / #237)
 
