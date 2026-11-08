@@ -50,12 +50,14 @@ The lockfile was clean when this gate was added, after the Next.js 16 and Prisma
 
 1. Run `npm audit --omit=dev` locally to see the advisory and the fix version.
 2. Prefer a non-breaking `npm audit fix`, or bump the direct dependency that pulls in the vulnerable package.
-3. If no fixed version exists yet, do not weaken the gate. Pin or replace the dependency, or record the exception in the PR with the advisory ID and a follow-up issue.
+3. If the vulnerable package is transitive and a patched release exists that the direct dependency has not adopted yet, force it with an npm `overrides` entry in the root `package.json` and re-lock.
+4. If no patched version exists, **the PR stays blocked**. The workflow has no exception mechanism, so noting an exception in the PR does not make `npm audit (production)` pass. Replace or remove the dependency instead. Only when the advisory demonstrably does not affect this app may an admin merge by overriding branch protection (section 5.2); record the advisory ID, why it does not apply, and a follow-up issue in the PR.
 
 ## 4. CODEOWNERS Policy
 
 - The previous file was `*@Afnanpathan2004` with no space, so GitHub read it as a pattern with no owner and enforced nothing. The corrected default is `* @Afnanpathan2004`.
-- Security-sensitive paths are listed explicitly with the same owner so they stay visible: `.github/`, `apps/web/core/auth/`, `apps/web/features/auth/`, `apps/web/app/api/auth/`, `apps/web/core/security/`, `apps/web/middleware.ts`, and `packages/database/prisma/`. To require a second reviewer later, add another handle to those lines.
+- Security-sensitive paths are listed explicitly with the same owner so they stay visible: `.github/`, `apps/web/core/auth/`, `apps/web/features/auth/`, `apps/web/app/api/auth/`, `apps/web/core/security/`, `apps/web/middleware.ts`, and `packages/database/prisma/`. Adding another handle lets that person approve, but GitHub accepts approval from any one listed owner, so it does not require a second approval. To require two reviewers, also raise the required approval count to two in branch protection (section 5.2).
+- **Single-owner limitation:** GitHub does not let a PR author approve their own PR. With one code owner and **Require review from Code Owners** enabled, that owner's own PRs touching owned paths cannot get a valid code-owner approval and need an admin override or a ruleset bypass entry. Listing a second owner removes the need for the override.
 - Code owners only take effect when **Require review from Code Owners** is enabled in branch protection (section 5). Owners must have write access to the repository. When the team changes, edit the handles in `.github/CODEOWNERS`.
 
 ## 5. Repository Settings (Admin Checklist)
@@ -79,7 +81,7 @@ Settings → Rules (or Branches) → protect `main` and `dev` with the same rule
 
 - [ ] Require a pull request before merging.
 - [ ] Require at least 1 approving review.
-- [ ] Require review from Code Owners.
+- [ ] Require review from Code Owners. Enable this only after a second code owner is listed in `.github/CODEOWNERS`, or after adding the sole owner as a bypass actor (ruleset, pull requests only) so their own PRs can still merge; note each bypass in the PR. See the single-owner limitation in section 4.
 - [ ] Dismiss stale approvals when new commits are pushed.
 - [ ] Require status checks to pass: `quality-gates`, `npm audit (production)`, `Dependency review`, `Analyze (javascript-typescript)`.
 - [ ] Require conversations to be resolved.
@@ -97,7 +99,7 @@ Settings → Actions → General:
 
 ### 5.4 Verification
 
-- [ ] Open a throwaway PR touching `.github/`: it requests review from both owners and cannot merge without an approval.
+- [ ] Open a throwaway PR touching `.github/` from an account other than `@Afnanpathan2004`: it requests review from `@Afnanpathan2004` and cannot merge without that owner's approval.
 - [ ] The `Security` and `CodeQL` workflows appear in the PR checks.
 - [ ] Security → Code scanning shows a CodeQL analysis after the first run on `dev`.
 - [ ] Security → Dependabot lists the weekly update PRs after the first Monday.
