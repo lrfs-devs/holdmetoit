@@ -504,9 +504,7 @@ describe("ChallengeLeaderboardTab", () => {
       );
 
       // Links should contain ?view=today
-      expect(todayHtml).toContain(
-         `/profile/user-1?challengeId=${todayChallenge.id}`
-      );
+      expect(todayHtml).toContain(`/@afnan?challengeId=${todayChallenge.id}`);
 
       const defaultHtml = renderToStaticMarkup(
          createElement(ChallengeLeaderboardTab, {
@@ -516,11 +514,9 @@ describe("ChallengeLeaderboardTab", () => {
       );
 
       // Default (overall rank) links should NOT have ?view=
-      expect(defaultHtml).toContain(
-         `/profile/user-1?challengeId=${todayChallenge.id}`
-      );
+      expect(defaultHtml).toContain(`/@afnan?challengeId=${todayChallenge.id}`);
       expect(defaultHtml).not.toContain(
-         `/profile/user-1?challengeId=${todayChallenge.id}&view=`
+         `/@afnan?challengeId=${todayChallenge.id}&view=`
       );
    });
 
@@ -814,9 +810,7 @@ describe("ChallengeLeaderboardTab", () => {
          createElement(ChallengeLeaderboardTab, { challenge: duoChallenge })
       );
 
-      expect(teamHtml).toContain(
-         `/profile/user-1?challengeId=${duoChallenge.id}`
-      );
+      expect(teamHtml).toContain(`/@afnan?challengeId=${duoChallenge.id}`);
       expect(teamHtml).not.toContain(`&view=team`);
 
       const individualHtml = renderToStaticMarkup(
@@ -827,7 +821,7 @@ describe("ChallengeLeaderboardTab", () => {
       );
 
       expect(individualHtml).toContain(
-         `/profile/user-1?challengeId=${duoChallenge.id}`
+         `/@afnan?challengeId=${duoChallenge.id}`
       );
    });
 
@@ -905,7 +899,8 @@ describe("ChallengeLeaderboardTab", () => {
 
          // Scholar details are rendered with platform username
          expect(html).toContain("klara");
-         expect(html).not.toContain("@klara");
+         expect(html).not.toMatch(/>\s*@klara\s*</);
+         expect(html).toContain('href="/@klara?challengeId=test-challenge-1"');
          expect(html).toContain(
             'data-testid="unassigned-pill-part-unassigned-1"'
          );

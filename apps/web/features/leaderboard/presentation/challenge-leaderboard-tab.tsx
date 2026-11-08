@@ -45,6 +45,7 @@ import {
    type AdminPardonParticipant,
 } from "@/features/accountability/presentation/admin-pardon-modal";
 import { EditDuoTeamModal } from "@/features/challenges/presentation/edit-duo-team-modal";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import { DataPagination } from "@/components/ui/data-pagination";
 import {
    Table,
@@ -492,8 +493,25 @@ export function ChallengeLeaderboardTab({
       }
    };
 
-   const getParticipantProfileUrl = (userId: string) => {
-      return `/profile/${userId}?challengeId=${challenge.id}`;
+   const getParticipantProfileUrl = (
+      entryOrUserId:
+         | ScoreboardStandingEntry
+         | { userId?: string; id?: string; username?: string | null }
+         | string
+   ) => {
+      if (typeof entryOrUserId === "string") {
+         return buildUserProfileUrl(
+            { userId: entryOrUserId },
+            { challengeId: challenge.id }
+         );
+      }
+      return buildUserProfileUrl(
+         {
+            userId: entryOrUserId.userId || (entryOrUserId as any).id,
+            username: entryOrUserId.username,
+         },
+         { challengeId: challenge.id }
+      );
    };
 
    const [currentPage, setCurrentPage] = useState(1);
@@ -930,9 +948,7 @@ export function ChallengeLeaderboardTab({
                   <p className="text-xs text-text-tertiary">Runner-up</p>
                   {top2 ? (
                      <Link
-                        href={getParticipantProfileUrl(
-                           top2.userId || top2.participantId
-                        )}
+                        href={getParticipantProfileUrl(top2)}
                         className="text-sm font-bold text-white hover:underline truncate block"
                      >
                         {top2.username || top2.displayName}
@@ -975,9 +991,7 @@ export function ChallengeLeaderboardTab({
                   </p>
                   {top1 ? (
                      <Link
-                        href={getParticipantProfileUrl(
-                           top1.userId || top1.participantId
-                        )}
+                        href={getParticipantProfileUrl(top1)}
                         className="text-sm font-bold text-white hover:underline truncate block"
                      >
                         {top1.username || top1.displayName}
@@ -1005,9 +1019,7 @@ export function ChallengeLeaderboardTab({
                   <p className="text-xs text-text-tertiary">Rank 3</p>
                   {top3 ? (
                      <Link
-                        href={getParticipantProfileUrl(
-                           top3.userId || top3.participantId
-                        )}
+                        href={getParticipantProfileUrl(top3)}
                         className="text-sm font-bold text-white hover:text-feedback-success hover:underline truncate block"
                      >
                         {top3.username || top3.displayName}
@@ -1475,14 +1487,16 @@ export function ChallengeLeaderboardTab({
                                                 {/* Avatar */}
                                                 <Link
                                                    href={getParticipantProfileUrl(
-                                                      entry.userId ||
-                                                         entry.participantId
+                                                      entry
                                                    )}
                                                    className="h-8 w-8 rounded-full bg-surface-nested border border-border-strong overflow-hidden flex items-center justify-center shrink-0 text-xs hover:border-feedback-success transition-colors"
                                                 >
                                                    <UserAvatar
                                                       src={entry.image}
-                                                      name={entry.username || entry.displayName}
+                                                      name={
+                                                         entry.username ||
+                                                         entry.displayName
+                                                      }
                                                       userId={entry.userId}
                                                       size="sm"
                                                       className="h-full w-full border-0"
@@ -1495,8 +1509,7 @@ export function ChallengeLeaderboardTab({
                                                    <div className="flex items-center gap-1.5 min-w-0">
                                                       <Link
                                                          href={getParticipantProfileUrl(
-                                                            entry.userId ||
-                                                               entry.participantId
+                                                            entry
                                                          )}
                                                          className="text-xs font-bold text-white hover:text-feedback-success hover:underline truncate block"
                                                          title={
@@ -1665,14 +1678,16 @@ export function ChallengeLeaderboardTab({
                                           {/* Avatar */}
                                           <Link
                                              href={getParticipantProfileUrl(
-                                                entry.userId ||
-                                                   entry.participantId
+                                                entry
                                              )}
                                              className="h-8 w-8 rounded-full bg-surface-nested border border-border-strong overflow-hidden flex items-center justify-center shrink-0 text-xs hover:border-feedback-success transition-colors"
                                           >
                                              <UserAvatar
                                                 src={entry.image}
-                                                name={entry.username || entry.displayName}
+                                                name={
+                                                   entry.username ||
+                                                   entry.displayName
+                                                }
                                                 userId={entry.userId}
                                                 size="sm"
                                                 className="h-full w-full border-0"
@@ -1685,8 +1700,7 @@ export function ChallengeLeaderboardTab({
                                              <div className="flex items-center gap-1.5 min-w-0">
                                                 <Link
                                                    href={getParticipantProfileUrl(
-                                                      entry.userId ||
-                                                         entry.participantId
+                                                      entry
                                                    )}
                                                    className="text-xs font-bold text-white hover:text-feedback-success hover:underline truncate block"
                                                    title={
@@ -1812,14 +1826,14 @@ export function ChallengeLeaderboardTab({
 
                                  {/* Avatar */}
                                  <Link
-                                    href={getParticipantProfileUrl(
-                                       entry.userId || entry.participantId
-                                    )}
+                                    href={getParticipantProfileUrl(entry)}
                                     className="h-9 w-9 rounded-full bg-surface-nested border border-border-strong overflow-hidden flex items-center justify-center shrink-0 text-xs hover:border-feedback-success transition-colors"
                                  >
                                     <UserAvatar
                                        src={entry.image}
-                                       name={entry.username || entry.displayName}
+                                       name={
+                                          entry.username || entry.displayName
+                                       }
                                        userId={entry.userId}
                                        size="sm"
                                        className="h-full w-full border-0"
@@ -1830,9 +1844,7 @@ export function ChallengeLeaderboardTab({
                                  <div className="min-w-0 flex-1 space-y-0.5">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                        <Link
-                                          href={getParticipantProfileUrl(
-                                             entry.userId || entry.participantId
-                                          )}
+                                          href={getParticipantProfileUrl(entry)}
                                           className="text-xs font-bold text-white hover:text-feedback-success hover:underline truncate max-w-[110px] xs:max-w-[140px] block"
                                        >
                                           {entry.username || entry.displayName}
@@ -1986,14 +1998,16 @@ export function ChallengeLeaderboardTab({
                                        <div className="flex items-center gap-2.5">
                                           <Link
                                              href={getParticipantProfileUrl(
-                                                entry.userId ||
-                                                   entry.participantId
+                                                entry
                                              )}
                                              className="h-7 w-7 rounded-full bg-surface-nested border border-border-strong overflow-hidden flex items-center justify-center text-xs shrink-0 hover:border-feedback-success transition-colors"
                                           >
                                              <UserAvatar
                                                 src={entry.image}
-                                                name={entry.username || entry.displayName}
+                                                name={
+                                                   entry.username ||
+                                                   entry.displayName
+                                                }
                                                 userId={entry.userId}
                                                 size="sm"
                                                 className="h-full w-full border-0"
@@ -2003,8 +2017,7 @@ export function ChallengeLeaderboardTab({
                                              <div className="flex items-center gap-1.5 flex-wrap">
                                                 <Link
                                                    href={getParticipantProfileUrl(
-                                                      entry.userId ||
-                                                         entry.participantId
+                                                      entry
                                                    )}
                                                    className="font-semibold text-sm text-white hover:text-feedback-success hover:underline truncate block"
                                                 >
@@ -2033,7 +2046,6 @@ export function ChallengeLeaderboardTab({
                                                    variant="compact"
                                                 />
                                              </div>
-
                                           </div>
                                        </div>
                                     </TableCell>

@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/core/auth";
-import { requireSessionUser, AuthError } from "@/features/auth/api/require-session";
+import {
+   requireSessionUser,
+   AuthError,
+} from "@/features/auth/api/require-session";
 import {
    findUserById,
    isUsernameAvailable,
@@ -194,6 +197,11 @@ export async function updateUsernameAction(
 
       revalidatePath("/profile");
       revalidatePath("/");
+      revalidatePath(`/@${updatedUser.username}`);
+      if (oldUsername) {
+         revalidatePath(`/@${oldUsername}`);
+      }
+      revalidatePath("/[userHandle]", "page");
 
       return {
          ok: true,

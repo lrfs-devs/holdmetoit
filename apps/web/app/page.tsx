@@ -18,6 +18,7 @@ import {
    COLLAPSED_CATEGORIES_COOKIE,
    ROLLOVER_SNOOZE_COOKIE,
 } from "@/features/study-logs/presentation/cockpit/cockpit-tasks-storage";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 
 export const dynamic = "force-dynamic";
 
@@ -115,9 +116,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       ? { ...session.user, role: effectiveRole ?? session.user.role }
       : session?.user;
 
-   const profileUrl = cockpit?.challengeId
-      ? `/profile?challengeId=${cockpit.challengeId}`
-      : "/profile";
+   const profileUrl = buildUserProfileUrl(
+      {
+         id: session?.user?.id,
+         username: session?.user?.username,
+      },
+      cockpit?.challengeId ? { challengeId: cockpit.challengeId } : undefined
+   );
 
    const rawSnoozeCookie = cookieStore.get(ROLLOVER_SNOOZE_COOKIE)?.value;
    let initialIsRolloverSnoozed = false;

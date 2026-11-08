@@ -147,6 +147,22 @@ describe("UserNav", () => {
       expect(html).toContain('data-testid="user-profile-link"');
       expect(html).toContain('href="/challenge/c-1/participant/p-1"');
    });
+
+   it("renders user capsule as a link to /@<platformUsername> when user has username", () => {
+      const html = renderToStaticMarkup(
+         createElement(UserNav, {
+            user: {
+               id: "u_1",
+               displayName: "Alice Student",
+               username: "alice_s",
+               role: "PARTICIPANT",
+            },
+         })
+      );
+      expect(html).toContain('data-testid="user-profile-link"');
+      expect(html).toContain('href="/@alice_s"');
+      expect(html).toContain('title="View profile for alice_s"');
+   });
 });
 
 describe("AppHeader", () => {

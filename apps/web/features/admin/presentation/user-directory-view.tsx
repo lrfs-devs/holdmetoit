@@ -28,6 +28,7 @@ import { EmptyState } from "@/components/state/empty-state";
 import { fetchAdminUserRosterAction } from "../api/user-directory.actions";
 import { UserInspectorSheet } from "./user-inspector-sheet";
 import { SickStatusBadge } from "@/features/participant-status/presentation/sick-status-badge";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import type {
    AdminEnrollmentFilter,
    AdminRosterRole,
@@ -525,7 +526,9 @@ export function UserDirectoryView({
                                        {user.activeChallenges.map((ch) => (
                                           <Link
                                              key={ch.id}
-                                             href={`/challenge/${ch.id}/participant/${ch.participantId}`}
+                                             href={buildUserProfileUrl(user, {
+                                                challengeId: ch.id,
+                                             })}
                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-brand-1/10 border border-brand-1/30 text-brand-1 text-label font-medium hover:bg-brand-1/20 transition-colors"
                                              title={`View ${ch.title} participant stats`}
                                           >
@@ -566,7 +569,7 @@ export function UserDirectoryView({
                                        size="sm"
                                        className="h-8 px-2 text-xs text-text-secondary hover:text-white"
                                     >
-                                       <Link href={`/profile/${user.id}`}>
+                                       <Link href={buildUserProfileUrl(user)}>
                                           <span>Profile</span>
                                        </Link>
                                     </Button>

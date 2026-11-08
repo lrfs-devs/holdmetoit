@@ -18,6 +18,7 @@ import {
    isDevRole,
 } from "@/features/auth/domain/auth-roles";
 import { PreviewModeHotkey } from "@/features/auth/presentation/preview-mode-hotkey";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 
 export function SignInWithDiscordButton({
    redirectTo = "/",
@@ -116,7 +117,8 @@ export function UserNav({
       user.username || user.displayName || user.name || "Companion";
    const initial = displayName.charAt(0).toUpperCase();
    const isDev = isDevRole(user.role) && !effectiveIsPreviewActive;
-   const activeProfileUrl = profileUrl ?? "/profile";
+   const activeProfileUrl =
+      profileUrl ?? (user.username ? buildUserProfileUrl(user) : "/profile");
 
    return (
       <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">

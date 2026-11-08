@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createElement } from "react";
 import { redirect } from "next/navigation";
 import ProfilePage from "./page";
 import { auth } from "@/core/auth";
@@ -7,12 +6,7 @@ import * as globalProfileRepo from "@/features/participant-stats/data/global-pro
 
 vi.mock("next/navigation", () => ({
    redirect: vi.fn(),
-   useRouter: () => ({
-      refresh: vi.fn(),
-      push: vi.fn(),
-      replace: vi.fn(),
-   }),
-   useSearchParams: () => new URLSearchParams(),
+   RedirectType: { replace: "replace", push: "push" },
 }));
 
 vi.mock("@/core/auth", () => ({
@@ -21,20 +15,7 @@ vi.mock("@/core/auth", () => ({
 
 vi.mock("@/features/participant-stats/data/global-profile.repository", () => ({
    getGlobalUserProfile: vi.fn(),
-   getChallengeSnapshotForUser: vi.fn(),
 }));
-
-vi.mock(
-   "@/features/participant-stats/presentation/global-profile-view",
-   () => ({
-      GlobalProfileView: (props: any) =>
-         createElement(
-            "div",
-            { "data-testid": "global-profile-view", ...props },
-            "Global Profile View"
-         ),
-   })
-);
 
 describe("ProfilePage (/profile)", () => {
    beforeEach(() => {
@@ -67,20 +48,7 @@ describe("ProfilePage (/profile)", () => {
          trophyRank: "Silver Scholar",
          pokedexCount: 2,
       },
-      challengeHistory: [
-         {
-            challengeId: "chal_active",
-            participantId: "part_active",
-            title: "Active Challenge",
-            mode: "SOLOS",
-            status: "ACTIVE",
-            startDate: "2026-10-25T00:00:00.000Z",
-            endDate: "2026-11-05T00:00:00.000Z",
-            targetHours: 15,
-            loggedHours: 10,
-            trophyDelta: 0,
-         },
-      ],
+      challengeHistory: [],
    };
 
    it("redirects unauthenticated users to home page", async () => {
@@ -102,36 +70,27 @@ describe("ProfilePage (/profile)", () => {
       expect(redirect).toHaveBeenCalledWith("/");
    });
 
-   it("renders GlobalProfileView for authenticated user", async () => {
+   it("canonical redirects authenticated user to their /@<platformUsername> profile", async () => {
       vi.mocked(auth).mockResolvedValue({
-         user: { id: "user_session", role: "PARTICIPANT" },
+         user: { id: "user_session" },
       } as any);
       vi.mocked(globalProfileRepo.getGlobalUserProfile).mockResolvedValue(
          mockProfileData as any
       );
-      vi.mocked(
-         globalProfileRepo.getChallengeSnapshotForUser
-      ).mockResolvedValue({
-         profile: { challengeTitle: "Active Challenge" },
-      } as any);
 
-      const jsx = await ProfilePage({
-         searchParams: Promise.resolve({ challengeId: "chal_active" }),
+      await ProfilePage({
+         searchParams: Promise.resolve({
+            challengeId: "chal_1",
+            tab: "settings",
+         }),
       });
 
       expect(globalProfileRepo.getGlobalUserProfile).toHaveBeenCalledWith(
          "user_session"
       );
-      expect(
-         globalProfileRepo.getChallengeSnapshotForUser
-      ).toHaveBeenCalledWith(
-         "user_session",
-         "chal_active",
-         expect.objectContaining({
-            currentUserId: "user_session",
-            isAdmin: false,
-         })
+      expect(redirect).toHaveBeenCalledWith(
+         "/@currentuser?challengeId=chal_1&tab=settings",
+         "replace"
       );
-      expect(jsx).toBeDefined();
    });
 });

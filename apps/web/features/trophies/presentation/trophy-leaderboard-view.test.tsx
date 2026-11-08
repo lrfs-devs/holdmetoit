@@ -137,4 +137,13 @@ describe("TrophyLeaderboardView", () => {
 
       expect(html).toContain("Join Active Battles");
    });
+
+   it("links competitors to their canonical /@<platformUsername> profile", () => {
+      const entries = buildEntries(1);
+      const html = renderToStaticMarkup(
+         <TrophyLeaderboardView initialEntries={entries} />
+      );
+
+      expect(html).toContain(`href="/@${entries[0]!.username}"`);
+   });
 });

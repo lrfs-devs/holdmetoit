@@ -1,20 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createElement } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import UserProfilePage, { generateMetadata } from "./page";
 import { auth } from "@/core/auth";
 import * as globalProfileRepo from "@/features/participant-stats/data/global-profile.repository";
-import * as privacyDomain from "@/features/participant-stats/domain/profile-privacy";
-import * as privacyRepo from "@/features/participant-stats/data/profile-privacy.repository";
 
 vi.mock("next/navigation", () => ({
    notFound: vi.fn(),
-   useRouter: () => ({
-      refresh: vi.fn(),
-      push: vi.fn(),
-      replace: vi.fn(),
-   }),
-   useSearchParams: () => new URLSearchParams(),
+   redirect: vi.fn(),
+   RedirectType: { replace: "replace", push: "push" },
 }));
 
 vi.mock("@/core/auth", () => ({
@@ -25,26 +18,6 @@ vi.mock("@/features/participant-stats/data/global-profile.repository", () => ({
    getGlobalUserProfile: vi.fn(),
    getChallengeSnapshotForUser: vi.fn(),
 }));
-
-vi.mock("@/features/participant-stats/domain/profile-privacy", () => ({
-   canViewFullProfileHistory: vi.fn(),
-}));
-
-vi.mock("@/features/participant-stats/data/profile-privacy.repository", () => ({
-   checkAreAcceptedFriends: vi.fn(),
-}));
-
-vi.mock(
-   "@/features/participant-stats/presentation/global-profile-view",
-   () => ({
-      GlobalProfileView: (props: any) =>
-         createElement(
-            "div",
-            { "data-testid": "global-profile-view", ...props },
-            "Global Profile View"
-         ),
-   })
-);
 
 describe("UserProfilePage (/profile/[userId])", () => {
    beforeEach(() => {
@@ -100,12 +73,12 @@ describe("UserProfilePage (/profile/[userId])", () => {
          );
 
          const meta = await generateMetadata({
-            params: Promise.resolve({ userId: "missing" }),
+            params: Promise.resolve({ userId: "missing_user" }),
          });
          expect(meta.title).toBe("Scholar Not Found | HoldMeToIt");
       });
 
-      it("returns dynamic title and description for existing user", async () => {
+      it("returns customized profile meta tags when user exists", async () => {
          vi.mocked(globalProfileRepo.getGlobalUserProfile).mockResolvedValue(
             mockProfileData as any
          );
@@ -113,14 +86,26 @@ describe("UserProfilePage (/profile/[userId])", () => {
          const meta = await generateMetadata({
             params: Promise.resolve({ userId: "user_target" }),
          });
-         expect(meta.title).toContain("bobbuilder");
-         expect(meta.description).toContain("20h lifetime study hours");
+         expect(meta.title).toBe("@bobbuilder | HoldMeToIt Profile");
+         expect(meta.description).toContain("20h study");
       });
    });
 
    describe("Page rendering", () => {
-      it("triggers notFound when user profile does not exist", async () => {
+      it("redirects unauthenticated visitor to /", async () => {
          vi.mocked(auth).mockResolvedValue(null as any);
+
+         await UserProfilePage({
+            params: Promise.resolve({ userId: "user_target" }),
+         });
+
+         expect(redirect).toHaveBeenCalledWith("/");
+      });
+
+      it("triggers notFound when user profile does not exist", async () => {
+         vi.mocked(auth).mockResolvedValue({
+            user: { id: "user_viewer", role: "PARTICIPANT" },
+         } as any);
          vi.mocked(globalProfileRepo.getGlobalUserProfile).mockResolvedValue(
             null
          );
@@ -131,6 +116,28 @@ describe("UserProfilePage (/profile/[userId])", () => {
          expect(notFound).toHaveBeenCalled();
       });
 
+      it("canonical redirects to /@<platformUsername> forwarding query parameters", async () => {
+         vi.mocked(auth).mockResolvedValue({
+            user: { id: "user_viewer", role: "PARTICIPANT" },
+         } as any);
+         vi.mocked(globalProfileRepo.getGlobalUserProfile).mockResolvedValue(
+            mockProfileData as any
+         );
+
+         await UserProfilePage({
+            params: Promise.resolve({ userId: "user_target" }),
+            searchParams: Promise.resolve({
+               challengeId: "chal_1",
+               tab: "history",
+            }),
+         });
+
+         expect(redirect).toHaveBeenCalledWith(
+            "/@bobbuilder?challengeId=chal_1&tab=history",
+            "replace"
+         );
+      });
+
       it("resolves target userId when 'me' alias is used by authenticated session", async () => {
          vi.mocked(auth).mockResolvedValue({
             user: { id: "user_me", role: "PARTICIPANT" },
@@ -138,58 +145,13 @@ describe("UserProfilePage (/profile/[userId])", () => {
          vi.mocked(globalProfileRepo.getGlobalUserProfile).mockResolvedValue(
             mockProfileData as any
          );
-         vi.mocked(privacyDomain.canViewFullProfileHistory).mockReturnValue(
-            true
-         );
 
          await UserProfilePage({ params: Promise.resolve({ userId: "me" }) });
 
          expect(globalProfileRepo.getGlobalUserProfile).toHaveBeenCalledWith(
             "user_me"
          );
-      });
-
-      it("enforces privacy rules and loads initial challenge snapshot when authorized", async () => {
-         vi.mocked(auth).mockResolvedValue({
-            user: { id: "user_viewer", role: "PARTICIPANT" },
-         } as any);
-         vi.mocked(globalProfileRepo.getGlobalUserProfile).mockResolvedValue(
-            mockProfileData as any
-         );
-         vi.mocked(privacyRepo.checkAreAcceptedFriends).mockResolvedValue(true);
-         vi.mocked(privacyDomain.canViewFullProfileHistory).mockReturnValue(
-            true
-         );
-         vi.mocked(
-            globalProfileRepo.getChallengeSnapshotForUser
-         ).mockResolvedValue({
-            profile: { challengeTitle: "Sprint 1" },
-         } as any);
-
-         const jsx = await UserProfilePage({
-            params: Promise.resolve({ userId: "user_target" }),
-            searchParams: Promise.resolve({ challengeId: "chal_1" }),
-         });
-
-         expect(privacyDomain.canViewFullProfileHistory).toHaveBeenCalledWith(
-            expect.objectContaining({
-               viewerId: "user_viewer",
-               targetUserId: "user_target",
-               isAcceptedFriend: true,
-            })
-         );
-
-         expect(
-            globalProfileRepo.getChallengeSnapshotForUser
-         ).toHaveBeenCalledWith(
-            "user_target",
-            "chal_1",
-            expect.objectContaining({
-               currentUserId: "user_viewer",
-               isAdmin: false,
-            })
-         );
-         expect(jsx).toBeDefined();
+         expect(redirect).toHaveBeenCalledWith("/@bobbuilder", "replace");
       });
    });
 });

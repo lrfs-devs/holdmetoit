@@ -153,6 +153,7 @@ export async function getAdminUserRoster(
 
       return {
          id: user.id,
+         username: user.username,
          discordId: user.discordId,
          name: user.displayName || user.name || user.username || "Anonymous",
          discordTag:

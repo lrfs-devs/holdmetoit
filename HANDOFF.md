@@ -4,7 +4,7 @@
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
 > **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-06 (Session 204 — fix(identity): enforce exact case-normalized username queries, race condition fix, and migration pre-check)
+> **Last Updated:** 2026-11-08 (Session 207 — fix(identity): resolve code review findings for redirects, clipboard safety, and documentation accuracy)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
@@ -2963,3 +2963,86 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
       - `npm run test:web`: ✅ 252 test files (2,660 tests) passing 100% green.
 - **NEXT STEP:** Submit PR to `dev` for peer review and staging deployment.
+
+### Session 205 — 2026-11-07 (feat(identity): implement canonical user profile URLs /@<platformUsername>, mandatory authentication, and rich Discord embeds — on `implement_user_profile_urls`)
+
+- **Context & Objectives:** Transition all scholar profile URLs from legacy CUID-based formats (`/profile/<cuid>`) to canonical user handle URLs (`/@<platformUsername>`), enforce mandatory session authentication for human visitors while allowing social link crawler unfurling, construct rich OpenGraph / Discord preview metadata cards with rank accent colors, maintain full backwards compatibility with legacy routes, and provide an in-app "Share Profile" action.
+- **Changes Completed:**
+   1. **Pure Domain Profile URL Generator (`features/participant-stats/domain/profile-url.ts`):** Created `buildUserProfileUrl` honoring Law L7 (zero Next.js/React imports). Formats canonical `/@${cleanUsername}`, falls back to `/@${cleanId}` or `/profile`, and preserves query parameters (`challengeId`, `tab`, `view`, `day`). Unit tested across 8 scenarios (8/8 green).
+   2. **Pure Domain Discord & OpenGraph Embed Engine (`features/participant-stats/domain/profile-embed.ts`):** Created format-aware helper methods (`buildProfileEmbedTitle`, `buildProfileEmbedDescription`, `buildProfileDiscordEmbed`, `getRankThemeColor`) dynamically calculating theme colors based on trophy rank (Obsidian `#10b981`, Diamond `#38bdf8`, Platinum `#a78bfa`, Gold `#f59e0b`, Silver `#94a3b8`, Bronze `#d97706`). Unit tested across 7 scenarios (7/7 green).
+   3. **Edge Gatekeeping & Crawler Pass-through (`proxy.ts`):** Configured edge middleware to intercept `/@:username`, `/%40:username`, `/profile`, and `/profile/:path*`. Deflects unauthenticated human visitors to `/`, while allowing social link preview bots (`Discordbot`, `Twitterbot`, `facebookexternalhit`, etc.) to pass unconditionally to scrape metadata without cookies. Unit tested across 12 scenarios (12/12 green).
+   4. **Canonical App Router Route (`app/[userHandle]/page.tsx`):**
+      - Guarded against path collisions with an immediate prefix check: `if (!decoded.startsWith("@")) notFound()`.
+      - Mandates session authentication (`if (!session?.user?.id) redirect("/")`).
+      - Canonical redirect: if accessed via CUID handle (`/@<cuid>`) but scholar has a platform username, automatically replace-redirects to `/@<platformUsername>`.
+      - Generates rich OpenGraph, Twitter card, and themeColor metadata tags in `generateMetadata`.
+      - Implemented comprehensive states: loading skeleton (`loading.tsx`), empty state (`not-found.tsx`), and error boundary (`error.tsx`) satisfying Law L9.
+      - Tested across 10 scenarios (10/10 green).
+   5. **Backwards Compatibility & Canonical Redirection:**
+      - `app/profile/[userId]/page.tsx`: Converts legacy CUID URLs to permanent 308 redirects to `buildUserProfileUrl(profile.user, query)` (6/6 tests green).
+      - `app/profile/page.tsx`: Redirects authenticated scholars directly to their own canonical `/@<platformUsername>` (3/3 tests green).
+   6. **Application-Wide Link Standardization:**
+      - Challenge Leaderboard (`challenge-leaderboard-tab.tsx`): Updated `getParticipantProfileUrl` to use `buildUserProfileUrl` across podium cards (Rank 1/2/3) and standings rows.
+      - Trophy Leaderboard (`trophy-leaderboard-view.tsx`): Competitor avatar and name wrapped with `<Link href={buildUserProfileUrl(entry)}>`.
+      - Header Capsule (`components/ui/header.tsx`): User capsule navigates to `/@<platformUsername>`.
+      - Home Cockpit (`home-cockpit-view.tsx` & `app/page.tsx`): Welcome greeting link resolves `buildUserProfileUrl` with platform username and challenge context.
+      - Admin Directory (`user-directory-view.tsx` & `user-inspector-sheet.tsx`): Standardized profile links to `buildUserProfileUrl(user)`.
+      - Cache Revalidation (`username.actions.ts` & `user-directory.actions.ts`): Revalidates `/[userHandle]` and `/@${username}` upon handle/role modifications.
+   7. **Share Profile Action & Live Address Bar Sync (`global-profile-view.tsx`):**
+      - Added a "Share Profile" button in the profile header card with clipboard copy and toast notification.
+      - In `EditUsernameDialog`: on username change, triggers `router.replace(`/@${newUsername}`)` to sync the browser URL in real time.
+   8. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 255 test files (2,693 tests) passing 100% green.
+
+### Session 206 — 2026-11-07 (feat(identity): unify challenge participant profile navigation with canonical scholar URLs /@<platformUsername>?challengeId=<id> — on `implement_user_profile_urls`)
+
+- **Context & Objectives:** Unify the scholar profile experience across the entire application. Clicking a scholar from anywhere (Challenge Overview tab, Challenge Leaderboard tab, Manage tab, Admin User Directory) must navigate to the single canonical profile URL `/@<platformUsername>?challengeId=<id>` rather than maintaining a disconnected legacy route at `/challenge/[id]/participant/[participantId]`.
+- **Changes Completed:**
+   1. **Challenge Overview Tab Links (`challenge-overview-tab.tsx`):**
+      - Imported `buildUserProfileUrl` and replaced raw `/challenge/${challenge.id}/participant/${p.participantId}` links with `buildUserProfileUrl(p, { challengeId: challenge.id })` for both avatar and scholar display name.
+      - Added test coverage in `challenge-overview-tab.test.tsx` asserting canonical user profile URL rendering.
+   2. **Challenge Manage Tab Links (`challenge-manage-tab.tsx`):**
+      - Imported `buildUserProfileUrl` and updated roster participant avatar and display name links to `buildUserProfileUrl(participant, { challengeId: challenge.id })`.
+   3. **Admin User Directory Links (`user-directory-view.tsx`):**
+      - Updated active challenges badges to link to `buildUserProfileUrl(user, { challengeId: ch.id })`.
+      - Updated `user-directory-view.test.tsx` assertions to match.
+   4. **Challenge Snapshot & Global Profile History Defaulting (`challenge-snapshot.tsx` & `global-profile-view.tsx`):**
+      - In `challenge-snapshot.tsx`, pointed `cockpitUrl` to `/challenge/${profile.challengeId}` so "View Full Challenge Cockpit" navigates to the challenge page itself rather than creating a redirect cycle back to the profile.
+      - In `global-profile-view.tsx`, defaulted `activeTab` to `"history"` whenever `selectedChallengeId` is provided (unless `tab` query param explicitly requests `"overview"` or `"settings"`), ensuring the user immediately sees the target challenge snapshot.
+      - Added a contextual "Back to Challenge Leaderboard" header link above the snapshot with origin `view` preservation (`today`, `team`, `individual`).
+      - Updated "Open Challenge Cockpit" button on the overview card to link to `/challenge/${challengeHistory[0].challengeId}`.
+      - Updated unit test suites in `challenge-snapshot.test.tsx` and `global-profile-view.test.tsx`.
+   5. **Legacy Route Permanent 308 Redirect (`app/challenge/[id]/participant/[participantId]/page.tsx`):**
+      - Converted the legacy participant route to issue an HTTP 308 permanent redirect via Next.js `permanentRedirect(destination, RedirectType.replace)`.
+      - Destination dynamically resolves the participant's user ID and platform username to build `/@<platformUsername>?challengeId=<id>&tab=history` while preserving any `view` or `tab` query parameters.
+      - Configured canonical alternate URL in `generateMetadata`.
+      - Updated `page.test.tsx` to verify the 308 redirect and query forwarding.
+   6. **Profile Embed Title & Description Refinements (`profile-embed.ts`):**
+      - Changed embed title from `@<handle> | HoldMeToIt Scholar Profile` to `@<handle> | HoldMeToIt Profile`.
+      - Removed `Recruit (x trophies)`, tasks completed, and Pokédex from the description and Discord embed fields, focusing the social preview strictly on core study metrics (`⏱️ Lifetime Study`, `🔥 Active Streak`, and `⚔️ Challenges`).
+      - Preserved dynamic trophy rank border color stripe via `getRankThemeColor`.
+      - Updated unit test suites in `profile-embed.test.ts`, `app/[userHandle]/page.test.tsx`, and `app/profile/[userId]/page.test.tsx`.
+   7. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 255 test files (2,696 tests) passing 100% green.
+- **NEXT STEP:** Submit PR to `dev` for peer review and staging deployment.
+
+### Session 207 — 2026-11-08 (fix(identity): resolve code review findings for redirects, clipboard safety, and documentation accuracy — on `implement_user_profile_urls`)
+
+- **Context & Objectives:** Address PR code review findings regarding participant page redirect behavior, profile-link clipboard safety, documentation fallback qualifiers, and handoff obsolescence pruning.
+- **Changes Completed:**
+   1. **Temporary Redirect on Participant Page (`app/challenge/[id]/participant/[participantId]/page.tsx`):**
+      - Switched from `permanentRedirect` to `redirect(destination, RedirectType.replace)`. Avoids permanent browser and CDN caching of mutable platform usernames and fallback user IDs.
+      - Updated `page.test.tsx` to mock and assert `redirect` with `RedirectType.replace`.
+   2. **Clipboard API Availability Guard (`global-profile-view.tsx`):**
+      - Updated `handleShareProfile` to check `if (!navigator?.clipboard?.writeText)` and return early with `toast.error("Clipboard is not available in this browser.")` before setting copy state or displaying success toast.
+   3. **Documentation Fallback Qualifiers (`docs/identity/README.md`):**
+      - Qualified profile redirects and participant navigation links to reflect fallback to `/@<userId>` when platform usernames are unconfigured.
+      - Corrected participant redirect documentation to temporary redirect.
+   4. **Handoff Pruning (`HANDOFF.md`):**
+      - Pruned obsolete Session 205 `NEXT STEP` directive in accordance with §9.3 of `AGENTS.md`.
+   5. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 255 test files (2,696 tests) passing 100% green.
+- **NEXT STEP:** Merge PR into `dev` after review approvals.
