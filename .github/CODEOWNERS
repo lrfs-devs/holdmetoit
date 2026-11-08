@@ -1,1 +1,11 @@
-*@Afnanpathan2004
+# Default owner for everything
+*                               @Afnanpathan2004 @lrfs-devs/maintainers 
+
+# Security-sensitive paths 
+/.github/                       @Afnanpathan2004 @lrfs-devs/maintainers
+/apps/web/core/auth/            @Afnanpathan2004 @lrfs-devs/maintainers
+/apps/web/features/auth/        @Afnanpathan2004 @lrfs-devs/maintainers
+/apps/web/app/api/auth/         @Afnanpathan2004 @lrfs-devs/maintainers
+/apps/web/core/security/        @Afnanpathan2004 @lrfs-devs/maintainers
+/apps/web/middleware.ts         @Afnanpathan2004 @lrfs-devs/maintainers
+/packages/database/prisma/      @Afnanpathan2004 @lrfs-devs/maintainers
