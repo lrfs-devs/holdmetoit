@@ -4,6 +4,7 @@ import Discord from "next-auth/providers/discord";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 
 import { prisma } from "@/core/db";
+import { getServerEnv } from "@/core/env/server";
 import { createLogger, logEvents } from "@/core/observability/logger";
 import {
    buildDiscordAvatarUrl,
@@ -16,13 +17,14 @@ import {
 } from "@/features/auth/data/user.repository";
 
 const logger = createLogger("auth");
+const serverEnv = getServerEnv();
 
 const nextAuthResult = NextAuth({
    adapter: PrismaAdapter(prisma),
    providers: [
       Discord({
-         clientId: process.env.AUTH_DISCORD_ID,
-         clientSecret: process.env.AUTH_DISCORD_SECRET,
+         clientId: serverEnv.AUTH_DISCORD_ID,
+         clientSecret: serverEnv.AUTH_DISCORD_SECRET,
          issuer: "https://discord.com",
          authorization: {
             params: {
@@ -149,6 +151,7 @@ const nextAuthResult = NextAuth({
             session.user.role = user.role;
             session.user.discordId = user.discordId;
             session.user.displayName = user.displayName;
+            session.user.username = (user as any).username ?? null;
             session.user.isSick = Boolean((user as any).isSick);
             session.user.sickModeActivatedAt = (user as any).sickModeActivatedAt
                ? new Date((user as any).sickModeActivatedAt).toISOString()

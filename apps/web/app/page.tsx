@@ -18,20 +18,22 @@ import {
    COLLAPSED_CATEGORIES_COOKIE,
    ROLLOVER_SNOOZE_COOKIE,
 } from "@/features/study-logs/presentation/cockpit/cockpit-tasks-storage";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 
 export const dynamic = "force-dynamic";
 
 interface HomePageProps {
-   searchParams?: {
+   searchParams?: Promise<{
       challenge?: string;
       as?: string;
       preview?: string;
       role?: string;
-   };
+   }>;
 }
 
 /** Loads the participant cockpit and related dashboard content. */
 export default async function HomePage({ searchParams }: HomePageProps) {
+   const query = (await searchParams) ?? {};
    const session = await auth();
    const cookieStore = await cookies();
    const previewCookie = cookieStore.get(PARTICIPANT_PREVIEW_COOKIE)?.value;
@@ -65,7 +67,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
    const { isAdmin, effectiveRole } = getEffectiveAdminState({
       userRole: session?.user?.role,
       previewCookie,
-      searchParamAs: searchParams?.as,
+      searchParamAs: query.as,
    });
 
    const [
@@ -76,7 +78,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       isWrappedEnabled,
    ] = await Promise.all([
       userId
-         ? getParticipantCockpit(userId, searchParams?.challenge)
+         ? getParticipantCockpit(userId, query.challenge)
          : Promise.resolve(null),
       userId
          ? getUserCategorizedTasks(userId).catch(() => null)
@@ -114,9 +116,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       ? { ...session.user, role: effectiveRole ?? session.user.role }
       : session?.user;
 
-   const profileUrl = cockpit?.challengeId
-      ? `/profile?challengeId=${cockpit.challengeId}`
-      : "/profile";
+   const profileUrl = buildUserProfileUrl(
+      {
+         id: session?.user?.id,
+         username: session?.user?.username,
+      },
+      cockpit?.challengeId ? { challengeId: cockpit.challengeId } : undefined
+   );
 
    const rawSnoozeCookie = cookieStore.get(ROLLOVER_SNOOZE_COOKIE)?.value;
    let initialIsRolloverSnoozed = false;

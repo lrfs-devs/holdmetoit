@@ -119,7 +119,7 @@ describe("UserDirectoryView", () => {
       expect(html).toContain("24.5h");
       expect(html).toContain("Diamond");
       expect(html).toContain("October Sprint");
-      expect(html).toContain("/challenge/chal_oct/participant/part_alice");
+      expect(html).toContain('href="/@usr_alice?challengeId=chal_oct"');
 
       // Bob
       expect(html).toContain("Bob Host");
@@ -128,7 +128,7 @@ describe("UserDirectoryView", () => {
       expect(html).toContain("80h");
       expect(html).toContain("Platinum");
       expect(html).toContain("Unenrolled");
-      expect(html).toContain("/profile/usr_bob");
+      expect(html).toContain('href="/@usr_bob"');
    });
 
    it("renders empty state when no users are returned", () => {
