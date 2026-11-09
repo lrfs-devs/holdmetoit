@@ -201,6 +201,34 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 - **Behavior change:** a `PARTICIPANT` newly added to `DEV_DISCORD_IDS` becomes `DEV` at next sign-in (previously the session callback elevated them immediately). An existing `ADMIN` is promoted within the window.
 - **Validation:** web auth/admin suites green (199 tests) incl. new policy, revalidation, guild-service and action tests; `lint:web` 0 errors; Prettier clean. `typecheck:web` and the full `test:web` were **not** run to completion in the authoring sandbox (Prisma engine download blocked, so no generated client): the type error count did not increase versus `dev`. Re-run both in CI or locally.
 - **NEXT:** run `npm run typecheck:web` and `npm run test:web` with a generated Prisma client; open PR `fix/auth-role-revalidation-227` → `dev` and move #227 to `In Review` (not `Done` until merged to `dev` and released to `main`). Ensure `AUTH_URL` is set in every deployed environment.
+### Session 205 — 2026-11-09 (Feat: 1-Click Discord Todo Export for Daily & Weekly Tasks on `krish` · GH #260 / Jira KAN-97)
+
+- **Scope & Objectives:** Implemented 1-click clipboard export for Daily and Weekly todos from the website directly to Discord-ready text. Linked with GitHub Issue #260 and Jira Ticket KAN-97 (assigned to Krish Jaiswal).
+- **Domain Layer (`features/tasks/domain/task-export.ts` — Law L7):**
+   - Pure calculation and text generation without React/Next.js/Prisma imports.
+   - Supports two Discord-optimized formats:
+      1. **Standard Markdown Checklist (Default):** Native Discord markdown task list `- [ ]` and `- [x]`, in-progress `- [ ] ⏳`, crossed out `- [ ] ~~...~~`, and challenge goal indicator `🏆`.
+      2. **High-Contrast Emojis:** Visual status markers (`⬜`, `✅`, `⏳`, `❌ ~~...~~`, `🏆`).
+   - Daily export: includes full day of week, date, and challenge day number derived from `activeDayOption?.dayNumber` (e.g. `## 📋 Daily Todos — Monday, Nov 9, 2026 (Day 2)`).
+   - Weekly export: includes explicit date range (e.g. `## 🗓️ Weekly Todos — Nov 2, 2026 – Nov 8, 2026`) and scopes to `visibleWeeklyCategories` matching the Weekly board display.
+   - Category grouping: work items grouped under `### 📂 Category Name` headers (skipping empty categories, defaulting unnamed categories to "General").
+   - Progress summary footer: includes completed/total count and completion percentage in a clean blockquote.
+   - 21 unit tests passing in Vitest (`task-export.test.ts`) with 100% line and function test coverage.
+- **Presentation Layer (`features/tasks/presentation/task-export-button.tsx` & `cockpit-tasks-section.tsx`):**
+   - Implemented `TaskExportButton` as a split button control:
+      - **Primary Export Button:** Executes instant 1-click clipboard copy of the preferred style.
+      - **Chevron Trigger Control:** Dedicated dropdown trigger button allowing the user to select between Markdown Checklist and High-Contrast Emojis, saving preference to `localStorage` (`holdmetoit_task_export_style`).
+   - **Symmetrical Card Layout Alignment:** Positioned in Row 2 opposite `CockpitWeekNavigator` (`justify-between`) in both Daily and Weekly boards. Fits comfortably within 360px viewport (253px total width out of 320px available) with zero horizontal overflow or clipping.
+   - **Robust Fallback:** Non-secure context fallback uses `try/finally` for guaranteed textarea removal and verifies `document.execCommand("copy")` boolean result, routing failures to error toast.
+   - Inline feedback: switches to emerald `Copied! ✓` state for 2 seconds.
+   - Toast confirmation via `sonner` (`Exported Daily (Markdown Checklist) to clipboard!`).
+   - 7 unit tests passing in Vitest (`task-export-button.test.tsx`).
+- **Documentation:**
+   - Updated Section 7 of `docs/tasks/README.md` covering architecture, split button controls, format specifications, and developer usage.
+- **Quality Gates:**
+   - `npm run typecheck:web`: 0 errors (`tsc --noEmit` exits with 0).
+   - 28/28 unit tests green across `task-export` suites; 108/108 tests passing in `cockpit-tasks` suites.
+- **Jira Status:** `KAN-97` in `In Review` (Stage 2).
 
 ### Session 204 — 2026-11-08 (CI security scanning & supply-chain hardening, SEC-19 / #237)
 
