@@ -16,18 +16,24 @@ import {
    User,
    History,
    Shield,
+   Share2,
+   Check,
+   ArrowLeft,
 } from "lucide-react";
+import { toast } from "sonner";
+import { buildUserProfileUrl } from "../domain/profile-url";
 import type {
    GlobalUserProfile,
    ParticipatedChallengeItem,
 } from "../domain/global-profile.types";
 import type { ParticipantStatsViewModel } from "../domain/participant-stats.types";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { RefreshAvatarButton } from "@/features/auth/presentation/refresh-avatar-button";
+import { EditUsernameDialog } from "@/features/auth/presentation/edit-username-dialog";
 import { ChallengeSnapshot } from "./challenge-snapshot";
 import { EmptyState } from "@/components/state/empty-state";
 import { CockpitSkeleton } from "@/components/state/cockpit-skeleton";
 import { YptSettingsCard } from "@/features/ypt/presentation/ypt-settings-card";
+import { AudioSettingsCard } from "@/features/preferences/presentation/audio-settings-card";
 import { WrappedMascotPreferenceCard } from "@/features/wrapped/presentation/wrapped-mascot-preference-card";
 import {
    SickModeSettingsCard,
@@ -51,6 +57,8 @@ export interface GlobalProfileViewProps {
    isOwnProfile?: boolean;
    viewerRole?: string | null;
    initialYptId?: string | null;
+   isGlobalLeaderboardEnabled?: boolean;
+   isPlatformUsernameEnabled?: boolean;
 }
 
 export function GlobalProfileView({
@@ -60,11 +68,40 @@ export function GlobalProfileView({
    isAuthorizedHistory = true,
    isOwnProfile = false,
    initialYptId,
+   isGlobalLeaderboardEnabled = true,
+   isPlatformUsernameEnabled = true,
 }: GlobalProfileViewProps) {
    const router = useRouter();
    const searchParams = useSearchParams();
 
    const { user, careerStats, challengeHistory } = profile;
+   const [currentUsername, setCurrentUsername] = useState(user.username);
+   const [hasCopied, setHasCopied] = useState(false);
+
+   const handleShareProfile = async () => {
+      try {
+         const canonicalPath = buildUserProfileUrl({
+            username: currentUsername,
+            id: user.id,
+         });
+         const origin =
+            typeof window !== "undefined" && window.location?.origin
+               ? window.location.origin
+               : "";
+         const shareUrl = `${origin}${canonicalPath}`;
+
+         if (!navigator?.clipboard?.writeText) {
+            toast.error("Clipboard is not available in this browser.");
+            return;
+         }
+         await navigator.clipboard.writeText(shareUrl);
+         setHasCopied(true);
+         toast.success("Profile link copied to clipboard!");
+         setTimeout(() => setHasCopied(false), 2000);
+      } catch {
+         toast.error("Failed to copy profile link.");
+      }
+   };
 
    // Active tab state
    const [activeTab, setActiveTab] = useState<
@@ -73,6 +110,8 @@ export function GlobalProfileView({
       const tabParam = searchParams?.get("tab");
       if (tabParam === "history") return "history";
       if (tabParam === "settings" && isOwnProfile) return "settings";
+      if (tabParam === "overview") return "overview";
+      if (selectedChallengeId) return "history";
       return "overview";
    });
 
@@ -132,7 +171,7 @@ export function GlobalProfileView({
                   <div className="relative shrink-0">
                      <UserAvatar
                         src={user.image}
-                        name={user.displayName}
+                        name={currentUsername || user.displayName}
                         userId={user.id}
                         size="xl"
                         className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl border-2 border-border-strong shadow-md text-xl"
@@ -141,8 +180,18 @@ export function GlobalProfileView({
 
                   <div className="min-w-0 space-y-1">
                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
-                           {user.displayName}
+                        <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate flex items-center gap-2">
+                           <span>{currentUsername || user.displayName}</span>
+                           {isOwnProfile && isPlatformUsernameEnabled && (
+                              <EditUsernameDialog
+                                 currentUsername={currentUsername}
+                                 usernameChangedAt={user.usernameChangedAt}
+                                 onUsernameUpdated={(newUsername) => {
+                                    setCurrentUsername(newUsername);
+                                    router.replace(`/@${newUsername}`);
+                                 }}
+                              />
+                           )}
                         </h1>
 
                         {/* Sick Status Badge */}
@@ -153,21 +202,20 @@ export function GlobalProfileView({
                            variant="default"
                         />
 
-                        {/* Trophy Rank Badge */}
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-brand-1/40 bg-brand-1/15 text-brand-1 shadow-sm">
-                           <Trophy className="h-3.5 w-3.5 fill-current" />
-                           <span>{careerStats.trophyRank}</span>
-                           <span className="opacity-75 font-normal">
-                              ({careerStats.trophyTotal} trophies)
+                        {/* Trophy Rank Badge - Gated behind global_leaderboard feature flag */}
+                        {isGlobalLeaderboardEnabled && (
+                           <span
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-brand-1/40 bg-brand-1/15 text-brand-1 shadow-sm"
+                              data-testid="trophy-rank-badge"
+                           >
+                              <Trophy className="h-3.5 w-3.5 fill-current" />
+                              <span>{careerStats.trophyRank}</span>
+                              <span className="opacity-75 font-normal">
+                                 ({careerStats.trophyTotal} trophies)
+                              </span>
                            </span>
-                        </span>
+                        )}
                      </div>
-
-                     {user.username && (
-                        <p className="text-xs text-text-tertiary">
-                           @{user.username}
-                        </p>
-                     )}
 
                      <p className="text-xs text-text-tertiary flex items-center gap-1.5 pt-0.5">
                         <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
@@ -176,16 +224,29 @@ export function GlobalProfileView({
                   </div>
                </div>
 
-               {/* Right Actions: Quick Refresh Avatar for Profile Owner */}
-               {isOwnProfile && (
-                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-border-default">
-                     <RefreshAvatarButton
-                        userId={user.id}
-                        size="sm"
-                        className="rounded-xl border-border-strong bg-surface-nested hover:bg-surface-elevated text-xs font-semibold text-text-secondary hover:text-white"
-                     />
-                  </div>
-               )}
+               {/* Share Profile Action */}
+               <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end shrink-0">
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     size="sm"
+                     onClick={handleShareProfile}
+                     className="gap-2 text-xs font-semibold bg-surface-elevated hover:bg-surface-nested border border-border-subtle"
+                     data-testid="share-profile-button"
+                  >
+                     {hasCopied ? (
+                        <>
+                           <Check className="h-3.5 w-3.5 text-feedback-success" />
+                           <span>Copied!</span>
+                        </>
+                     ) : (
+                        <>
+                           <Share2 className="h-3.5 w-3.5" />
+                           <span>Share Profile</span>
+                        </>
+                     )}
+                  </Button>
+               </div>
             </div>
          </div>
 
@@ -377,7 +438,7 @@ export function GlobalProfileView({
                            className="rounded-xl shrink-0"
                         >
                            <Link
-                              href={`/challenge/${challengeHistory[0].challengeId}/participant/${challengeHistory[0].participantId}`}
+                              href={`/challenge/${challengeHistory[0].challengeId}`}
                            >
                               Open Challenge Cockpit
                            </Link>
@@ -425,6 +486,28 @@ export function GlobalProfileView({
                   />
                ) : (
                   <div className="space-y-6">
+                     {currentChallengeId && (
+                        <div className="flex items-center justify-between">
+                           <Link
+                              href={
+                                 searchParams?.get("view")
+                                    ? `/challenge/${currentChallengeId}?tab=leaderboard&view=${encodeURIComponent(searchParams.get("view")!)}`
+                                    : `/challenge/${currentChallengeId}?tab=leaderboard`
+                              }
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-tertiary hover:text-white transition-colors"
+                              data-testid="back-to-challenge-link"
+                           >
+                              <ArrowLeft className="h-3.5 w-3.5" />
+                              <span>
+                                 Back to{" "}
+                                 {currentSnapshot?.profile.challengeTitle
+                                    ? `${currentSnapshot.profile.challengeTitle} Leaderboard`
+                                    : "Challenge Leaderboard"}
+                              </span>
+                           </Link>
+                        </div>
+                     )}
+
                      {/* Selector Bar */}
                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-border-default bg-surface-primary">
                         <div className="min-w-0">
@@ -497,6 +580,9 @@ export function GlobalProfileView({
                <YptSettingsCard
                   initialYptId={initialYptId ?? user.yptId ?? null}
                />
+
+               {/* Audio Feedback Settings Card */}
+               <AudioSettingsCard />
 
                {/* Wrapped Mascot Preference Card */}
                <WrappedMascotPreferenceCard />

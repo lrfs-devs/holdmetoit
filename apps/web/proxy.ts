@@ -9,8 +9,11 @@ const SESSION_COOKIE_NAMES = [
    "__Secure-next-auth.session-token",
 ];
 
+const CRAWLER_USER_AGENTS =
+   /Discordbot|Twitterbot|facebookexternalhit|LinkedInBot|Slackbot|TelegramBot|WhatsApp/i;
+
 /**
- * Lightweight proxy for early gatekeeping on protected administrative routes.
+ * Lightweight proxy for early gatekeeping on protected administrative and profile routes.
  * Deflects completely unauthenticated requests before Server Components or
  * database connections are initialized.
  *
@@ -42,7 +45,22 @@ export function proxy(request: NextRequest) {
       }
    }
 
-   if (pathname === "/profile") {
+   const isProfileRoute =
+      pathname === "/profile" ||
+      pathname.startsWith("/profile/") ||
+      pathname.startsWith("/@") ||
+      pathname.startsWith("/%40");
+
+   if (isProfileRoute) {
+      const userAgent = request.headers.get("user-agent") ?? "";
+      const isCrawler = CRAWLER_USER_AGENTS.test(userAgent);
+
+      // Social crawlers (e.g. Discordbot) bypass proxy redirection so they can scrape
+      // OpenGraph / Twitter metadata tags for rich link embeds in chat.
+      if (isCrawler) {
+         return NextResponse.next();
+      }
+
       const hasSessionCookie = SESSION_COOKIE_NAMES.some(
          (name) =>
             request.cookies.has(name) &&
@@ -59,5 +77,12 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-   matcher: ["/admin/:path*", "/devboard/:path*", "/profile"],
+   matcher: [
+      "/admin/:path*",
+      "/devboard/:path*",
+      "/profile",
+      "/profile/:path*",
+      "/@:username",
+      "/%40:username",
+   ],
 };

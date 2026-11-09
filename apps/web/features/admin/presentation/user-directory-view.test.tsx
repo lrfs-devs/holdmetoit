@@ -47,6 +47,7 @@ describe("UserDirectoryView", () => {
             discordTag: "alice#0001",
             image: "https://example.com/alice.png",
             role: "USER",
+            dbRole: "PARTICIPANT",
             createdAt: new Date("2026-09-01T00:00:00.000Z").toISOString(),
             lifetimeStudyHours: 24.5,
             trophies: 1250,
@@ -70,6 +71,7 @@ describe("UserDirectoryView", () => {
             discordTag: "bob#0002",
             image: null,
             role: "HOST",
+            dbRole: "ADMIN",
             createdAt: new Date("2026-08-15T00:00:00.000Z").toISOString(),
             lifetimeStudyHours: 80.0,
             trophies: 800,
@@ -119,7 +121,7 @@ describe("UserDirectoryView", () => {
       expect(html).toContain("24.5h");
       expect(html).toContain("Diamond");
       expect(html).toContain("October Sprint");
-      expect(html).toContain("/challenge/chal_oct/participant/part_alice");
+      expect(html).toContain('href="/@usr_alice?challengeId=chal_oct"');
 
       // Bob
       expect(html).toContain("Bob Host");
@@ -128,7 +130,7 @@ describe("UserDirectoryView", () => {
       expect(html).toContain("80h");
       expect(html).toContain("Platinum");
       expect(html).toContain("Unenrolled");
-      expect(html).toContain("/profile/usr_bob");
+      expect(html).toContain('href="/@usr_bob"');
    });
 
    it("renders empty state when no users are returned", () => {

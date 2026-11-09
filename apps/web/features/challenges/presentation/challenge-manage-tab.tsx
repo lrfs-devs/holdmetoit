@@ -69,6 +69,7 @@ import {
    AdminTargetOverrideModal,
    type AdminTargetOverrideParticipant,
 } from "@/features/challenges/presentation/admin-target-override-modal";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import {
    AdminPardonModal,
    type AdminPardonParticipant,
@@ -1194,7 +1195,9 @@ export function ChallengeManageTab({
                                  {/* User info */}
                                  <div className="flex items-center gap-3 min-w-0">
                                     <Link
-                                       href={`/challenge/${challenge.id}/participant/${participant.participantId}`}
+                                       href={buildUserProfileUrl(participant, {
+                                          challengeId: challenge.id,
+                                       })}
                                        className="h-10 w-10 rounded-full bg-surface-nested border border-border-strong overflow-hidden shrink-0 flex items-center justify-center hover:border-feedback-success transition-colors"
                                     >
                                        <UserAvatar
@@ -1207,7 +1210,12 @@ export function ChallengeManageTab({
                                     </Link>
                                     <div className="min-w-0">
                                        <Link
-                                          href={`/challenge/${challenge.id}/participant/${participant.participantId}`}
+                                          href={buildUserProfileUrl(
+                                             participant,
+                                             {
+                                                challengeId: challenge.id,
+                                             }
+                                          )}
                                           className="text-xs font-bold text-white hover:text-feedback-success hover:underline truncate block"
                                        >
                                           {participant.displayName}

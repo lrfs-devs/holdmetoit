@@ -145,3 +145,68 @@ Unit tests for `toClientError` and `sanitizeTaskerError` cover:
    - `ypt-connection.actions.test.ts`
    - `feedback/route.test.ts`
    - `yapperize.test.ts`
+
+## 5. Authentication, Sessions & Role Revalidation (SEC-05 / SEC-20, GH #227)
+
+### 5.1 Source of truth
+
+Discord is the single source of truth for privileged roles:
+
+| Role          | Granted by                                                                     |
+| :------------ | :----------------------------------------------------------------------------- |
+| `DEV`         | Discord snowflake listed in `DEV_DISCORD_IDS` (legacy alias `DISCORD_DEV_IDS`) |
+| `ADMIN`       | Holds a role from `DISCORD_ADMIN_ROLE_IDS` in the `DISCORD_GUILD_ID` server    |
+| `PARTICIPANT` | Everyone else                                                                  |
+
+Roles are derived at sign-in (`syncUserRoleFromDiscord`) and kept honest between sign-ins by revalidation (below).
+The pure rules live in `features/auth/domain/role-policy.ts` (Law L7).
+
+### 5.2 Sessions
+
+Auth.js uses `strategy: "database"` with:
+
+| Setting     | Value  | Why                                                          |
+| :---------- | :----- | :----------------------------------------------------------- |
+| `maxAge`    | 7 days | Bounds how long a session (and any stale privilege) can live |
+| `updateAge` | 1 day  | An active session is extended at most once a day             |
+
+Both are constants in `role-policy.ts` (`SESSION_MAX_AGE_SECONDS`, `SESSION_UPDATE_AGE_SECONDS`); the previous behavior was the Auth.js default of 30 days.
+
+### 5.3 Revalidation window
+
+The `session` callback (`core/auth/index.ts`) calls `revalidatePrivilegedRole` (`features/auth/data/role-revalidation.service.ts`) for `ADMIN` and `DEV` sessions only. Because `requireAdminUser`, `requireDevUser` and every admin page read the role through `auth()`, a revoked admin loses access everywhere within the window.
+
+- **Window:** `ROLE_REVALIDATION_TTL_MS` = 5 minutes per user, per server process. In serverless deployments each warm instance checks independently, so the worst case is one Discord lookup per instance per user per window.
+- **Demote-only:** revalidation can remove privileges (or apply a `DEV` id an operator explicitly configured). It never grants `ADMIN`; that happens at sign-in. This keeps a manual revoke from being silently undone minutes later.
+- **Demotions are persisted** (`User.role`) by the service. The `session` callback performs no role writes of its own (the old fire-and-forget DEV update was removed).
+- **Left the server:** only Discord's "Unknown Member" response (HTTP 404, JSON code 10007) is treated as "no admin role" and demotes. Any other 404, such as an unknown guild from a wrong `DISCORD_GUILD_ID` (code 10004), counts as unavailable and keeps the stored role.
+- **Discord unavailable** (outage, missing bot token, unset `DISCORD_GUILD_ID`): the stored role is kept, a `auth.role_revalidation_unavailable` warning is logged, and the check is retried after 30 seconds (`ROLE_REVALIDATION_RETRY_MS`). This favours availability; alert on that log event if you need a stricter posture.
+- **No `discordId`:** the user cannot be verified and keeps the stored role.
+- `DISCORD_ADMIN_ROLE_IDS` empty while the bot is configured means "nobody is an admin", matching sign-in behavior.
+
+Changes to `DEV_DISCORD_IDS` take effect for an existing `ADMIN` session within the window, and for a `PARTICIPANT` session at the next sign-in.
+
+### 5.4 Manual role editor (`updateUserRoleAction`)
+
+The editor in `/admin/users` is **revoke-only**:
+
+- It may demote `ADMIN` to `PARTICIPANT` (audited, reason required).
+- It cannot grant `ADMIN` (`ROLE_GRANT_FORBIDDEN`): assign the Discord admin role instead; the user gets it on next sign-in.
+- It cannot change a `DEV` user for any actor, admin or dev (`DEV_ROLE_PROTECTED`), because `DEV` is re-derived from `DEV_DISCORD_IDS`.
+- Self-demotion remains blocked (`SELF_DEMOTION_FORBIDDEN`).
+
+A manual revoke lasts until the user next signs in; if they still hold the Discord admin role at that point they regain `ADMIN`. To remove access permanently, remove the Discord role as well.
+
+### 5.5 Host URL policy (`AUTH_URL` / trusted hosts)
+
+- Set `AUTH_URL` to the canonical public origin in every deployed environment (for example `https://holdmetoit.example`). It pins callback and redirect URLs.
+- The Auth.js config sets **no** `trustHost` and the repo does not set `AUTH_TRUST_HOST`. Do not add a blanket `AUTH_TRUST_HOST=true`: it makes Auth.js derive its URL from the request `Host` header.
+- Vercel provides its own trusted host handling. On any other host (Docker, VM), keep `AUTH_URL` set and verify the sign-in redirect lands on the intended origin before go-live.
+- `AUTH_SECRET` must be set per environment and rotated if exposed.
+
+### 5.6 Tests
+
+- `features/auth/domain/role-policy.test.ts`: demote-only rule, DEV protection, revoke-only rule, window constants.
+- `features/auth/data/role-revalidation.service.test.ts`: demotion within the window, TTL caching, outage handling, DEV add/remove, persistence failure.
+- `features/auth/data/discord-guild.service.test.ts` (`checkDiscordAdminRole`): found / left server / outage / unconfigured.
+- `features/admin/api/user-directory.actions.test.ts`: admins cannot modify DEV users, grants rejected, revoke audited.

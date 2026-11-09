@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DataPagination } from "@/components/ui/data-pagination";
 import { TrophyRoleBadge } from "./trophy-role-badge";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import {
    filterLeaderboardEntries,
    LEADERBOARD_PAGE_SIZE,
@@ -239,11 +240,14 @@ export function TrophyLeaderboardView({
                                  {getTopRankDecor(displayRank)}
                               </div>
 
-                              <div className="relative h-10 w-10 rounded-2xl overflow-hidden bg-surface-elevated border border-border-default shrink-0">
+                              <Link
+                                 href={buildUserProfileUrl(entry)}
+                                 className="relative h-10 w-10 rounded-2xl overflow-hidden bg-surface-elevated border border-border-default shrink-0 hover:border-brand-1 transition-colors block"
+                              >
                                  {entry.image ? (
                                     <Image
                                        src={entry.image}
-                                       alt={entry.displayName}
+                                       alt={entry.username || entry.displayName}
                                        fill
                                        sizes="40px"
                                        className="object-cover"
@@ -251,13 +255,16 @@ export function TrophyLeaderboardView({
                                  ) : (
                                     <UserIcon className="h-5 w-5 m-auto text-text-tertiary" />
                                  )}
-                              </div>
+                              </Link>
 
                               <div className="min-w-0">
                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-bold text-white text-sm truncate">
-                                       {entry.displayName}
-                                    </span>
+                                    <Link
+                                       href={buildUserProfileUrl(entry)}
+                                       className="font-bold text-white text-sm truncate hover:underline hover:text-brand-1"
+                                    >
+                                       {entry.username || entry.displayName}
+                                    </Link>
                                     {isSelf && (
                                        <span className="text-label bg-brand-1/20 text-brand-1 border border-brand-1/40 px-1.5 py-0.2 rounded font-bold">
                                           YOU
@@ -265,8 +272,6 @@ export function TrophyLeaderboardView({
                                     )}
                                  </div>
                                  <div className="text-meta text-text-tertiary flex items-center gap-2 mt-0.5">
-                                    <span>@{entry.username}</span>
-                                    <span>•</span>
                                     <span className="font-mono text-text-secondary">
                                        {entry.wins}W / {entry.losses}L (
                                        {entry.winRate}%)

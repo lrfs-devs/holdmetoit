@@ -3,7 +3,7 @@
  * Uses the shared discord.js REST client to inspect guild member roles.
  */
 
-import { fetchGuildMember } from "@holdmetoit/discord";
+import { fetchGuildMember, lookupGuildMember } from "@holdmetoit/discord";
 import { getServerEnv } from "@/core/env/server";
 import { parseDiscordSnowflakeList } from "@/features/auth/domain/auth-roles";
 
@@ -74,4 +74,42 @@ export async function isDiscordAdmin(discordUserId: string): Promise<boolean> {
 
    const memberRoles = await fetchMemberRoles(discordUserId);
    return memberRoles.some((roleId) => adminRoleIds.includes(roleId));
+}
+
+export type AdminRoleCheck = "admin" | "not_admin" | "unavailable";
+
+/**
+ * Revalidation-grade variant of {@link isDiscordAdmin}.
+ *
+ * Unlike `isDiscordAdmin`, it never mistakes an outage for a missing role:
+ * - "unavailable": guild/bot not configured, or Discord could not be reached
+ * - "not_admin":   Discord answered and the user lacks an admin role (including
+ *                  users who left the server, HTTP 404)
+ * - "admin":       Discord answered and the user holds a configured admin role
+ */
+export async function checkDiscordAdminRole(
+   discordUserId: string
+): Promise<AdminRoleCheck> {
+   const guildId = getServerEnv().DISCORD_GUILD_ID;
+   if (!guildId || !discordUserId) {
+      return "unavailable";
+   }
+
+   const adminRoleIds = getConfiguredAdminRoleIds();
+   if (adminRoleIds.length === 0) {
+      return "not_admin";
+   }
+
+   const lookup = await lookupGuildMember({ guildId, userId: discordUserId });
+   if (lookup.status === "unavailable") {
+      return "unavailable";
+   }
+   if (lookup.status === "not_found") {
+      return "not_admin";
+   }
+
+   const roles = Array.isArray(lookup.member.roles) ? lookup.member.roles : [];
+   return roles.some((roleId) => adminRoleIds.includes(roleId))
+      ? "admin"
+      : "not_admin";
 }
