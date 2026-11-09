@@ -179,7 +179,7 @@ The `session` callback (`core/auth/index.ts`) calls `revalidatePrivilegedRole` (
 - **Window:** `ROLE_REVALIDATION_TTL_MS` = 5 minutes per user, per server process. In serverless deployments each warm instance checks independently, so the worst case is one Discord lookup per instance per user per window.
 - **Demote-only:** revalidation can remove privileges (or apply a `DEV` id an operator explicitly configured). It never grants `ADMIN`; that happens at sign-in. This keeps a manual revoke from being silently undone minutes later.
 - **Demotions are persisted** (`User.role`) by the service. The `session` callback performs no role writes of its own (the old fire-and-forget DEV update was removed).
-- **Left the server:** Discord HTTP 404 on the member lookup is treated as "no admin role" and demotes.
+- **Left the server:** only Discord's "Unknown Member" response (HTTP 404, JSON code 10007) is treated as "no admin role" and demotes. Any other 404, such as an unknown guild from a wrong `DISCORD_GUILD_ID` (code 10004), counts as unavailable and keeps the stored role.
 - **Discord unavailable** (outage, missing bot token, unset `DISCORD_GUILD_ID`): the stored role is kept, a `auth.role_revalidation_unavailable` warning is logged, and the check is retried after 30 seconds (`ROLE_REVALIDATION_RETRY_MS`). This favours availability; alert on that log event if you need a stricter posture.
 - **No `discordId`:** the user cannot be verified and keeps the stored role.
 - `DISCORD_ADMIN_ROLE_IDS` empty while the bot is configured means "nobody is an admin", matching sign-in behavior.

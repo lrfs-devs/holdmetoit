@@ -25,6 +25,7 @@ import type {
    AdminRosterRole,
    AdminUserRosterItem,
 } from "../domain/user-directory.types";
+import { canRevokeStoredRole } from "@/features/auth/domain/role-policy";
 import type { AuditEvent } from "@/features/audit/domain/audit-log";
 import {
    Shield,
@@ -148,8 +149,9 @@ export function UserInspectorSheet({
       }
    };
 
-   // Discord is the source of truth: only existing elevated roles can be revoked.
-   const canRevoke = user?.role !== undefined && user.role !== "USER";
+   // Discord is the source of truth: only a stored ADMIN role can be revoked.
+   // DEV users appear as ADMIN in the roster, so decide from the stored role.
+   const canRevoke = canRevokeStoredRole(user?.dbRole);
 
    const handleRoleSubmit = (e: React.FormEvent) => {
       e.preventDefault();

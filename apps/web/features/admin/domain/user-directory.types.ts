@@ -1,3 +1,5 @@
+import type { UserRoleType } from "@/features/auth/domain/auth-roles";
+
 export type AdminRosterRole = "USER" | "HOST" | "ADMIN";
 
 export type AdminEnrollmentFilter =
@@ -24,6 +26,8 @@ export interface AdminUserRosterItem {
    discordTag: string;
    image: string | null;
    role: AdminRosterRole;
+   /** Stored database role. `role` collapses DEV into ADMIN, so use this to tell them apart. */
+   dbRole: UserRoleType;
    createdAt: string;
    lifetimeStudyHours: number;
    trophies: number;

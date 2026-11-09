@@ -141,6 +141,33 @@ describe("user-directory.repository", () => {
          },
       ];
 
+      it("exposes the stored role so DEV is distinguishable from ADMIN", async () => {
+         vi.mocked(prisma.user.findMany).mockResolvedValue([
+            {
+               id: "dev1",
+               displayName: "Dev One",
+               username: "dev_one",
+               name: "Dev One",
+               image: null,
+               discordId: "999",
+               role: "DEV",
+               createdAt: new Date("2026-09-01T00:00:00.000Z"),
+               trophyBalance: 0,
+               wallet: null,
+               yptConnection: null,
+               hostedChallenges: [],
+               participations: [],
+            },
+         ] as any);
+
+         const result = await getAdminUserRoster({}, { now: fixedNow });
+
+         // The roster collapses DEV into ADMIN for display...
+         expect(result.items[0].role).toBe("ADMIN");
+         // ...but the stored role stays visible so the UI can protect it.
+         expect(result.items[0].dbRole).toBe("DEV");
+      });
+
       it("returns all users with mapped attributes and summary counters", async () => {
          vi.mocked(prisma.user.findMany).mockResolvedValue(mockUsers as any);
 
@@ -160,6 +187,7 @@ describe("user-directory.repository", () => {
          const charlie = result.items.find((i) => i.id === "u3")!;
          expect(alice.name).toBe("Alice Active");
          expect(alice.role).toBe("USER");
+         expect(alice.dbRole).toBe("PARTICIPANT");
          expect(alice.yptStatus).toBe("CONNECTED");
          expect(alice.lifetimeStudyHours).toBe(3.0); // (7200 + 3600) / 3600 = 3h
          expect(alice.activeChallenges).toHaveLength(1);
@@ -167,6 +195,7 @@ describe("user-directory.repository", () => {
 
          expect(bob.name).toBe("Bob Host");
          expect(bob.role).toBe("HOST"); // ADMIN + hostedChallenges -> HOST
+         expect(bob.dbRole).toBe("ADMIN");
          expect(bob.yptStatus).toBe("DISCONNECTED");
          expect(bob.lifetimeStudyHours).toBe(10.0); // 36000 / 3600
          expect(bob.activeChallenges).toHaveLength(0); // challenge ended in September

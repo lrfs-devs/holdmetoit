@@ -29,6 +29,7 @@ const ROLE_RANK: Record<UserRoleType, number> = {
    DEV: 2,
 };
 
+/** Numeric privilege rank used to compare roles; unknown values rank as PARTICIPANT. */
 function rankOf(role: UserRoleType | string): number {
    return ROLE_RANK[role as UserRoleType] ?? 0;
 }
@@ -57,6 +58,18 @@ export function resolveRevalidatedRole(
    if (authoritative === "DEV") return "DEV";
    if (rankOf(authoritative) < rankOf(current)) return authoritative;
    return current;
+}
+
+/**
+ * Whether the manual editor has anything to revoke for a stored role.
+ * Only ADMIN can be revoked: DEV is protected and PARTICIPANT has no
+ * elevated access. Takes the stored database role, not the roster role,
+ * because the roster collapses DEV into ADMIN.
+ */
+export function canRevokeStoredRole(
+   dbRole: UserRoleType | string | null | undefined
+): boolean {
+   return dbRole === "ADMIN";
 }
 
 export type RoleChangeCode =

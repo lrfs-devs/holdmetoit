@@ -100,6 +100,7 @@ export async function revalidatePrivilegedRole(
    return nextRole;
 }
 
+/** Records when a user is next due for a Discord check; bounds memory by resetting at the cap. */
 function remember(userId: string, until: number): void {
    if (nextCheckAt.size >= MAX_TRACKED_USERS) {
       nextCheckAt.clear();

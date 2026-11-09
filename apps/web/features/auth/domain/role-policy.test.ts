@@ -4,6 +4,7 @@ import {
    ROLE_REVALIDATION_TTL_MS,
    SESSION_MAX_AGE_SECONDS,
    SESSION_UPDATE_AGE_SECONDS,
+   canRevokeStoredRole,
    evaluateRoleChange,
    resolveDiscordRole,
    resolveRevalidatedRole,
@@ -106,6 +107,19 @@ describe("role-policy", () => {
                requestedRole: "PARTICIPANT",
             })
          ).toEqual({ allowed: true, code: "ROLE_CHANGE_ALLOWED" });
+      });
+   });
+
+   describe("canRevokeStoredRole", () => {
+      it("offers revoke only for a stored ADMIN", () => {
+         expect(canRevokeStoredRole("ADMIN")).toBe(true);
+      });
+
+      it("hides revoke for DEV (protected) and PARTICIPANT (nothing to revoke)", () => {
+         expect(canRevokeStoredRole("DEV")).toBe(false);
+         expect(canRevokeStoredRole("PARTICIPANT")).toBe(false);
+         expect(canRevokeStoredRole(undefined)).toBe(false);
+         expect(canRevokeStoredRole(null)).toBe(false);
       });
    });
 });
