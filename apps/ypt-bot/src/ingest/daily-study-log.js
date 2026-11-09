@@ -41,9 +41,9 @@ export async function ingestGroupMembersToDailyStudyLogs(
    // 0. Auto-lock any challenges whose 6-hour grace window has expired
    await lockExpiredChallengesAfterGrace(nowUtc, log);
 
-   // 1. Resolve the anchor challenge in UTC. The cron is challenge-window independent:
-   //    locked/ended challenges still anchor telemetry via fallback. No challenge at all
-   //    means there is no participant to key rows to, so fail loudly.
+   // 1. Resolve the anchor challenge in UTC. The fallback can return an ended or
+   //    locked challenge so we can report why we skipped; it must never be written to.
+   //    No challenge at all means there is nothing to key rows to, so fail loudly.
    const challenge = await getActiveChallenge(nowUtc, { allowFallback: true });
    if (!challenge) {
       throw new Error("No challenge available to anchor study telemetry");
@@ -51,6 +51,26 @@ export async function ingestGroupMembersToDailyStudyLogs(
 
    const lifecycle =
       challenge.lifecycle || getChallengeLifecycle(challenge, nowUtc);
+
+   // Stop tracking once the challenge is not ingestable (UPCOMING, LOCKED, or
+   // EXPIRED past the 6-hour Day 7 grace window). Only ACTIVE and DAY7_GRACE write.
+   if (!lifecycle.canIngest) {
+      log.info("Ingest skipped: challenge is not accepting study telemetry", {
+         challengeId: challenge.id,
+         challengeTitle: challenge.title,
+         state: lifecycle.state,
+      });
+      return {
+         success: true,
+         skipped: true,
+         reason: lifecycle.state,
+         challengeId: challenge.id,
+         challengeTitle: challenge.title,
+         matchedCount: 0,
+         unlinkedCount: 0,
+         upsertedCount: 0,
+      };
+   }
 
    // Challenge-anchored day bucket (derived from challenge start in UTC)
    // During Day 7 grace period, lock target bucket to Day 7 (1 second prior to day7End)

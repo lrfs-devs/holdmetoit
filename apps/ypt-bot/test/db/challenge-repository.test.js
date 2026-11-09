@@ -516,7 +516,7 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
       }
    });
 
-   test("still logs study telemetry when the challenge is locked (no longer skips)", async () => {
+   test("skips study telemetry when the challenge is locked", async () => {
       const lockedChallenge = {
          ...mockChallenge,
          resultsLockedAt: new Date("2026-10-11T17:00:00.000Z"),
@@ -569,13 +569,14 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
          );
 
          assert.strictEqual(result.success, true);
+         assert.strictEqual(result.skipped, true);
+         assert.strictEqual(result.reason, "LOCKED");
+         assert.strictEqual(result.upsertedCount, 0);
          assert.strictEqual(
-            result.upsertedCount,
-            1,
-            "Locked challenge must still receive study telemetry"
+            upsertArgs,
+            null,
+            "Locked challenge must not receive study telemetry"
          );
-         assert.ok(upsertArgs);
-         assert.strictEqual(upsertArgs.create.participantId, "cp-alice");
       } finally {
          prisma.challenge.findMany = origChallengeFindMany;
          prisma.challenge.findFirst = origChallengeFindFirst;
