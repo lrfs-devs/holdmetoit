@@ -9,6 +9,8 @@ export const logEvents = {
    authDiscordSignin: "auth.discord_signin",
    authUserSynced: "auth.user_synced",
    authRoleSyncFailed: "auth.role_sync_failed",
+   authRoleRevalidated: "auth.role_revalidated",
+   authRoleRevalidationUnavailable: "auth.role_revalidation_unavailable",
    authSignout: "auth.signout",
    authPreviewToggled: "auth.preview_toggled",
    authUsernameUpdated: "auth.username_updated",

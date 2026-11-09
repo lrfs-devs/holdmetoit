@@ -4,13 +4,22 @@ import ParticipantStatsPage, { generateMetadata } from "./page";
 import { getChallengeParticipantStats } from "@/features/participant-stats/data/participant-stats.repository";
 import { auth } from "@/core/auth";
 import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect, RedirectType } from "next/navigation";
 import { PARTICIPANT_PREVIEW_COOKIE } from "@/features/auth/domain/preview-mode";
 
 vi.mock("next/navigation", () => ({
    notFound: vi.fn(() => {
       throw new Error("NEXT_NOT_FOUND");
    }),
+   redirect: vi.fn((url: string, type?: any) => {
+      const err = new Error(`NEXT_REDIRECT:${url}`);
+      (err as any).digest = `NEXT_REDIRECT;replace;${url};307;`;
+      throw err;
+   }),
+   RedirectType: {
+      push: "push",
+      replace: "replace",
+   },
 }));
 
 vi.mock(
@@ -116,19 +125,24 @@ describe("ParticipantStatsPage", () => {
       },
    };
 
-   it("renders participant stats view when record is found", async () => {
+   it("redirects to canonical scholar profile URL with challengeId", async () => {
       vi.mocked(getChallengeParticipantStats).mockResolvedValue(
          mockStats as any
       );
 
-      const pageElement = await ParticipantStatsPage({
-         params: Promise.resolve({ id: "chal_1", participantId: "part_1" }),
-      });
+      await expect(
+         ParticipantStatsPage({
+            params: Promise.resolve({ id: "chal_1", participantId: "part_1" }),
+            searchParams: Promise.resolve({ view: "today" }),
+         })
+      ).rejects.toThrow(
+         "NEXT_REDIRECT:/@bob?challengeId=chal_1&tab=history&view=today"
+      );
 
-      const html = renderToStaticMarkup(pageElement);
-      expect(html).toContain("Bob Scholar");
-      expect(html).toContain("Winter Battle");
-      expect(html).toContain("10:00:00");
+      expect(redirect).toHaveBeenCalledWith(
+         "/@bob?challengeId=chal_1&tab=history&view=today",
+         RedirectType.replace
+      );
    });
 
    it("forwards participant preview state to the stats repository", async () => {
@@ -144,9 +158,11 @@ describe("ParticipantStatsPage", () => {
          mockStats as any
       );
 
-      await ParticipantStatsPage({
-         params: Promise.resolve({ id: "chal_1", participantId: "part_1" }),
-      });
+      await expect(
+         ParticipantStatsPage({
+            params: Promise.resolve({ id: "chal_1", participantId: "part_1" }),
+         })
+      ).rejects.toThrow();
 
       expect(getChallengeParticipantStats).toHaveBeenCalledWith(
          "chal_1",
@@ -170,16 +186,20 @@ describe("ParticipantStatsPage", () => {
       expect(notFound).toHaveBeenCalled();
    });
 
-   it("generates metadata with participant and challenge title", async () => {
+   it("generates metadata with participant, challenge title, and canonical alternate URL", async () => {
       vi.mocked(getChallengeParticipantStats).mockResolvedValue(
          mockStats as any
       );
 
       const meta = await generateMetadata({
          params: Promise.resolve({ id: "chal_1", participantId: "part_1" }),
+         searchParams: Promise.resolve({ view: "today" }),
       });
 
       expect(meta.title).toBe("Bob Scholar — Winter Battle | HoldMeToIt");
+      expect(meta.alternates?.canonical).toBe(
+         "/@bob?challengeId=chal_1&tab=history&view=today"
+      );
    });
 
    it("generates fallback metadata when participant is not found", async () => {

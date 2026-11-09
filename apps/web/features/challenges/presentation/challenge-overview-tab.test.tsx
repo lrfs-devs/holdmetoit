@@ -333,6 +333,16 @@ describe("ChallengeOverviewTab", () => {
       expect(html).toContain('data-testid="betting-card"');
    });
 
+   it("renders canonical user profile URL /@<username>?challengeId=<id> for participants", () => {
+      const html = renderToStaticMarkup(
+         createElement(ChallengeOverviewTab, { challenge: mockChallenge })
+      );
+
+      expect(html).toContain(
+         'href="/@alicescholar?challengeId=test-challenge-overview"'
+      );
+   });
+
    it("hides the betting card when the betting flag is off", () => {
       const html = renderToStaticMarkup(
          createElement(ChallengeOverviewTab, {

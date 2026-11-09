@@ -20,10 +20,12 @@ import {
    updateUserRoleAction,
    getUserAuditLogsAction,
 } from "../api/user-directory.actions";
+import { buildUserProfileUrl } from "@/features/participant-stats/domain/profile-url";
 import type {
    AdminRosterRole,
    AdminUserRosterItem,
 } from "../domain/user-directory.types";
+import { canRevokeStoredRole } from "@/features/auth/domain/role-policy";
 import type { AuditEvent } from "@/features/audit/domain/audit-log";
 import {
    Shield,
@@ -147,6 +149,10 @@ export function UserInspectorSheet({
       }
    };
 
+   // Discord is the source of truth: only a stored ADMIN role can be revoked.
+   // DEV users appear as ADMIN in the roster, so decide from the stored role.
+   const canRevoke = canRevokeStoredRole(user?.dbRole);
+
    const handleRoleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       setRoleFeedback(null);
@@ -215,7 +221,7 @@ export function UserInspectorSheet({
                         size="sm"
                         className="h-8 gap-1.5 text-xs text-text-secondary hover:text-white"
                      >
-                        <Link href={`/profile/${user.id}`} target="_blank">
+                        <Link href={buildUserProfileUrl(user)} target="_blank">
                            <span>Profile</span>
                            <ExternalLink className="h-3 w-3" />
                         </Link>
@@ -417,19 +423,24 @@ export function UserInspectorSheet({
                            onChange={(e) =>
                               setSelectedRole(e.target.value as AdminRosterRole)
                            }
-                           disabled={isRolePending || isSelf}
+                           disabled={isRolePending || isSelf || !canRevoke}
                            className="w-full h-9 rounded-xl border border-border-default bg-surface-page px-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-1 disabled:opacity-50"
                         >
-                           <option value="USER">
-                              USER (Regular Participant)
+                           <option value={user.role}>
+                              {user.role} (current)
                            </option>
-                           <option value="HOST">
-                              HOST (Challenge Creator & Referee)
-                           </option>
-                           <option value="ADMIN">
-                              ADMIN (Full Platform Authority)
-                           </option>
+                           {canRevoke && (
+                              <option value="USER">
+                                 USER (Revoke admin access)
+                              </option>
+                           )}
                         </select>
+                        <p className="text-meta text-text-secondary">
+                           Admin access is granted through the Discord admin
+                           role. This editor can only revoke it; a revoked user
+                           regains access only if they still hold the Discord
+                           role when they sign in again.
+                        </p>
                      </div>
 
                      <div className="space-y-1.5">
@@ -444,7 +455,7 @@ export function UserInspectorSheet({
                            value={roleReason}
                            onChange={(e) => setRoleReason(e.target.value)}
                            placeholder="Explain why this user role is being changed (logged to audit trail)..."
-                           disabled={isRolePending || isSelf}
+                           disabled={isRolePending || isSelf || !canRevoke}
                            className="min-h-[70px] text-xs bg-surface-page border-border-default resize-none"
                         />
                      </div>
@@ -472,6 +483,7 @@ export function UserInspectorSheet({
                         disabled={
                            isRolePending ||
                            isSelf ||
+                           !canRevoke ||
                            selectedRole === user.role ||
                            roleReason.trim().length < 3
                         }

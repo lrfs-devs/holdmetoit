@@ -1,5 +1,6 @@
 import { prisma } from "@/core/db";
 import { getRankForTrophies } from "@/features/trophies/domain/trophy-rank";
+import type { UserRoleType } from "@/features/auth/domain/auth-roles";
 import type {
    AdminEnrollmentFilter,
    AdminRosterRole,
@@ -153,12 +154,14 @@ export async function getAdminUserRoster(
 
       return {
          id: user.id,
+         username: user.username,
          discordId: user.discordId,
          name: user.displayName || user.name || user.username || "Anonymous",
          discordTag:
             user.username || user.displayName || user.name || "Unknown",
          image: user.image,
          role,
+         dbRole: user.role as UserRoleType,
          createdAt: user.createdAt.toISOString(),
          lifetimeStudyHours,
          trophies,

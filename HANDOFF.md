@@ -4,7 +4,7 @@
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
 > **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-06 (Session 204 — fix(identity): enforce exact case-normalized username queries, race condition fix, and migration pre-check)
+> **Last Updated:** 2026-11-09 (Session 208 — fix(auth): revalidate Discord roles, shorten sessions, restrict admin role editing; GH #227)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
@@ -55,6 +55,7 @@
 - `DEV` → Discord snowflake listed in `DEV_DISCORD_IDS` (JSON array; legacy alias `DISCORD_DEV_IDS` still read).
 - `ADMIN` → user holds a role in `DISCORD_ADMIN_ROLE_IDS` within `DISCORD_GUILD_ID` (looked up with `DISCORD_BOT_TOKEN`; OAuth scope stays `identify`).
 - `PARTICIPANT` → everyone else. The `DISCORD_ADMIN_IDS` whitelist has been removed.
+- **Revalidation (GH #227):** `ADMIN`/`DEV` sessions are re-checked against Discord at most every 5 minutes per process and **demoted** (never promoted) when Discord no longer grants the role. Sessions last 7 days (`updateAge` 1 day). The `/admin/users` role editor is revoke-only and cannot touch `DEV` users. Details: `docs/security/README.md` §5.
 - **Global Participant Preview:** Admins and devs can toggle a global cookie (`holdmetoit_preview_as_participant`) from the header next to "Admin Console". When active, all pages (`/`, `/challenge/[id]`, etc.) render exactly as regular participants see them (hiding Manage tab, Event Audit tab, host override controls, and DEV badge).
 
 ---
@@ -183,6 +184,71 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 ---
 
 ## 7. Session Changelog (Last 3–5 Sessions)
+
+### Session 208 — 2026-11-09 (Discord role revalidation, shorter sessions, revoke-only role editor, SEC-05 / SEC-20 / GH #227 on `fix/auth-role-revalidation-227`)
+
+- **Revalidation:**
+   - New `features/auth/data/role-revalidation.service.ts` re-checks `ADMIN`/`DEV` users against Discord from the Auth.js `session` callback, cached 5 minutes per user per process, and persists demotions. Outages keep the stored role and retry after 30s.
+   - New `checkDiscordAdminRole` (`discord-guild.service.ts`) and `lookupGuildMember` (`packages/discord`) distinguish "left the server" (404 → demote) from "Discord unavailable" (keep role). The old `fetchGuildMember` is unchanged.
+   - Removed the fire-and-forget DEV `prisma.user.update` from the `session` callback.
+- **Sessions:** `maxAge` 7 days, `updateAge` 1 day (was the 30-day default).
+- **Role editor:** `updateUserRoleAction` is revoke-only; granting `ADMIN` returns `ROLE_GRANT_FORBIDDEN`, any change to a `DEV` target returns `DEV_ROLE_PROTECTED`. The inspector sheet only offers "revoke". Pure rules in `features/auth/domain/role-policy.ts`.
+- **Docs:** `docs/security/README.md` §5 (source of truth, windows, `AUTH_URL` / no blanket `AUTH_TRUST_HOST` policy).
+- **Deviations from the issue text (needs team sign-off):**
+   - DEV targets are immutable for _every_ actor, not just non-DEV ones, because `DEV` is re-derived from `DEV_DISCORD_IDS` and an edit would be silently reverted.
+   - Admins cannot be _granted_ by anyone through the editor (the issue offered "DEV may grant ADMIN" as an alternative), because Discord is the source of truth and a manual grant would be removed by the next revalidation.
+   - Revalidation is demote-only so a manual revoke is not undone within minutes. A revoked user who still holds the Discord role regains `ADMIN` at next sign-in.
+- **Behavior change:** a `PARTICIPANT` newly added to `DEV_DISCORD_IDS` becomes `DEV` at next sign-in (previously the session callback elevated them immediately). An existing `ADMIN` is promoted within the window.
+- **Validation:** web auth/admin suites green (199 tests) incl. new policy, revalidation, guild-service and action tests; `lint:web` 0 errors; Prettier clean. `typecheck:web` and the full `test:web` were **not** run to completion in the authoring sandbox (Prisma engine download blocked, so no generated client): the type error count did not increase versus `dev`. Re-run both in CI or locally.
+- **NEXT:** run `npm run typecheck:web` and `npm run test:web` with a generated Prisma client; open PR `fix/auth-role-revalidation-227` → `dev` and move #227 to `In Review` (not `Done` until merged to `dev` and released to `main`). Ensure `AUTH_URL` is set in every deployed environment.
+### Session 205 — 2026-11-09 (Feat: 1-Click Discord Todo Export for Daily & Weekly Tasks on `krish` · GH #260 / Jira KAN-97)
+
+- **Scope & Objectives:** Implemented 1-click clipboard export for Daily and Weekly todos from the website directly to Discord-ready text. Linked with GitHub Issue #260 and Jira Ticket KAN-97 (assigned to Krish Jaiswal).
+- **Domain Layer (`features/tasks/domain/task-export.ts` — Law L7):**
+   - Pure calculation and text generation without React/Next.js/Prisma imports.
+   - Supports two Discord-optimized formats:
+      1. **Standard Markdown Checklist (Default):** Native Discord markdown task list `- [ ]` and `- [x]`, in-progress `- [ ] ⏳`, crossed out `- [ ] ~~...~~`, and challenge goal indicator `🏆`.
+      2. **High-Contrast Emojis:** Visual status markers (`⬜`, `✅`, `⏳`, `❌ ~~...~~`, `🏆`).
+   - Daily export: includes full day of week, date, and challenge day number derived from `activeDayOption?.dayNumber` (e.g. `## 📋 Daily Todos — Monday, Nov 9, 2026 (Day 2)`).
+   - Weekly export: includes explicit date range (e.g. `## 🗓️ Weekly Todos — Nov 2, 2026 – Nov 8, 2026`) and scopes to `visibleWeeklyCategories` matching the Weekly board display.
+   - Category grouping: work items grouped under `### 📂 Category Name` headers (skipping empty categories, defaulting unnamed categories to "General").
+   - Progress summary footer: includes completed/total count and completion percentage in a clean blockquote.
+   - 21 unit tests passing in Vitest (`task-export.test.ts`) with 100% line and function test coverage.
+- **Presentation Layer (`features/tasks/presentation/task-export-button.tsx` & `cockpit-tasks-section.tsx`):**
+   - Implemented `TaskExportButton` as a split button control:
+      - **Primary Export Button:** Executes instant 1-click clipboard copy of the preferred style.
+      - **Chevron Trigger Control:** Dedicated dropdown trigger button allowing the user to select between Markdown Checklist and High-Contrast Emojis, saving preference to `localStorage` (`holdmetoit_task_export_style`).
+   - **Symmetrical Card Layout Alignment:** Positioned in Row 2 opposite `CockpitWeekNavigator` (`justify-between`) in both Daily and Weekly boards. Fits comfortably within 360px viewport (253px total width out of 320px available) with zero horizontal overflow or clipping.
+   - **Robust Fallback:** Non-secure context fallback uses `try/finally` for guaranteed textarea removal and verifies `document.execCommand("copy")` boolean result, routing failures to error toast.
+   - Inline feedback: switches to emerald `Copied! ✓` state for 2 seconds.
+   - Toast confirmation via `sonner` (`Exported Daily (Markdown Checklist) to clipboard!`).
+   - 7 unit tests passing in Vitest (`task-export-button.test.tsx`).
+- **Documentation:**
+   - Updated Section 7 of `docs/tasks/README.md` covering architecture, split button controls, format specifications, and developer usage.
+- **Quality Gates:**
+   - `npm run typecheck:web`: 0 errors (`tsc --noEmit` exits with 0).
+   - 28/28 unit tests green across `task-export` suites; 108/108 tests passing in `cockpit-tasks` suites.
+- **Jira Status:** `KAN-97` in `In Review` (Stage 2).
+
+### Session 204 — 2026-11-08 (CI security scanning & supply-chain hardening, SEC-19 / #237)
+
+- **Workflow Hardening:**
+   - `.github/workflows/ci.yml` now declares `permissions: contents: read`, pins `actions/checkout` and `actions/setup-node` (v4.4.0) to commit SHAs, and sets `persist-credentials: false`.
+- **New Scanning Workflows:**
+   - `.github/workflows/security.yml`: `npm audit --package-lock-only --omit=dev --audit-level=high` (push, PR, weekly cron) and `actions/dependency-review-action` on pull requests (fails on newly introduced high/critical advisories).
+   - `.github/workflows/codeql.yml`: CodeQL for JavaScript/TypeScript with the `security-extended` queries (push, PR, weekly cron).
+   - Every action is pinned to a full SHA of a release at least two weeks old, each verified against its tag.
+- **Audit Gate Is Blocking:**
+   - The lockfile is clean (0 production advisories) after the Next.js 16 and Prisma 7 migration (PR #253), so the audit step fails the build on any high or critical advisory with no advisory-mode escape hatch.
+- **Dependabot & CODEOWNERS:**
+   - `.github/dependabot.yml`: weekly grouped npm and GitHub Actions updates, 7-day cooldown, `chore(deps)` / `chore(ci)` commit prefixes.
+   - `.github/CODEOWNERS` previously read `*@Afnanpathan2004` (no space) and enforced nothing. Fixed it and listed the security-sensitive paths explicitly under the same owner: `.github/`, auth, `core/security`, `middleware.ts`, and `packages/database/prisma/`.
+- **Not In The Repository (admin must apply):**
+   - Secret scanning with push protection, Dependabot alerts and security updates, and branch protection on `main` and `dev` (require Code Owner review and the four checks). Checklist in `docs/ci-security/README.md` §5.
+- **Left Unchanged:**
+   - Husky `prepare: husky || true`, because Docker builds run `npm ci` without a `.git` directory.
+- **Validation:** `actionlint` clean, all YAML parses, every `uses:` is a 40-character SHA, and the audit command exits 0 on the current lockfile. No application code changed.
+- **NEXT:** apply the repository-settings checklist and make `npm audit (production)`, `Dependency review`, `Analyze (javascript-typescript)`, and `quality-gates` required checks.
 
 ### Session 203 — 2026-11-06 (Merge `origin/dev` @ `8de6b8d` into `chore/nextjs-16-upgrade`, resolving PR #252 and #254 integrations)
 
@@ -2963,3 +3029,86 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
       - `npm run test:web`: ✅ 252 test files (2,660 tests) passing 100% green.
 - **NEXT STEP:** Submit PR to `dev` for peer review and staging deployment.
+
+### Session 205 — 2026-11-07 (feat(identity): implement canonical user profile URLs /@<platformUsername>, mandatory authentication, and rich Discord embeds — on `implement_user_profile_urls`)
+
+- **Context & Objectives:** Transition all scholar profile URLs from legacy CUID-based formats (`/profile/<cuid>`) to canonical user handle URLs (`/@<platformUsername>`), enforce mandatory session authentication for human visitors while allowing social link crawler unfurling, construct rich OpenGraph / Discord preview metadata cards with rank accent colors, maintain full backwards compatibility with legacy routes, and provide an in-app "Share Profile" action.
+- **Changes Completed:**
+   1. **Pure Domain Profile URL Generator (`features/participant-stats/domain/profile-url.ts`):** Created `buildUserProfileUrl` honoring Law L7 (zero Next.js/React imports). Formats canonical `/@${cleanUsername}`, falls back to `/@${cleanId}` or `/profile`, and preserves query parameters (`challengeId`, `tab`, `view`, `day`). Unit tested across 8 scenarios (8/8 green).
+   2. **Pure Domain Discord & OpenGraph Embed Engine (`features/participant-stats/domain/profile-embed.ts`):** Created format-aware helper methods (`buildProfileEmbedTitle`, `buildProfileEmbedDescription`, `buildProfileDiscordEmbed`, `getRankThemeColor`) dynamically calculating theme colors based on trophy rank (Obsidian `#10b981`, Diamond `#38bdf8`, Platinum `#a78bfa`, Gold `#f59e0b`, Silver `#94a3b8`, Bronze `#d97706`). Unit tested across 7 scenarios (7/7 green).
+   3. **Edge Gatekeeping & Crawler Pass-through (`proxy.ts`):** Configured edge middleware to intercept `/@:username`, `/%40:username`, `/profile`, and `/profile/:path*`. Deflects unauthenticated human visitors to `/`, while allowing social link preview bots (`Discordbot`, `Twitterbot`, `facebookexternalhit`, etc.) to pass unconditionally to scrape metadata without cookies. Unit tested across 12 scenarios (12/12 green).
+   4. **Canonical App Router Route (`app/[userHandle]/page.tsx`):**
+      - Guarded against path collisions with an immediate prefix check: `if (!decoded.startsWith("@")) notFound()`.
+      - Mandates session authentication (`if (!session?.user?.id) redirect("/")`).
+      - Canonical redirect: if accessed via CUID handle (`/@<cuid>`) but scholar has a platform username, automatically replace-redirects to `/@<platformUsername>`.
+      - Generates rich OpenGraph, Twitter card, and themeColor metadata tags in `generateMetadata`.
+      - Implemented comprehensive states: loading skeleton (`loading.tsx`), empty state (`not-found.tsx`), and error boundary (`error.tsx`) satisfying Law L9.
+      - Tested across 10 scenarios (10/10 green).
+   5. **Backwards Compatibility & Canonical Redirection:**
+      - `app/profile/[userId]/page.tsx`: Converts legacy CUID URLs to permanent 308 redirects to `buildUserProfileUrl(profile.user, query)` (6/6 tests green).
+      - `app/profile/page.tsx`: Redirects authenticated scholars directly to their own canonical `/@<platformUsername>` (3/3 tests green).
+   6. **Application-Wide Link Standardization:**
+      - Challenge Leaderboard (`challenge-leaderboard-tab.tsx`): Updated `getParticipantProfileUrl` to use `buildUserProfileUrl` across podium cards (Rank 1/2/3) and standings rows.
+      - Trophy Leaderboard (`trophy-leaderboard-view.tsx`): Competitor avatar and name wrapped with `<Link href={buildUserProfileUrl(entry)}>`.
+      - Header Capsule (`components/ui/header.tsx`): User capsule navigates to `/@<platformUsername>`.
+      - Home Cockpit (`home-cockpit-view.tsx` & `app/page.tsx`): Welcome greeting link resolves `buildUserProfileUrl` with platform username and challenge context.
+      - Admin Directory (`user-directory-view.tsx` & `user-inspector-sheet.tsx`): Standardized profile links to `buildUserProfileUrl(user)`.
+      - Cache Revalidation (`username.actions.ts` & `user-directory.actions.ts`): Revalidates `/[userHandle]` and `/@${username}` upon handle/role modifications.
+   7. **Share Profile Action & Live Address Bar Sync (`global-profile-view.tsx`):**
+      - Added a "Share Profile" button in the profile header card with clipboard copy and toast notification.
+      - In `EditUsernameDialog`: on username change, triggers `router.replace(`/@${newUsername}`)` to sync the browser URL in real time.
+   8. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 255 test files (2,693 tests) passing 100% green.
+
+### Session 206 — 2026-11-07 (feat(identity): unify challenge participant profile navigation with canonical scholar URLs /@<platformUsername>?challengeId=<id> — on `implement_user_profile_urls`)
+
+- **Context & Objectives:** Unify the scholar profile experience across the entire application. Clicking a scholar from anywhere (Challenge Overview tab, Challenge Leaderboard tab, Manage tab, Admin User Directory) must navigate to the single canonical profile URL `/@<platformUsername>?challengeId=<id>` rather than maintaining a disconnected legacy route at `/challenge/[id]/participant/[participantId]`.
+- **Changes Completed:**
+   1. **Challenge Overview Tab Links (`challenge-overview-tab.tsx`):**
+      - Imported `buildUserProfileUrl` and replaced raw `/challenge/${challenge.id}/participant/${p.participantId}` links with `buildUserProfileUrl(p, { challengeId: challenge.id })` for both avatar and scholar display name.
+      - Added test coverage in `challenge-overview-tab.test.tsx` asserting canonical user profile URL rendering.
+   2. **Challenge Manage Tab Links (`challenge-manage-tab.tsx`):**
+      - Imported `buildUserProfileUrl` and updated roster participant avatar and display name links to `buildUserProfileUrl(participant, { challengeId: challenge.id })`.
+   3. **Admin User Directory Links (`user-directory-view.tsx`):**
+      - Updated active challenges badges to link to `buildUserProfileUrl(user, { challengeId: ch.id })`.
+      - Updated `user-directory-view.test.tsx` assertions to match.
+   4. **Challenge Snapshot & Global Profile History Defaulting (`challenge-snapshot.tsx` & `global-profile-view.tsx`):**
+      - In `challenge-snapshot.tsx`, pointed `cockpitUrl` to `/challenge/${profile.challengeId}` so "View Full Challenge Cockpit" navigates to the challenge page itself rather than creating a redirect cycle back to the profile.
+      - In `global-profile-view.tsx`, defaulted `activeTab` to `"history"` whenever `selectedChallengeId` is provided (unless `tab` query param explicitly requests `"overview"` or `"settings"`), ensuring the user immediately sees the target challenge snapshot.
+      - Added a contextual "Back to Challenge Leaderboard" header link above the snapshot with origin `view` preservation (`today`, `team`, `individual`).
+      - Updated "Open Challenge Cockpit" button on the overview card to link to `/challenge/${challengeHistory[0].challengeId}`.
+      - Updated unit test suites in `challenge-snapshot.test.tsx` and `global-profile-view.test.tsx`.
+   5. **Legacy Route Permanent 308 Redirect (`app/challenge/[id]/participant/[participantId]/page.tsx`):**
+      - Converted the legacy participant route to issue an HTTP 308 permanent redirect via Next.js `permanentRedirect(destination, RedirectType.replace)`.
+      - Destination dynamically resolves the participant's user ID and platform username to build `/@<platformUsername>?challengeId=<id>&tab=history` while preserving any `view` or `tab` query parameters.
+      - Configured canonical alternate URL in `generateMetadata`.
+      - Updated `page.test.tsx` to verify the 308 redirect and query forwarding.
+   6. **Profile Embed Title & Description Refinements (`profile-embed.ts`):**
+      - Changed embed title from `@<handle> | HoldMeToIt Scholar Profile` to `@<handle> | HoldMeToIt Profile`.
+      - Removed `Recruit (x trophies)`, tasks completed, and Pokédex from the description and Discord embed fields, focusing the social preview strictly on core study metrics (`⏱️ Lifetime Study`, `🔥 Active Streak`, and `⚔️ Challenges`).
+      - Preserved dynamic trophy rank border color stripe via `getRankThemeColor`.
+      - Updated unit test suites in `profile-embed.test.ts`, `app/[userHandle]/page.test.tsx`, and `app/profile/[userId]/page.test.tsx`.
+   7. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 255 test files (2,696 tests) passing 100% green.
+- **NEXT STEP:** Submit PR to `dev` for peer review and staging deployment.
+
+### Session 207 — 2026-11-08 (fix(identity): resolve code review findings for redirects, clipboard safety, and documentation accuracy — on `implement_user_profile_urls`)
+
+- **Context & Objectives:** Address PR code review findings regarding participant page redirect behavior, profile-link clipboard safety, documentation fallback qualifiers, and handoff obsolescence pruning.
+- **Changes Completed:**
+   1. **Temporary Redirect on Participant Page (`app/challenge/[id]/participant/[participantId]/page.tsx`):**
+      - Switched from `permanentRedirect` to `redirect(destination, RedirectType.replace)`. Avoids permanent browser and CDN caching of mutable platform usernames and fallback user IDs.
+      - Updated `page.test.tsx` to mock and assert `redirect` with `RedirectType.replace`.
+   2. **Clipboard API Availability Guard (`global-profile-view.tsx`):**
+      - Updated `handleShareProfile` to check `if (!navigator?.clipboard?.writeText)` and return early with `toast.error("Clipboard is not available in this browser.")` before setting copy state or displaying success toast.
+   3. **Documentation Fallback Qualifiers (`docs/identity/README.md`):**
+      - Qualified profile redirects and participant navigation links to reflect fallback to `/@<userId>` when platform usernames are unconfigured.
+      - Corrected participant redirect documentation to temporary redirect.
+   4. **Handoff Pruning (`HANDOFF.md`):**
+      - Pruned obsolete Session 205 `NEXT STEP` directive in accordance with §9.3 of `AGENTS.md`.
+   5. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 255 test files (2,696 tests) passing 100% green.
+- **NEXT STEP:** Merge PR into `dev` after review approvals.
