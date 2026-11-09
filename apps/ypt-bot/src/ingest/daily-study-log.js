@@ -38,7 +38,7 @@ export async function ingestGroupMembersToDailyStudyLogs(
 ) {
    const startTime = Date.now();
 
-   // 0. Auto-lock any challenges whose 6-hour grace window has expired
+   // 0. Auto-lock any challenges whose end time has passed (challenge ended)
    await lockExpiredChallengesAfterGrace(nowUtc, log);
 
    // 1. Resolve the anchor challenge in UTC. The cron is challenge-window independent:
@@ -53,13 +53,7 @@ export async function ingestGroupMembersToDailyStudyLogs(
       challenge.lifecycle || getChallengeLifecycle(challenge, nowUtc);
 
    // Challenge-anchored day bucket (derived from challenge start in UTC)
-   // During Day 7 grace period, lock target bucket to Day 7 (1 second prior to day7End)
-   const logDate = lifecycle.isGracePeriod
-      ? computeChallengeDayLogDate(
-           new Date(lifecycle.day7End.getTime() - 1000),
-           challenge.startAt
-        )
-      : computeChallengeDayLogDate(nowUtc, challenge.startAt);
+   const logDate = computeChallengeDayLogDate(nowUtc, challenge.startAt);
 
    // 2. Resolve in-memory participant lookup table (yptId -> participantId)
    const participantMap = await getParticipantMap(challenge.id);
@@ -116,78 +110,22 @@ export async function ingestGroupMembersToDailyStudyLogs(
 
       const existing = existingMap.get(participant.participantId);
 
-      let durationSeconds;
-      let status;
-
-      if (lifecycle.isGracePeriod) {
-         // Day 7 Completion 6-hour Grace Period Rules:
-         // - No new sessions of YPT are logged (sessionStartMs >= day7End).
-         // - Only old sessions (in-progress sessions started before Day 7 completion) continue to accumulate.
-         // - When an in-progress old session completes, its final study duration is recorded to Day 7 and marked OFFLINE.
-         const isStudying = Boolean(member.isStudying);
-         const sessionStartMs = member.sessionStartMs
-            ? Number(member.sessionStartMs)
-            : null;
-         const day7EndMs = lifecycle.day7End.getTime();
-
-         const isOldSession =
-            isStudying && sessionStartMs !== null && sessionStartMs < day7EndMs;
-         const wasStudyingOldSession = existing?.status === "STUDYING";
-
-         if (isOldSession) {
-            // Accumulate active old session
-            const cappedLiveMs = cappedLiveStudyMs(
-               member.todayStudyMs,
-               member.sessionElapsedMs
-            );
-            const studyMs = Math.max(
-               cappedLiveMs,
-               Number(member.todayStudyMs || 0),
-               Number(member.studyMs || 0)
-            );
-            const rawSeconds = Math.floor(studyMs / 1000);
-            durationSeconds = clampDailyStudySeconds(rawSeconds);
-            if (rawSeconds > MAX_DAILY_STUDY_SECONDS) cappedCount++;
-            if (
-               Number(member.sessionElapsedMs || 0) > MAX_CONTINUOUS_SESSION_MS
-            )
-               sessionCappedCount++;
-            status = deriveStudyStatus(member);
-         } else if (wasStudyingOldSession && !isStudying) {
-            // Completed old session finalized
-            const rawSeconds = Math.floor(
-               Number(member.todayStudyMs || member.studyMs || 0) / 1000
-            );
-            const finalizedSeconds = clampDailyStudySeconds(rawSeconds);
-            durationSeconds = Math.max(
-               existing?.durationSeconds || 0,
-               finalizedSeconds
-            );
-            status = "OFFLINE";
-         } else {
-            // New session started after Day 7 or offline without pending old session: DO NOT LOG NEW SESSIONS
-            durationSeconds = existing ? existing.durationSeconds : 0;
-            status = "OFFLINE";
-         }
-      } else {
-         // Normal active challenge day: calculate real-time integer seconds
-         // Continuous sessions are capped at 4h before the daily 14h clamp is applied.
-         const cappedLiveMs = cappedLiveStudyMs(
-            member.todayStudyMs,
-            member.sessionElapsedMs
-         );
-         const studyMs = Math.max(
-            cappedLiveMs,
-            Number(member.todayStudyMs || 0),
-            Number(member.studyMs || 0)
-         );
-         const rawSeconds = Math.floor(studyMs / 1000);
-         durationSeconds = clampDailyStudySeconds(rawSeconds);
-         if (rawSeconds > MAX_DAILY_STUDY_SECONDS) cappedCount++;
-         if (Number(member.sessionElapsedMs || 0) > MAX_CONTINUOUS_SESSION_MS)
-            sessionCappedCount++;
-         status = deriveStudyStatus(member);
-      }
+      // Calculate real-time integer seconds. Continuous sessions capped at 4h before daily 14h clamp.
+      const cappedLiveMs = cappedLiveStudyMs(
+         member.todayStudyMs,
+         member.sessionElapsedMs
+      );
+      const studyMs = Math.max(
+         cappedLiveMs,
+         Number(member.todayStudyMs || 0),
+         Number(member.studyMs || 0)
+      );
+      const rawSeconds = Math.floor(studyMs / 1000);
+      const durationSeconds = clampDailyStudySeconds(rawSeconds);
+      if (rawSeconds > MAX_DAILY_STUDY_SECONDS) cappedCount++;
+      if (Number(member.sessionElapsedMs || 0) > MAX_CONTINUOUS_SESSION_MS)
+         sessionCappedCount++;
+      const status = deriveStudyStatus(member);
 
       // 4. Admin Override Safety (Law L5)
       // Check if an existing row has isOverride: true. If so, do not overwrite durationSeconds.
@@ -205,13 +143,12 @@ export async function ingestGroupMembersToDailyStudyLogs(
       }
 
       // 5. Zero-Drop & Rollover Glitch Guard
-      // - If YPT has already rolled over to a future day (member.studyDate > targetLogDateStr)
-      //   during normal challenge days (!lifecycle.isGracePeriod), incoming telemetry belongs to
-      //   tomorrow; preserve today's completed study duration.
+      // - If YPT has already rolled over to a future day (member.studyDate > targetLogDateStr),
+      //   incoming telemetry belongs to tomorrow; preserve today's completed study duration.
       // - If incoming duration is 0 but existing record has durationSeconds > 0, preserve existing duration.
-      const isFutureYptDate =
-         !lifecycle.isGracePeriod &&
-         Boolean(member.studyDate && member.studyDate > targetLogDateStr);
+      const isFutureYptDate = Boolean(
+         member.studyDate && member.studyDate > targetLogDateStr
+      );
       const isZeroDrop = Boolean(
          durationSeconds === 0 && existing && existing.durationSeconds > 0
       );
