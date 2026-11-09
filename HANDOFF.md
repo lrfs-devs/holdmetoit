@@ -2931,6 +2931,29 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - `npm run typecheck:web`: ✅ 0 compiler errors (`tsc --noEmit` exits with 0).
       - `npm run lint:web`: ✅ 0 errors (design-token guard passed).
       - Unit test suites: ✅ 100% green exit across all wrapped tests (17 files, 126 tests) and profile tests.
+- **NEXT STEP (completed in Session 202):** PR #242 submitted to `dev`, Jira issue KAN-93 transitioned to `In Review`. Ready for peer review and merge into `dev`.
+
+### Session 199 — 2026-11-09 (feat(ypt-bot): remove challenge lockdown grace period and lock immediately upon completion — on `afnan-jr`)
+
+- **Context & Objectives:** Remove the post-challenge 6-hour lockdown grace window completely. Challenges now lock immediately upon reaching `endAt` (`now >= endAt`) during ingestion:
+   1. `apps/ypt-bot/src/db/challenge-repository.js`:
+      - Set `CHALLENGE_GRACE_WINDOW_MS = 0`.
+      - Updated `getChallengeLifecycle`: removed `DAY7_GRACE` state; challenges transition directly from `ACTIVE` to `EXPIRED` (`canIngest: false, isGracePeriod: false`) as soon as `now > endAt`.
+      - Updated `lockExpiredChallengesAfterGrace`: cutoff set to `now` (`endAt: { lte: now }`); audit reason and `newValue.title` standardized to `"challenge ended"`.
+      - Updated `getActiveChallenge`: queries active challenges with `endAt: { gte: now }`.
+   2. `apps/ypt-bot/src/ingest/daily-study-log.js`:
+      - Removed legacy Day 7 grace session accumulation branch; unified ingestion to compute daily integer seconds with session and daily clamps during active challenge days.
+      - Updated comments to reflect immediate auto-lock on challenge expiry.
+   3. `apps/ypt-bot/test/db/challenge-repository.test.js`:
+      - Updated lifecycle tests to verify active boundary at `endAt` and immediate `EXPIRED` at `endAt + 1s`.
+      - Updated auto-lock tests: asserts challenge does not lock while active (`now < endAt`), and locks immediately with `auditReason: "challenge ended"` and `newValue.title: "challenge ended"` once `now >= endAt`.
+      - Updated simulation tests and verified idempotency and reconciliation retries.
+   4. `docs/ypt-bot/doc.md`:
+      - Updated lifecycle documentation and audit log specifications in Section 6 and test summary in Section 8.
+- **Quality Gates:**
+   - `apps/ypt-bot` test suite: ✅ 98/98 tests passing across all 33 test suites (`npm test` in `apps/ypt-bot`).
+   - `apps/web` unit tests: ✅ 64/64 challenge-day tests and 23/23 challenge-lifecycle tests green.
+- **NEXT STEP:** Changes verified across YPT bot and web apps. Ready for review and merge.
 - **NEXT STEP:** PR #242 submitted to `dev`, Jira issue KAN-93 transitioned to `In Review`. Ready for peer review and merge into `dev`.
 
 ### Session 201 — 2026-11-05 (feat(identity): platform usernames backend engine, UI unification, and feature flag gating — on `untitled-worktree`)

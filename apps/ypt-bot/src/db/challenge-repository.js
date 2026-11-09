@@ -3,7 +3,7 @@ import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 import { clampDailyStudySeconds } from "../config/limits.js";
 
-export const CHALLENGE_GRACE_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 hours
+export const CHALLENGE_GRACE_WINDOW_MS = 0; // Grace period removed: challenges lock immediately upon ending
 
 /**
  * Computes the lifecycle state of a challenge relative to a given UTC instant.
@@ -11,13 +11,11 @@ export const CHALLENGE_GRACE_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 hours
  * - 'LOCKED': resultsLockedAt is set and has passed (logging prohibited).
  * - 'UPCOMING': now is before challenge startAt (logging prohibited).
  * - 'ACTIVE': now is within [startAt, endAt] and challenge is not locked.
- * - 'DAY7_GRACE': now is within (endAt, endAt + 6h] and challenge is not locked.
- *   Only ongoing sessions started before endAt are permitted; no new sessions.
- * - 'EXPIRED': now is past endAt + 6h (logging prohibited).
+ * - 'EXPIRED': now is past endAt (logging prohibited; auto-lock triggers).
  *
  * @param {object} challenge
  * @param {Date|string|number} [nowUtc=new Date()]
- * @returns {{ state: 'LOCKED'|'UPCOMING'|'ACTIVE'|'DAY7_GRACE'|'EXPIRED', canIngest: boolean, isGracePeriod: boolean, day7End: Date }}
+ * @returns {{ state: 'LOCKED'|'UPCOMING'|'ACTIVE'|'EXPIRED', canIngest: boolean, isGracePeriod: boolean, day7End: Date }}
  */
 export function getChallengeLifecycle(challenge, nowUtc = new Date()) {
    const now = new Date(nowUtc).getTime();
@@ -52,21 +50,13 @@ export function getChallengeLifecycle(challenge, nowUtc = new Date()) {
          day7End,
       };
    }
-   if (now <= end + CHALLENGE_GRACE_WINDOW_MS) {
-      return {
-         state: "DAY7_GRACE",
-         canIngest: true,
-         isGracePeriod: true,
-         day7End,
-      };
-   }
    return { state: "EXPIRED", canIngest: false, isGracePeriod: false, day7End };
 }
 
 /**
- * Automatically locks any challenges whose Day 7 completion + 6-hour grace window
- * has expired and that have not yet been locked. Writes an immutable system AuditLog
- * with actionType: 'CHALLENGE_LOCKED' and auditReason: 'challenge locked after 6 hr grace hours'.
+ * Automatically locks any challenges whose completion timestamp (endAt) has passed
+ * and that have not yet been locked. Writes an immutable system AuditLog
+ * with actionType: 'CHALLENGE_LOCKED' and auditReason: 'challenge ended'.
  *
  * @param {Date|string|number} [nowUtc=new Date()]
  * @param {import('winston').Logger} [log=logger]
@@ -77,7 +67,7 @@ export async function lockExpiredChallengesAfterGrace(
    log = logger
 ) {
    const now = new Date(nowUtc);
-   const cutoff = new Date(now.getTime() - CHALLENGE_GRACE_WINDOW_MS);
+   const cutoff = now;
 
    // Retry previously failed challenge accountability reconciliations
    if (prisma.auditLog?.findMany) {
@@ -162,15 +152,15 @@ export async function lockExpiredChallengesAfterGrace(
                previousValue: { resultsLockedAt: null },
                newValue: {
                   resultsLockedAt: now.toISOString(),
-                  title: "challenge locked after 6 hr grace hours",
+                  title: "challenge ended",
                   autoLocked: true,
                },
-               auditReason: "challenge locked after 6 hr grace hours",
+               auditReason: "challenge ended",
                createdAt: now,
             },
          });
 
-         log.info("Challenge auto-locked after 6-hour grace window expired.", {
+         log.info("Challenge auto-locked: challenge ended.", {
             challengeId: challenge.id,
             challengeTitle: challenge.title,
             resultsLockedAt: now.toISOString(),
@@ -221,7 +211,7 @@ export async function lockExpiredChallengesAfterGrace(
 
 /**
  * Dynamically resolves the active challenge from the database using strict UTC time.
- * Evaluates locking (resultsLockedAt), active window, and the Day 7 6-hour grace window.
+ * Evaluates locking (resultsLockedAt) and the active window (startAt <= now <= endAt).
  *
  * @param {Date} [nowUtc=new Date()]
  * @param {object} [options]
@@ -232,7 +222,7 @@ export async function getActiveChallenge(nowUtc = new Date(), options = {}) {
    const { allowFallback = false } = options;
    const now = new Date(nowUtc);
 
-   // 0. Auto-lock any challenges whose 6-hour grace window has expired
+   // 0. Auto-lock any challenges whose end time has passed
    await lockExpiredChallengesAfterGrace(now, logger);
 
    // 1. Check if an explicit challenge ID was provided in environment
@@ -250,12 +240,11 @@ export async function getActiveChallenge(nowUtc = new Date(), options = {}) {
       );
    }
 
-   // 2. Query candidates that started in the past and whose grace window hasn't expired
-   const cutoff = new Date(now.getTime() - CHALLENGE_GRACE_WINDOW_MS);
+   // 2. Query candidates that started in the past and whose end time hasn't passed
    const candidates = await prisma.challenge.findMany({
       where: {
          startAt: { lte: now },
-         endAt: { gte: cutoff },
+         endAt: { gte: now },
          OR: [{ resultsLockedAt: null }, { resultsLockedAt: { gt: now } }],
       },
       orderBy: { startAt: "desc" },
