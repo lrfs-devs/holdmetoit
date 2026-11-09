@@ -7,6 +7,7 @@ import {
    invalidateAuthToken,
 } from "../../src/ypt/session.js";
 import { prisma } from "../../src/db/client.js";
+import { stubChallengeLock } from "../helpers/stub-challenge-lock.js";
 
 describe("YPT studyDate extraction and aggregation", () => {
    const originalFetch = globalThis.fetch;
@@ -91,14 +92,20 @@ describe("YPT studyDate extraction and aggregation", () => {
 
 describe("Zero-Drop & Rollover Glitch Guards in ingestGroupMembersToDailyStudyLogs", () => {
    let origAuditLogFindMany;
+   let restoreChallengeLock;
 
    beforeEach(() => {
       origAuditLogFindMany = prisma.auditLog.findMany;
       prisma.auditLog.findMany = async () => [];
+      restoreChallengeLock = stubChallengeLock(prisma, {
+         endAt: new Date("2026-10-12T00:00:00.000Z"),
+         resultsLockedAt: null,
+      });
    });
 
    afterEach(() => {
       prisma.auditLog.findMany = origAuditLogFindMany;
+      restoreChallengeLock();
    });
    it("guards against overwriting completed day when YPT member has already rolled over to next date", async () => {
       // Mock prisma dependencies

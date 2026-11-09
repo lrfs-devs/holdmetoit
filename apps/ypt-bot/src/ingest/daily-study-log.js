@@ -215,8 +215,8 @@ export async function ingestGroupMembersToDailyStudyLogs(
       if (existing?.isOverride) {
          skippedOverrides++;
          // Still update live status without touching durationSeconds
-         upsertOperations.push(
-            prisma.dailyStudyLog.update({
+         upsertOperations.push((db) =>
+            db.dailyStudyLog.update({
                where: { id: existing.id },
                data: { status },
             })
@@ -246,8 +246,8 @@ export async function ingestGroupMembersToDailyStudyLogs(
       }
 
       // 6. Upsert DailyStudyLog
-      upsertOperations.push(
-         prisma.dailyStudyLog.upsert({
+      upsertOperations.push((db) =>
+         db.dailyStudyLog.upsert({
             where: {
                participantId_logDate: {
                   participantId: participant.participantId,
@@ -272,8 +272,58 @@ export async function ingestGroupMembersToDailyStudyLogs(
       upsertedCount++;
    }
 
-   // Execute all upserts concurrently
-   await Promise.all(upsertOperations);
+   // Execute all writes in one transaction that holds a shared row lock on the
+   // challenge. lockChallengeResults (web) takes FOR UPDATE on the same row before
+   // it reads logs, and the grace-expiry lock UPDATEs it, so either our writes commit
+   // first and the lock sees them, or the lock commits first and the recheck below
+   // skips. Rechecking the lifecycle without the lock would leave the race open.
+   const writeOutcome = await prisma.$transaction(
+      async (tx) => {
+         const [row] = await tx.$queryRaw`
+            SELECT "endAt", "resultsLockedAt" FROM "Challenge"
+            WHERE "id" = ${challenge.id} FOR SHARE`;
+
+         const lockedSinceRead = Boolean(
+            row?.resultsLockedAt && !challenge.resultsLockedAt
+         );
+         const fresh = getChallengeLifecycle(
+            {
+               ...challenge,
+               endAt: row?.endAt ?? challenge.endAt,
+               resultsLockedAt: row?.resultsLockedAt ?? null,
+            },
+            nowUtc
+         );
+         if (!row || lockedSinceRead || !fresh.canIngest) {
+            return {
+               skipped: true,
+               reason: lockedSinceRead ? "LOCKED" : fresh.state,
+            };
+         }
+
+         await Promise.all(upsertOperations.map((op) => op(tx)));
+         return { skipped: false };
+      },
+      { maxWait: 5000, timeout: 15000 }
+   );
+
+   if (writeOutcome.skipped) {
+      log.info("Ingest skipped: challenge locked or ended during write", {
+         challengeId: challenge.id,
+         challengeTitle: challenge.title,
+         state: writeOutcome.reason,
+      });
+      return {
+         success: true,
+         skipped: true,
+         reason: writeOutcome.reason,
+         challengeId: challenge.id,
+         challengeTitle: challenge.title,
+         matchedCount,
+         unlinkedCount,
+         upsertedCount: 0,
+      };
+   }
 
    const durationMs = Date.now() - startTime;
    log.info("Ingest complete", {

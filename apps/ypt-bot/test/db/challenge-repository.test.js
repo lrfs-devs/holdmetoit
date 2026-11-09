@@ -10,6 +10,7 @@ import {
 import { computeChallengeDayLogDate } from "../../src/ingest/date-buckets.js";
 import { ingestGroupMembersToDailyStudyLogs } from "../../src/ingest/daily-study-log.js";
 import { prisma } from "../../src/db/client.js";
+import { stubChallengeLock } from "../helpers/stub-challenge-lock.js";
 
 describe("getChallengeLifecycle", () => {
    const startAt = new Date("2026-10-05T00:00:00.000Z");
@@ -285,14 +286,22 @@ describe(
 
 describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)", () => {
    let origAuditLogFindMany;
+   let restoreChallengeLock;
+   let lockRow;
 
    beforeEach(() => {
       origAuditLogFindMany = prisma.auditLog.findMany;
       prisma.auditLog.findMany = async () => [];
+      lockRow = {
+         endAt: new Date("2026-10-12T00:00:00.000Z"),
+         resultsLockedAt: null,
+      };
+      restoreChallengeLock = stubChallengeLock(prisma, lockRow);
    });
 
    afterEach(() => {
       prisma.auditLog.findMany = origAuditLogFindMany;
+      restoreChallengeLock();
    });
    const mockChallenge = {
       id: "chal-day7-mock",
@@ -580,6 +589,66 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
       } finally {
          prisma.challenge.findMany = origChallengeFindMany;
          prisma.challenge.findFirst = origChallengeFindFirst;
+         prisma.challenge.updateMany = origChallengeUpdateMany;
+         prisma.challengeParticipant.findMany = origParticipantFindMany;
+         prisma.dailyStudyLog.findMany = origLogFindMany;
+         prisma.dailyStudyLog.upsert = origLogUpsert;
+      }
+   });
+
+   test("skips writes when the challenge is locked between the lifecycle check and the write", async () => {
+      const origChallengeFindMany = prisma.challenge.findMany;
+      const origChallengeUpdateMany = prisma.challenge.updateMany;
+      const origParticipantFindMany = prisma.challengeParticipant.findMany;
+      const origLogFindMany = prisma.dailyStudyLog.findMany;
+      const origLogUpsert = prisma.dailyStudyLog.upsert;
+
+      let upsertCalls = 0;
+
+      // The challenge looks unlocked when first read, but another process commits
+      // the lock before the ingest transaction acquires its shared row lock.
+      lockRow.resultsLockedAt = new Date("2026-10-11T12:00:01.000Z");
+
+      prisma.challenge.findMany = async ({ where } = {}) => {
+         if (where?.endAt?.lte) return [];
+         return [mockChallenge];
+      };
+      prisma.challenge.updateMany = async () => ({ count: 0 });
+      prisma.challengeParticipant.findMany = async () => [mockParticipants[0]];
+      prisma.dailyStudyLog.findMany = async () => [];
+      prisma.dailyStudyLog.upsert = async () => {
+         upsertCalls++;
+      };
+
+      try {
+         const silentLogger = {
+            info: () => {},
+            warn: () => {},
+            error: () => {},
+            child: () => silentLogger,
+         };
+
+         const result = await ingestGroupMembersToDailyStudyLogs(
+            "test-group",
+            [
+               {
+                  userId: "ypt-alice",
+                  isStudying: true,
+                  todayStudyMs: 3600 * 1000,
+                  sessionElapsedMs: 0,
+               },
+            ],
+            new Date("2026-10-11T12:00:00.000Z"),
+            silentLogger
+         );
+
+         assert.strictEqual(result.success, true);
+         assert.strictEqual(result.skipped, true);
+         assert.strictEqual(result.reason, "LOCKED");
+         assert.strictEqual(result.upsertedCount, 0);
+         assert.strictEqual(upsertCalls, 0, "No write may follow the lock");
+      } finally {
+         prisma.challenge.findMany = origChallengeFindMany;
          prisma.challenge.updateMany = origChallengeUpdateMany;
          prisma.challengeParticipant.findMany = origParticipantFindMany;
          prisma.dailyStudyLog.findMany = origLogFindMany;
