@@ -73,13 +73,17 @@ describe("username domain logic (Law L7)", () => {
          const leading = validateUsername("_alice");
          expect(leading.ok).toBe(false);
          if (!leading.ok) {
-            expect(leading.code).toBe("USERNAME_CANNOT_START_OR_END_WITH_UNDERSCORE");
+            expect(leading.code).toBe(
+               "USERNAME_CANNOT_START_OR_END_WITH_UNDERSCORE"
+            );
          }
 
          const trailing = validateUsername("alice_");
          expect(trailing.ok).toBe(false);
          if (!trailing.ok) {
-            expect(trailing.code).toBe("USERNAME_CANNOT_START_OR_END_WITH_UNDERSCORE");
+            expect(trailing.code).toBe(
+               "USERNAME_CANNOT_START_OR_END_WITH_UNDERSCORE"
+            );
          }
       });
 
@@ -111,7 +115,15 @@ describe("username domain logic (Law L7)", () => {
       });
 
       it("rejects reserved keywords case-insensitively", () => {
-         const reserved = ["admin", "ADMIN", "Admin", "api", "dashboard", "team", "support"];
+         const reserved = [
+            "admin",
+            "ADMIN",
+            "Admin",
+            "api",
+            "dashboard",
+            "team",
+            "support",
+         ];
 
          for (const word of reserved) {
             const res = validateUsername(word);
@@ -142,8 +154,12 @@ describe("username domain logic (Law L7)", () => {
       });
 
       it("allows changes if 7 or more days have elapsed", () => {
-         const exactly7DaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-         expect(isUsernameChangeAllowed(exactly7DaysAgo, now).allowed).toBe(true);
+         const exactly7DaysAgo = new Date(
+            now.getTime() - 7 * 24 * 60 * 60 * 1000
+         );
+         expect(isUsernameChangeAllowed(exactly7DaysAgo, now).allowed).toBe(
+            true
+         );
 
          const eightDaysAgo = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
          expect(isUsernameChangeAllowed(eightDaysAgo, now).allowed).toBe(true);
@@ -157,12 +173,16 @@ describe("username domain logic (Law L7)", () => {
          expect(res.allowed).toBe(false);
          expect(res.remainingDays).toBe(5);
          expect(res.cooldownEndsAt?.toISOString()).toBe(
-            new Date(twoDaysAgo.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+            new Date(
+               twoDaysAgo.getTime() + 7 * 24 * 60 * 60 * 1000
+            ).toISOString()
          );
       });
 
       it("reports 1 day remaining when under 24 hours left", () => {
-         const almost7DaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000 - 3600000));
+         const almost7DaysAgo = new Date(
+            now.getTime() - (7 * 24 * 60 * 60 * 1000 - 3600000)
+         );
          const res = isUsernameChangeAllowed(almost7DaysAgo, now);
 
          expect(res.allowed).toBe(false);
@@ -185,14 +205,19 @@ describe("username domain logic (Law L7)", () => {
 
       it("cleans trailing underscores on truncated base before adding suffix", () => {
          const baseWithUnderscoreAtCutoff = "abcdefghijklmnop_rst";
-         const suffixed = generateSuffixedUsername(baseWithUnderscoreAtCutoff, 12);
+         const suffixed = generateSuffixedUsername(
+            baseWithUnderscoreAtCutoff,
+            12
+         );
          expect(suffixed.includes("__")).toBe(false);
       });
    });
 
    describe("sanitizeDiscordUsername", () => {
       it("converts spaces, hyphens and dots to underscores", () => {
-         expect(sanitizeDiscordUsername("Alice.Smith-99")).toBe("Alice_Smith_99");
+         expect(sanitizeDiscordUsername("Alice.Smith-99")).toBe(
+            "Alice_Smith_99"
+         );
       });
 
       it("falls back to scholar if empty or invalid", () => {

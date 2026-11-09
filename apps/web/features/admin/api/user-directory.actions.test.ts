@@ -224,7 +224,7 @@ describe("user-directory.actions", () => {
          expect(revalidatePath).toHaveBeenCalledWith("/@bob_tag");
       });
 
-      it("updates role to ADMIN when newRole is HOST or ADMIN", async () => {
+      it("rejects granting ADMIN: Discord is the source of truth", async () => {
          vi.mocked(requireAdminUser).mockResolvedValue(mockAdmin);
          vi.mocked(prisma.user.findUnique).mockResolvedValue({
             id: "user_3",
@@ -234,33 +234,114 @@ describe("user-directory.actions", () => {
             username: "charlie_tag",
          } as any);
 
-         vi.mocked(prisma.user.update).mockResolvedValue({
-            id: "user_3",
-            role: "ADMIN",
+         for (const newRole of ["HOST", "ADMIN"] as const) {
+            const result = await updateUserRoleAction({
+               targetUserId: "user_3",
+               newRole,
+               reason: "Promoting to host for new challenge",
+            });
+
+            expect(result.ok).toBe(false);
+            if (!result.ok) {
+               expect(result.code).toBe("ROLE_GRANT_FORBIDDEN");
+               expect(result.message).toContain("Discord");
+            }
+         }
+
+         expect(prisma.user.update).not.toHaveBeenCalled();
+         expect(recordAuditEvent).not.toHaveBeenCalled();
+      });
+
+      it("prevents an ADMIN from modifying a DEV user's role", async () => {
+         vi.mocked(requireAdminUser).mockResolvedValue(mockAdmin);
+         vi.mocked(prisma.user.findUnique).mockResolvedValue({
+            id: "dev_1",
+            role: "DEV",
+            displayName: "Dev",
+            name: "Dev",
+            username: "dev_tag",
+         } as any);
+
+         for (const newRole of ["USER", "HOST", "ADMIN"] as const) {
+            const result = await updateUserRoleAction({
+               targetUserId: "dev_1",
+               newRole,
+               reason: "Attempting to touch a developer",
+            });
+
+            expect(result.ok).toBe(false);
+            if (!result.ok) {
+               expect(result.code).toBe("DEV_ROLE_PROTECTED");
+            }
+         }
+
+         expect(prisma.user.update).not.toHaveBeenCalled();
+         expect(recordAuditEvent).not.toHaveBeenCalled();
+      });
+
+      it("prevents a DEV actor from changing another DEV user's role", async () => {
+         vi.mocked(requireAdminUser).mockResolvedValue({
+            ...mockAdmin,
+            id: "dev_actor",
+            role: "DEV",
+         });
+         vi.mocked(prisma.user.findUnique).mockResolvedValue({
+            id: "dev_2",
+            role: "DEV",
          } as any);
 
          const result = await updateUserRoleAction({
-            targetUserId: "user_3",
-            newRole: "HOST",
-            reason: "Promoting to host for new challenge",
+            targetUserId: "dev_2",
+            newRole: "USER",
+            reason: "Demote fellow developer",
+         });
+
+         expect(result.ok).toBe(false);
+         if (!result.ok) {
+            expect(result.code).toBe("DEV_ROLE_PROTECTED");
+         }
+         expect(prisma.user.update).not.toHaveBeenCalled();
+      });
+
+      it("allows an ADMIN to revoke another admin and audits it", async () => {
+         vi.mocked(requireAdminUser).mockResolvedValue(mockAdmin);
+         vi.mocked(prisma.user.findUnique).mockResolvedValue({
+            id: "user_4",
+            role: "ADMIN",
+            displayName: "Dana",
+            name: "Dana",
+            username: "dana_tag",
+         } as any);
+         vi.mocked(prisma.user.update).mockResolvedValue({
+            id: "user_4",
+            role: "PARTICIPANT",
+         } as any);
+
+         const result = await updateUserRoleAction({
+            targetUserId: "user_4",
+            newRole: "USER",
+            reason: "Left the host team",
          });
 
          expect(result.ok).toBe(true);
-         if (result.ok) {
-            expect(result.data.dbRole).toBe("ADMIN");
-         }
-
          expect(prisma.user.update).toHaveBeenCalledWith({
-            where: { id: "user_3" },
-            data: { role: "ADMIN" },
+            where: { id: "user_4" },
+            data: { role: "PARTICIPANT" },
          });
+         expect(recordAuditEvent).toHaveBeenCalledWith(
+            expect.objectContaining({
+               targetEntityId: "user_4",
+               previousValue: { role: "ADMIN" },
+               newValue: { role: "PARTICIPANT", rosterRole: "USER" },
+            })
+         );
       });
 
       it("masks raw database error with sanitized message", async () => {
          vi.mocked(requireAdminUser).mockResolvedValue(mockAdmin);
          vi.mocked(prisma.user.findUnique).mockResolvedValue({
             id: "user_3",
-            role: "PARTICIPANT",
+            role: "ADMIN",
          } as any);
          vi.mocked(prisma.user.update).mockRejectedValueOnce(
             new Error(
@@ -270,8 +351,8 @@ describe("user-directory.actions", () => {
 
          const result = await updateUserRoleAction({
             targetUserId: "user_3",
-            newRole: "ADMIN",
-            reason: "Promote",
+            newRole: "USER",
+            reason: "Revoke",
          });
 
          expect(result.ok).toBe(false);

@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+   cleanup,
+   fireEvent,
+   render,
+   screen,
+   waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { EditUsernameDialog } from "./edit-username-dialog";
@@ -36,7 +42,9 @@ describe("EditUsernameDialog", () => {
       fireEvent.click(trigger);
 
       expect(screen.getByText("Edit Platform Username")).toBeDefined();
-      const input = screen.getByTestId("platform-username-input") as HTMLInputElement;
+      const input = screen.getByTestId(
+         "platform-username-input"
+      ) as HTMLInputElement;
       expect(input.value).toBe("Alice");
    });
 
@@ -54,15 +62,21 @@ describe("EditUsernameDialog", () => {
       fireEvent.click(trigger);
 
       expect(screen.getByTestId("cooldown-notice")).toBeDefined();
-      const input = screen.getByTestId("platform-username-input") as HTMLInputElement;
+      const input = screen.getByTestId(
+         "platform-username-input"
+      ) as HTMLInputElement;
       expect(input.disabled).toBe(true);
 
-      const saveBtn = screen.getByTestId("save-username-btn") as HTMLButtonElement;
+      const saveBtn = screen.getByTestId(
+         "save-username-btn"
+      ) as HTMLButtonElement;
       expect(saveBtn.disabled).toBe(true);
    });
 
    it("checks username availability on change and displays reason when taken", async () => {
-      vi.mocked(usernameActions.checkUsernameAvailabilityAction).mockResolvedValue({
+      vi.mocked(
+         usernameActions.checkUsernameAvailabilityAction
+      ).mockResolvedValue({
          ok: true,
          data: {
             available: false,
@@ -85,14 +99,16 @@ describe("EditUsernameDialog", () => {
       });
 
       await waitFor(() => {
-         expect(screen.getByTestId("username-check-error").textContent).toContain(
-            "This username is already taken."
-         );
+         expect(
+            screen.getByTestId("username-check-error").textContent
+         ).toContain("This username is already taken.");
       });
    });
 
    it("submits updateUsernameAction and triggers onUsernameUpdated callback", async () => {
-      vi.mocked(usernameActions.checkUsernameAvailabilityAction).mockResolvedValue({
+      vi.mocked(
+         usernameActions.checkUsernameAvailabilityAction
+      ).mockResolvedValue({
          ok: true,
          data: {
             available: true,
@@ -124,7 +140,9 @@ describe("EditUsernameDialog", () => {
       fireEvent.change(input, { target: { value: "NewHandle" } });
 
       await waitFor(() => {
-         const saveBtn = screen.getByTestId("save-username-btn") as HTMLButtonElement;
+         const saveBtn = screen.getByTestId(
+            "save-username-btn"
+         ) as HTMLButtonElement;
          expect(saveBtn.disabled).toBe(false);
       });
 

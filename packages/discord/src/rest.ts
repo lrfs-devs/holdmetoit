@@ -7,6 +7,8 @@ import type {
 
 export const DISCORD_API_VERSION = "10";
 export const DISCORD_TOKEN_ENV = "DISCORD_BOT_TOKEN";
+/** Discord JSON error code "Unknown Member" (the user is not in the guild). */
+export const DISCORD_UNKNOWN_MEMBER_CODE = 10007;
 export const MISSING_TOKEN_ERROR =
    "DISCORD_BOT_TOKEN is not configured in environment.";
 
@@ -256,5 +258,41 @@ export async function fetchGuildMember(
       );
    } catch {
       return null;
+   }
+}
+
+export type GuildMemberLookup =
+   | { status: "found"; member: DiscordGuildMember }
+   | { status: "not_found" }
+   | { status: "unavailable" };
+
+/**
+ * Like {@link fetchGuildMember}, but distinguishes "the user is not in the
+ * guild" (HTTP 404 with the Unknown Member code) from "Discord could not be reached or refused the call".
+ * Security-sensitive callers (role revalidation) must not treat an outage as a
+ * missing member, nor a missing member as an outage.
+ */
+export async function lookupGuildMember(
+   input: FetchGuildMemberInput
+): Promise<GuildMemberLookup> {
+   if (!getDiscordToken()) return { status: "unavailable" };
+
+   try {
+      const member = await requestDiscord<DiscordGuildMember>(
+         Routes.guildMember(input.guildId, input.userId) as `/${string}`
+      );
+      return { status: "found", member };
+   } catch (error) {
+      // Only "Unknown Member" means the user left the guild. Other 404s (for
+      // example an unknown guild, code 10004, from a wrong DISCORD_GUILD_ID)
+      // are configuration problems and must not read as "not a member".
+      if (
+         error instanceof DiscordAPIError &&
+         error.status === 404 &&
+         error.code === DISCORD_UNKNOWN_MEMBER_CODE
+      ) {
+         return { status: "not_found" };
+      }
+      return { status: "unavailable" };
    }
 }

@@ -12,6 +12,7 @@ import {
    getUserAuditTrail,
 } from "@/features/audit/data/audit-log.repository";
 import type { AuditEvent } from "@/features/audit/domain/audit-log";
+import { evaluateRoleChange } from "@/features/auth/domain/role-policy";
 import { getAdminUserRoster } from "../data/user-directory.repository";
 import type {
    AdminRosterRole,
@@ -71,8 +72,13 @@ export async function fetchAdminUserRosterAction(
 }
 
 /**
- * Updates a user's global role with self-demotion protection and immutable audit trail.
+ * Revokes a user's platform admin role, with an immutable audit trail.
  * Protected by requireAdminUser.
+ *
+ * Discord is the source of truth for privileged roles (issue #227), so this
+ * editor is revoke-only: it can demote ADMIN to PARTICIPANT, can never grant
+ * ADMIN, and can never touch DEV users (controlled by DEV_DISCORD_IDS).
+ * Self-demotion remains blocked.
  */
 export async function updateUserRoleAction(input: UpdateUserRoleInput): Promise<
    ServerActionResult<{
@@ -129,6 +135,18 @@ export async function updateUserRoleAction(input: UpdateUserRoleInput): Promise<
       // Map domain roster role to DB UserRole enum
       const dbRole: UserRole = newRole === "USER" ? "PARTICIPANT" : "ADMIN";
       const prevDbRole = targetUser.role;
+
+      const decision = evaluateRoleChange({
+         targetRole: prevDbRole,
+         requestedRole: dbRole,
+      });
+      if (!decision.allowed) {
+         return {
+            ok: false,
+            code: decision.code,
+            message: decision.message,
+         };
+      }
 
       // Update role in DB
       const updatedUser = await prisma.user.update({

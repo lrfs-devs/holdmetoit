@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const discord = vi.hoisted(() => ({
    fetchGuildMember: vi.fn(),
+   lookupGuildMember: vi.fn(),
 }));
 
 vi.mock("@holdmetoit/discord", () => ({
    fetchGuildMember: discord.fetchGuildMember,
+   lookupGuildMember: discord.lookupGuildMember,
 }));
 
 import {
+   checkDiscordAdminRole,
    fetchMemberRoles,
    isDiscordAdmin,
    isDiscordDev,
@@ -104,6 +107,51 @@ describe("discord-guild.service", () => {
          process.env.DEV_DISCORD_IDS = '["123456789012345678"]';
          expect(isDiscordDev("random_user_snowflake")).toBe(false);
          expect(isDiscordDev("")).toBe(false);
+      });
+   });
+   describe("checkDiscordAdminRole", () => {
+      beforeEach(() => {
+         process.env.DISCORD_GUILD_ID = "guild_123";
+         process.env.DISCORD_BOT_TOKEN = "bot_secret";
+         process.env.DISCORD_ADMIN_ROLE_IDS = '["admin_role"]';
+      });
+
+      it("returns admin when the member holds a configured admin role", async () => {
+         discord.lookupGuildMember.mockResolvedValue({
+            status: "found",
+            member: { roles: ["other", "admin_role"] },
+         });
+         await expect(checkDiscordAdminRole("u1")).resolves.toBe("admin");
+      });
+
+      it("returns not_admin when the member lacks the admin role", async () => {
+         discord.lookupGuildMember.mockResolvedValue({
+            status: "found",
+            member: { roles: ["other"] },
+         });
+         await expect(checkDiscordAdminRole("u1")).resolves.toBe("not_admin");
+      });
+
+      it("treats a user who left the server (404) as not_admin", async () => {
+         discord.lookupGuildMember.mockResolvedValue({ status: "not_found" });
+         await expect(checkDiscordAdminRole("u1")).resolves.toBe("not_admin");
+      });
+
+      it("reports unavailable for Discord outages instead of not_admin", async () => {
+         discord.lookupGuildMember.mockResolvedValue({ status: "unavailable" });
+         await expect(checkDiscordAdminRole("u1")).resolves.toBe("unavailable");
+      });
+
+      it("reports unavailable when the guild is not configured", async () => {
+         delete process.env.DISCORD_GUILD_ID;
+         await expect(checkDiscordAdminRole("u1")).resolves.toBe("unavailable");
+         expect(discord.lookupGuildMember).not.toHaveBeenCalled();
+      });
+
+      it("returns not_admin without calling Discord when no admin roles are configured", async () => {
+         delete process.env.DISCORD_ADMIN_ROLE_IDS;
+         await expect(checkDiscordAdminRole("u1")).resolves.toBe("not_admin");
+         expect(discord.lookupGuildMember).not.toHaveBeenCalled();
       });
    });
 });

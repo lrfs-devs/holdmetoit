@@ -8,7 +8,8 @@ import { z } from "zod";
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 20;
 export const USERNAME_COOLDOWN_DAYS = 7;
-export const USERNAME_COOLDOWN_MS = USERNAME_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+export const USERNAME_COOLDOWN_MS =
+   USERNAME_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
 
 /**
  * Allowed syntax:
@@ -17,7 +18,8 @@ export const USERNAME_COOLDOWN_MS = USERNAME_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
  * - Cannot start or end with an underscore
  * - No consecutive underscores (__)
  */
-export const USERNAME_REGEX = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|_(?![_]))*[a-zA-Z0-9]$/;
+export const USERNAME_REGEX =
+   /^[a-zA-Z0-9](?:[a-zA-Z0-9]|_(?![_]))*[a-zA-Z0-9]$/;
 
 /**
  * Case-insensitive reserved system keywords, routes, and roles
@@ -219,7 +221,9 @@ export function isUsernameChangeAllowed(
    }
 
    const lastDate =
-      typeof lastChangedAt === "string" ? new Date(lastChangedAt) : lastChangedAt;
+      typeof lastChangedAt === "string"
+         ? new Date(lastChangedAt)
+         : lastChangedAt;
 
    if (Number.isNaN(lastDate.getTime())) {
       return { allowed: true, remainingDays: 0, cooldownEndsAt: null };
@@ -245,7 +249,10 @@ export function isUsernameChangeAllowed(
  * Generates an alternative username candidate by appending a numeric suffix,
  * ensuring the resulting string never exceeds USERNAME_MAX_LENGTH.
  */
-export function generateSuffixedUsername(base: string, attempt: number): string {
+export function generateSuffixedUsername(
+   base: string,
+   attempt: number
+): string {
    const suffix = `_${attempt}`;
    const maxBaseLength = USERNAME_MAX_LENGTH - suffix.length;
 

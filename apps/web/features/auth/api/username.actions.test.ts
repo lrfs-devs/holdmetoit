@@ -124,7 +124,9 @@ describe("username.actions", () => {
          const result = await updateUsernameAction("_LeadingUnderscore");
          expect(result.ok).toBe(false);
          if (!result.ok) {
-            expect(result.code).toBe("USERNAME_CANNOT_START_OR_END_WITH_UNDERSCORE");
+            expect(result.code).toBe(
+               "USERNAME_CANNOT_START_OR_END_WITH_UNDERSCORE"
+            );
          }
       });
 
