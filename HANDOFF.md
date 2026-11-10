@@ -3176,7 +3176,7 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 - **Changes Completed:**
    1. **Feature Flag Architecture & Registration (`packages/database` & `apps/web/features/feature-flags/`):**
       - Registered `mandatoryFeedback: "mandatory_feedback_v1"` in `FEATURE_FLAG_KEYS` (`apps/web/features/feature-flags/domain/feature-flag-keys.ts`).
-      - Added `mandatory_feedback_v1` definition to `SYSTEM_FEATURE_FLAGS` in `packages/database/prisma/seed-feature-flags.ts` with stage `BETA`, default status `DISABLED`, description, and categorization tags.
+      - Added `mandatory_feedback_v1` definition to `SYSTEM_FEATURE_FLAGS` in `packages/database/prisma/seed-feature-flags.ts` with its key, name, and description, seeding new flags with rollout mode `DISABLED`.
       - Documented the flag in `docs/feature-flags/README.md` and `docs/feature-flag/README.md` under Section 6.1 Flag Registry with operational behavior notes.
       - Seeded the flag row as `DISABLED` in both local PostgreSQL (`localhost:5433/holdmetoit3`) and Supabase.
    2. **Server-Side Evaluation & Route Wiring (`apps/web/features/wrapped/api/` & `app/`):**

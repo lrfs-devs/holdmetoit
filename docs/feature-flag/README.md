@@ -279,7 +279,7 @@ Live keys wired into production code, with the surfaces each one gates:
 - Source of truth: `FEATURE_FLAG_KEYS.mandatoryFeedback` in `features/feature-flags/domain/feature-flag-keys.ts` and `MANDATORY_FEEDBACK_FEATURE_FLAG_KEY` in `features/wrapped/api/wrapped-flag.ts`.
 - Evaluated server-side on `/` and `/challenge/:id`, then forwarded to `DashboardWrapped`, `ChallengeView`, and `ChallengeWrappedModal`.
 - When `DISABLED`: feedback is optional — participants can dismiss the modal ("Maybe later", "Cancel", "X", Escape, backdrop click), and reaching Slide 4 permanently dismisses the popup regardless of feedback status.
-- When `GLOBAL` (or `TARGETED` for assigned testers): participants with completed challenges cannot dismiss the dialog until all 5 feedback questions are submitted.
+- When `GLOBAL` (or `TARGETED` for assigned testers): participants with completed challenges cannot dismiss the dialog until feedback is successfully submitted (free-text questions remain optional).
 
 ---
 
