@@ -4,16 +4,14 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { CheckCircle2Icon, Loader2Icon, XIcon } from "lucide-react";
 
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 import {
    consistencyOptions,
-   soloPunishmentOptions,
-   soloStyleOptions,
+   countWords,
    submitChallengeFeedbackSchema,
-   trackingPreferenceOptions,
-   workSchoolHoursOptions,
    type SubmitChallengeFeedbackInput,
 } from "@/features/wrapped/domain/challenge-feedback.schema";
 import { submitChallengeFeedbackAction } from "@/features/wrapped/api/wrapped.actions";
@@ -25,6 +23,7 @@ export interface ChallengeFeedbackDialogProps {
    challengeTitle: string;
    onClose: () => void;
    onSuccess?: () => void;
+   mandatory?: boolean;
 }
 
 /**
@@ -36,6 +35,7 @@ export function ChallengeFeedbackDialog({
    challengeTitle,
    onClose,
    onSuccess,
+   mandatory = false,
 }: ChallengeFeedbackDialogProps) {
    const [isPending, startTransition] = useTransition();
    const [isSubmitted, setIsSubmitted] = useState(false);
@@ -44,11 +44,8 @@ export function ChallengeFeedbackDialog({
    // Form states
    const [consistency, setConsistency] = useState<string>("");
    const [fairnessRating, setFairnessRating] = useState<number>(0);
-   const [trackingPreference, setTrackingPreference] = useState<string>("");
    const [teamBattleFeedback, setTeamBattleFeedback] = useState<string>("");
-   const [workSchoolHours, setWorkSchoolHours] = useState<string>("");
-   const [soloStyle, setSoloStyle] = useState<string>("");
-   const [soloPunishment, setSoloPunishment] = useState<string>("");
+   const [joinReason, setJoinReason] = useState<string>("");
    const [soloIdeas, setSoloIdeas] = useState<string>("");
 
    const handleSubmit = useCallback(
@@ -60,11 +57,8 @@ export function ChallengeFeedbackDialog({
             challengeId,
             consistency,
             fairnessRating,
-            trackingPreference,
             teamBattleFeedback: teamBattleFeedback.trim(),
-            workSchoolHours,
-            soloStyle,
-            soloPunishment,
+            joinReason: joinReason.trim(),
             soloIdeas: soloIdeas.trim(),
          };
 
@@ -100,11 +94,8 @@ export function ChallengeFeedbackDialog({
          challengeId,
          consistency,
          fairnessRating,
-         trackingPreference,
          teamBattleFeedback,
-         workSchoolHours,
-         soloStyle,
-         soloPunishment,
+         joinReason,
          soloIdeas,
          onSuccess,
       ]
@@ -118,10 +109,23 @@ export function ChallengeFeedbackDialog({
       <Dialog
          open={isOpen}
          onOpenChange={(open) => {
-            if (!open) onClose();
+            if (!open && !mandatory) onClose();
          }}
       >
-         <DialogContent className="max-w-panel-md z-[70] flex flex-col rounded-2xl sm:rounded-3xl bg-surface-primary border-border-default text-text-primary">
+         <DialogContent
+            className="max-w-panel-md z-[70] flex flex-col rounded-2xl sm:rounded-3xl bg-surface-primary border-border-default text-text-primary"
+            hideCloseButton={mandatory}
+            onPointerDownOutside={(e) => {
+               if (mandatory) {
+                  e.preventDefault();
+               }
+            }}
+            onEscapeKeyDown={(e) => {
+               if (mandatory) {
+                  e.preventDefault();
+               }
+            }}
+         >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-border-default shrink-0">
                <div>
@@ -259,61 +263,13 @@ export function ChallengeFeedbackDialog({
                         </div>
                      </div>
 
-                     {/* Q3: Tracking Method */}
-                     <div className="flex flex-col gap-2.5">
-                        <Label
-                           id="feedback-tracking"
-                           className="font-sans text-sm font-semibold text-text-primary"
-                        >
-                           3. Which tracking method do you prefer for future
-                           challenges?{" "}
-                           <span className="text-feedback-success">*</span>
-                        </Label>
-                        <div
-                           role="group"
-                           aria-labelledby="feedback-tracking"
-                           className="grid gap-2"
-                        >
-                           {trackingPreferenceOptions.map((option) => {
-                              const selected = trackingPreference === option;
-                              return (
-                                 <button
-                                    type="button"
-                                    key={option}
-                                    onClick={() =>
-                                       setTrackingPreference(option)
-                                    }
-                                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-left text-xs font-medium transition-all cursor-pointer ${
-                                       selected
-                                          ? "bg-feedback-success-bg/30 border-feedback-success text-text-primary"
-                                          : "bg-surface-elevated border-border-default text-text-secondary hover:border-border-strong hover:text-text-primary"
-                                    }`}
-                                 >
-                                    <span
-                                       className={`w-4 h-4 rounded-full border grid place-items-center shrink-0 ${
-                                          selected
-                                             ? "border-feedback-success bg-feedback-success"
-                                             : "border-border-strong bg-transparent"
-                                       }`}
-                                    >
-                                       {selected && (
-                                          <span className="w-1.5 h-1.5 rounded-full bg-surface-page" />
-                                       )}
-                                    </span>
-                                    <span>{option}</span>
-                                 </button>
-                              );
-                           })}
-                        </div>
-                     </div>
-
-                     {/* Q4: Suggestions / Complaints */}
+                     {/* Q3: Suggestions / Complaints */}
                      <div className="flex flex-col gap-2">
                         <Label
                            htmlFor="feedback-team-battle"
                            className="font-sans text-sm font-semibold text-text-primary"
                         >
-                           4. Suggestions to improve Team Battles or any
+                           3. Suggestions to improve Team Battles or any
                            complaints?
                         </Label>
                         <Textarea
@@ -329,151 +285,49 @@ export function ChallengeFeedbackDialog({
                         />
                      </div>
 
-                     {/* Q5: Work / School hours */}
-                     <div className="flex flex-col gap-2.5">
-                        <Label
-                           id="feedback-work-school"
-                           className="font-sans text-sm font-semibold text-text-primary"
-                        >
-                           5. Should we adjust targets to account for work or
-                           school hours?{" "}
-                           <span className="text-feedback-success">*</span>
-                        </Label>
-                        <div
-                           role="group"
-                           aria-labelledby="feedback-work-school"
-                           className="grid gap-2"
-                        >
-                           {workSchoolHoursOptions.map((option) => {
-                              const selected = workSchoolHours === option;
-                              return (
-                                 <button
-                                    type="button"
-                                    key={option}
-                                    onClick={() => setWorkSchoolHours(option)}
-                                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-left text-xs font-medium transition-all cursor-pointer ${
-                                       selected
-                                          ? "bg-feedback-success-bg/40 border-feedback-success text-text-primary"
-                                          : "bg-surface-elevated border-border-default text-text-secondary hover:border-border-strong hover:text-text-primary"
-                                    }`}
-                                 >
-                                    <span
-                                       className={`w-4 h-4 rounded-full border grid place-items-center shrink-0 ${
-                                          selected
-                                             ? "border-feedback-success bg-feedback-success"
-                                             : "border-border-strong bg-transparent"
-                                       }`}
-                                    >
-                                       {selected && (
-                                          <span className="w-1.5 h-1.5 rounded-full bg-surface-page" />
-                                       )}
-                                    </span>
-                                    <span>{option}</span>
-                                 </button>
-                              );
-                           })}
+                     {/* Q4: Why did you join the battle? (One word) */}
+                     <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                           <Label
+                              htmlFor="feedback-join-reason"
+                              className="font-sans text-sm font-semibold text-text-primary"
+                           >
+                              4. Why did you join the battle?
+                           </Label>
+                           <span
+                              className={`font-sans text-meta font-medium transition-colors ${
+                                 countWords(joinReason) > 1
+                                    ? "text-feedback-error font-semibold"
+                                    : countWords(joinReason) === 1
+                                      ? "text-feedback-success"
+                                      : "text-text-tertiary"
+                              }`}
+                           >
+                              {countWords(joinReason) > 1
+                                 ? "1 word only"
+                                 : countWords(joinReason) === 1
+                                   ? "✓ 1 word"
+                                   : "One word only"}
+                           </span>
                         </div>
+                        <Input
+                           id="feedback-join-reason"
+                           type="text"
+                           value={joinReason}
+                           onChange={(e) => setJoinReason(e.target.value)}
+                           placeholder="e.g. Accountability, Discipline, Fun"
+                           maxLength={50}
+                           className="h-10 rounded-xl bg-surface-elevated border-border-default text-xs text-text-primary placeholder:text-text-tertiary/70 focus:border-feedback-success focus:bg-surface-elevated shadow-none"
+                        />
                      </div>
 
-                     {/* Q6: Solo operating style */}
-                     <div className="flex flex-col gap-2.5">
-                        <Label
-                           id="feedback-solo-style"
-                           className="font-sans text-sm font-semibold text-text-primary"
-                        >
-                           6. How would you prefer the Solo Challenge to
-                           operate?{" "}
-                           <span className="text-feedback-success">*</span>
-                        </Label>
-                        <div
-                           role="group"
-                           aria-labelledby="feedback-solo-style"
-                           className="grid gap-2"
-                        >
-                           {soloStyleOptions.map((option) => {
-                              const selected = soloStyle === option;
-                              return (
-                                 <button
-                                    type="button"
-                                    key={option}
-                                    onClick={() => setSoloStyle(option)}
-                                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-left text-xs font-medium transition-all cursor-pointer ${
-                                       selected
-                                          ? "bg-feedback-success-bg/40 border-feedback-success text-text-primary"
-                                          : "bg-surface-elevated border-border-default text-text-secondary hover:border-border-strong hover:text-text-primary"
-                                    }`}
-                                 >
-                                    <span
-                                       className={`w-4 h-4 rounded-full border grid place-items-center shrink-0 ${
-                                          selected
-                                             ? "border-feedback-success bg-feedback-success"
-                                             : "border-border-strong bg-transparent"
-                                       }`}
-                                    >
-                                       {selected && (
-                                          <span className="w-1.5 h-1.5 rounded-full bg-surface-page" />
-                                       )}
-                                    </span>
-                                    <span>{option}</span>
-                                 </button>
-                              );
-                           })}
-                        </div>
-                     </div>
-
-                     {/* Q7: Punishment PFP System */}
-                     <div className="flex flex-col gap-2.5">
-                        <Label
-                           id="feedback-solo-punishment"
-                           className="font-sans text-sm font-semibold text-text-primary"
-                        >
-                           7. Should we keep the punishment PFP system for the
-                           Solo Challenge?{" "}
-                           <span className="text-feedback-success">*</span>
-                        </Label>
-                        <div
-                           role="group"
-                           aria-labelledby="feedback-solo-punishment"
-                           className="grid gap-2"
-                        >
-                           {soloPunishmentOptions.map((option) => {
-                              const selected = soloPunishment === option;
-                              return (
-                                 <button
-                                    type="button"
-                                    key={option}
-                                    onClick={() => setSoloPunishment(option)}
-                                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-left text-xs font-medium transition-all cursor-pointer ${
-                                       selected
-                                          ? "bg-feedback-success-bg/40 border-feedback-success text-text-primary"
-                                          : "bg-surface-elevated border-border-default text-text-secondary hover:border-border-strong hover:text-text-primary"
-                                    }`}
-                                 >
-                                    <span
-                                       className={`w-4 h-4 rounded-full border grid place-items-center shrink-0 ${
-                                          selected
-                                             ? "border-feedback-success bg-feedback-success"
-                                             : "border-border-strong bg-transparent"
-                                       }`}
-                                    >
-                                       {selected && (
-                                          <span className="w-1.5 h-1.5 rounded-full bg-surface-page" />
-                                       )}
-                                    </span>
-                                    <span>{option}</span>
-                                 </button>
-                              );
-                           })}
-                        </div>
-                     </div>
-
-                     {/* Q8: Ideas & Thoughts */}
+                     {/* Q5: Ideas & Thoughts */}
                      <div className="flex flex-col gap-2">
                         <Label
                            htmlFor="feedback-solo-ideas"
                            className="font-sans text-sm font-semibold text-text-primary"
                         >
-                           8. Any other ideas or thoughts for the upcoming Solo
+                           5. Any other ideas or thoughts for the upcoming Solo
                            Challenge?
                         </Label>
                         <Textarea
@@ -490,14 +344,16 @@ export function ChallengeFeedbackDialog({
 
                   {/* Footer actions */}
                   <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-default bg-surface-primary shrink-0 rounded-b-2xl sm:rounded-b-3xl">
-                     <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={isPending}
-                        className="px-4 py-2 rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong font-sans font-medium text-xs transition-colors cursor-pointer"
-                     >
-                        Cancel
-                     </button>
+                     {!mandatory && (
+                        <button
+                           type="button"
+                           onClick={onClose}
+                           disabled={isPending}
+                           className="px-4 py-2 rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong font-sans font-medium text-xs transition-colors cursor-pointer"
+                        >
+                           Cancel
+                        </button>
+                     )}
                      <button
                         type="submit"
                         disabled={isPending}

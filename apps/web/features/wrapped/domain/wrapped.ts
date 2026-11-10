@@ -123,7 +123,9 @@ export function isWrappedWindowExpired(
 
 /**
  * Popup eligibility. localStorage values take precedence over the server
- * flags when present; the story popup is "done" once it has been seen (reached Slide 4).
+ * flags when present; the popup is due while unseen, and when mandatory
+ * feedback is enabled (`isMandatoryFeedback: true`), remains due until
+ * feedback has been submitted.
  * Outside the 3-day window the popup never opens.
  */
 export function isWrappedPopupDue(input: {
@@ -133,6 +135,7 @@ export function isWrappedPopupDue(input: {
    isFeedbackFilled?: boolean;
    localSeen?: boolean | null;
    localFeedback?: boolean | null;
+   isMandatoryFeedback?: boolean;
    now?: Date;
 }): boolean {
    const completionDate =
@@ -143,7 +146,14 @@ export function isWrappedPopupDue(input: {
 
    const seen = input.localSeen ?? input.isWrappedSeen ?? false;
 
-   return !seen;
+   if (!input.isMandatoryFeedback) {
+      return !seen;
+   }
+
+   const feedbackCompleted =
+      input.localFeedback ?? input.isFeedbackFilled ?? false;
+
+   return !seen || !feedbackCompleted;
 }
 
 export type WrappedVerdict = "saved" | "punished" | "excused";

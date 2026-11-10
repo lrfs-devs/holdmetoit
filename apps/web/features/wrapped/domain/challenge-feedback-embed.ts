@@ -14,12 +14,13 @@ export interface BuildChallengeFeedbackEmbedInput {
    challengeId: string;
    consistency: string;
    fairnessRating: number;
-   trackingPreference: string;
    teamBattleFeedback?: string | null;
-   workSchoolHours: string;
-   soloStyle: string;
-   soloPunishment: string;
+   joinReason?: string | null;
    soloIdeas?: string | null;
+   trackingPreference?: string | null;
+   workSchoolHours?: string | null;
+   soloStyle?: string | null;
+   soloPunishment?: string | null;
    reporter: ChallengeFeedbackReporter;
    createdAt?: Date;
    appUrl?: string | null;
@@ -101,23 +102,8 @@ export function buildChallengeFeedbackEmbed(
          inline: true,
       },
       {
-         name: "⏱️ Preferred Tracking",
-         value: input.trackingPreference,
-         inline: true,
-      },
-      {
-         name: "🎒 Count Work/School?",
-         value: input.workSchoolHours,
-         inline: true,
-      },
-      {
-         name: "🏆 Solo Challenge Style",
-         value: input.soloStyle,
-         inline: true,
-      },
-      {
-         name: "🎭 Keep Punishment PFPs?",
-         value: input.soloPunishment,
+         name: "⚔️ Why Did You Join?",
+         value: input.joinReason?.trim() || "—",
          inline: true,
       },
       {

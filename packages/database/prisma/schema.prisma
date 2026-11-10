@@ -396,14 +396,15 @@ model ChallengeFeedback {
   challengeId        String
   userId             String
 
-  // Survey Questions (8 community questions)
+  // Survey Questions (active & historical)
   consistency        String
   fairnessRating     Int
-  trackingPreference String
+  trackingPreference String?  // Deprecated: preserved for historical responses
   teamBattleFeedback String?  @db.Text
-  workSchoolHours    String
-  soloStyle          String
-  soloPunishment     String
+  workSchoolHours    String?  // Deprecated: preserved for historical responses
+  soloStyle          String?  // Deprecated: preserved for historical responses
+  soloPunishment     String?  // Deprecated: preserved for historical responses
+  joinReason         String?  @db.Text
   soloIdeas          String?  @db.Text
 
   // Discord Audit & Timestamps

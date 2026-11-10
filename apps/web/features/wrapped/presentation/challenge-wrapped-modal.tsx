@@ -101,6 +101,7 @@ interface ChallengeWrappedModalProps {
    isOpen?: boolean;
    onClose?: () => void;
    mascotVariantOverride?: WrappedMascotVariant;
+   isMandatoryFeedback?: boolean;
 }
 
 /**
@@ -114,6 +115,7 @@ export function ChallengeWrappedModal({
    isOpen: controlledIsOpen,
    onClose,
    mascotVariantOverride,
+   isMandatoryFeedback = false,
 }: ChallengeWrappedModalProps) {
    const { variant: mascotVariant } = useWrappedMascotPreference(
       mascotVariantOverride
@@ -163,6 +165,19 @@ export function ChallengeWrappedModal({
    const { isEnrolled, isWrappedSeen, isFeedbackFilled } =
       challenge.currentUser;
 
+   const [effectiveFeedback, setEffectiveFeedback] = useState<boolean>(
+      () => readWrappedLocalState(id)?.feedback ?? isFeedbackFilled ?? false
+   );
+   const [effectiveSeen, setEffectiveSeen] = useState<boolean>(
+      () => readWrappedLocalState(id)?.seen ?? isWrappedSeen ?? false
+   );
+
+   useEffect(() => {
+      if (isFeedbackFilled) {
+         setEffectiveFeedback(true);
+      }
+   }, [isFeedbackFilled]);
+
    const showToast = useCallback((message: string) => {
       if (toastTimerRef.current !== null) {
          window.clearTimeout(toastTimerRef.current);
@@ -189,7 +204,7 @@ export function ChallengeWrappedModal({
    }, [controlledIsOpen]);
 
    // Page load: seed localStorage from the server, run the 3-day auto-seen
-   // check, and auto-open the story while it is still due.
+   // check, and auto-open the story or feedback dialog while it is still due.
    useEffect(() => {
       if (controlledIsOpen !== undefined) {
          return;
@@ -218,11 +233,15 @@ export function ChallengeWrappedModal({
          });
       }
 
-      const effectiveSeen = activeLocal?.seen ?? isWrappedSeen;
-      const effectiveFeedback = activeLocal?.feedback ?? isFeedbackFilled;
+      const currentSeen = activeLocal?.seen ?? isWrappedSeen ?? false;
+      const currentFeedback =
+         activeLocal?.feedback ?? isFeedbackFilled ?? false;
+      setEffectiveSeen(currentSeen);
+      setEffectiveFeedback(currentFeedback);
 
-      if (!effectiveSeen && isWrappedWindowExpired(completionDate)) {
+      if (!currentSeen && isWrappedWindowExpired(completionDate)) {
          writeWrappedLocalState(id, { seen: true });
+         setEffectiveSeen(true);
          void markWrappedSeenIfExpiredAction(id);
          return;
       }
@@ -232,18 +251,23 @@ export function ChallengeWrappedModal({
          endAt: challenge.endAt,
          isWrappedSeen,
          isFeedbackFilled,
-         localSeen: effectiveSeen,
-         localFeedback: effectiveFeedback,
+         localSeen: currentSeen,
+         localFeedback: currentFeedback,
+         isMandatoryFeedback,
       });
 
       if (due) {
-         lastFocusRef.current = document.activeElement as HTMLElement | null;
-         revealedRef.current = false;
-         setRevealed(false);
-         setHoverIndex(null);
-         seenReportedRef.current = effectiveSeen;
-         setSlideIndex(0);
-         setIsOpen(true);
+         if (isMandatoryFeedback && currentSeen && !currentFeedback) {
+            setIsFeedbackDialogOpen(true);
+         } else {
+            lastFocusRef.current = document.activeElement as HTMLElement | null;
+            revealedRef.current = false;
+            setRevealed(false);
+            setHoverIndex(null);
+            seenReportedRef.current = currentSeen;
+            setSlideIndex(0);
+            setIsOpen(true);
+         }
       }
    }, [
       id,
@@ -255,6 +279,7 @@ export function ChallengeWrappedModal({
       isFeedbackFilled,
       dismissedThisVisit,
       isOpen,
+      isMandatoryFeedback,
    ]);
 
    // Reaching the feedback slide counts as "seen" (localStorage + server).
@@ -268,6 +293,7 @@ export function ChallengeWrappedModal({
       }
 
       seenReportedRef.current = true;
+      setEffectiveSeen(true);
       writeWrappedLocalState(id, { seen: true });
       void markWrappedSeenAction(id);
    }, [isOpen, slideIndex, id]);
@@ -475,8 +501,10 @@ export function ChallengeWrappedModal({
 
       const onKeyDown = (event: KeyboardEvent) => {
          if (event.key === "Escape") {
-            event.preventDefault();
-            close();
+            if (!isMandatoryFeedback || effectiveFeedback) {
+               event.preventDefault();
+               close();
+            }
             return;
          }
          if (event.key === "ArrowRight") {
@@ -523,7 +551,7 @@ export function ChallengeWrappedModal({
 
       document.addEventListener("keydown", onKeyDown);
       return () => document.removeEventListener("keydown", onKeyDown);
-   }, [isOpen, close, go, slideIndex]);
+   }, [isOpen, close, go, slideIndex, effectiveFeedback, isMandatoryFeedback]);
 
    // Touch swipe between slides.
    const swipeRef = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -597,7 +625,11 @@ export function ChallengeWrappedModal({
       [story]
    );
 
-   if (!story || !isOpen) {
+   if (!story) {
+      return null;
+   }
+
+   if (!isOpen && !isFeedbackDialogOpen) {
       return null;
    }
 
@@ -670,845 +702,887 @@ export function ChallengeWrappedModal({
    const bestTextAnchor = isBestDayOnRight ? "end" : "start";
 
    return (
-      <div
-         className="fixed inset-0 z-[60] grid place-items-center p-4 bg-black/80 backdrop-blur-md"
-         role="dialog"
-         aria-modal="true"
-         aria-label="Your challenge wrapped"
-         onPointerDown={(event) => {
-            if (event.target === event.currentTarget) {
-               close();
-            }
-         }}
-      >
-         <svg
-            width="0"
-            height="0"
-            style={{ position: "absolute" }}
-            aria-hidden="true"
-            focusable="false"
-         >
-            <filter
-               id="wrapped-rough"
-               x="-10%"
-               y="-10%"
-               width="120%"
-               height="120%"
+      <>
+         {isOpen && (
+            <div
+               className="fixed inset-0 z-[60] grid place-items-center p-4 bg-black/80 backdrop-blur-md"
+               role="dialog"
+               aria-modal="true"
+               aria-label="Your challenge wrapped"
+               onPointerDown={(event) => {
+                  if (
+                     (!isMandatoryFeedback || effectiveFeedback) &&
+                     event.target === event.currentTarget
+                  ) {
+                     close();
+                  }
+               }}
             >
-               <feTurbulence
-                  type="fractalNoise"
-                  baseFrequency="0.9"
-                  numOctaves="2"
-                  seed="3"
-                  result="n"
-               />
-               <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" />
-            </filter>
-            <symbol id="wrapped-stopwatch" viewBox="0 0 160 160">
-               <rect
-                  x="60"
-                  y="6"
-                  width="40"
-                  height="13"
-                  rx="4"
-                  fill="var(--color-border-strong)"
-               />
-               <rect
-                  x="73"
-                  y="16"
-                  width="14"
-                  height="16"
-                  fill="var(--color-border-strong)"
-               />
-               <circle
-                  cx="80"
-                  cy="95"
-                  r="58"
-                  fill="var(--color-surface-elevated)"
-                  stroke="var(--color-border-strong)"
-                  strokeWidth="6"
-               />
-               <path
-                  d="M80 95 L80 45 A50 50 0 0 1 123.3 120 Z"
-                  fill="var(--color-feedback-success)"
-                  fillOpacity="0.25"
-                  stroke="var(--color-feedback-success)"
-                  strokeWidth="4"
-                  strokeLinejoin="round"
-               />
-               <path
-                  d="M80 45 V57 M80 133 V145 M30 95 H42 M118 95 H130"
-                  stroke="var(--color-text-tertiary)"
-                  strokeWidth="5"
-                  strokeLinecap="round"
-               />
-               <circle cx="80" cy="95" r="7" fill="var(--color-text-primary)" />
-            </symbol>
-         </svg>
-
-         <div
-            ref={cardRef}
-            className="relative w-full max-w-panel-sm h-[min(calc(100vh-32px),700px)] h-[min(calc(100dvh-32px),700px)] rounded-[30px] overflow-hidden bg-surface-primary border border-border-default text-text-primary shadow-2xl touch-pan-y [&_button:focus-visible]:outline-[2px] [&_button:focus-visible]:outline-feedback-success [&_button:focus-visible]:outline-offset-[2px] md:max-w-panel-lg md:w-full md:aspect-[16/9] md:h-auto md:max-h-[min(520px,calc(100dvh-48px))] md:rounded-[32px]"
-            data-i={slideIndex}
-            onPointerDown={onCardPointerDown}
-            onPointerUp={onCardPointerUp}
-         >
-            <div className="absolute z-10 top-0 inset-x-0 flex items-center gap-3 pt-4 px-4 md:pt-4 md:px-6">
-               <button
-                  type="button"
-                  className="w-[38px] h-[38px] rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer grid place-items-center p-0 shrink-0 transition-colors"
-                  onClick={close}
-                  aria-label="Close wrapped"
+               <svg
+                  width="0"
+                  height="0"
+                  style={{ position: "absolute" }}
+                  aria-hidden="true"
+                  focusable="false"
                >
-                  <svg
-                     viewBox="0 0 16 16"
-                     fill="none"
-                     stroke="currentColor"
-                     strokeWidth="2.4"
-                     strokeLinecap="round"
-                     aria-hidden="true"
-                     className="w-4 h-4"
+                  <filter
+                     id="wrapped-rough"
+                     x="-10%"
+                     y="-10%"
+                     width="120%"
+                     height="120%"
                   >
-                     <path d="M3 3l10 10M13 3L3 13" />
-                  </svg>
-               </button>
-               <div className="flex-1 flex justify-center gap-2">
-                  {Array.from({ length: LAST_SLIDE_INDEX + 1 }, (_, index) => (
-                     <button
-                        key={index}
-                        type="button"
-                        className={`relative h-2 p-0 rounded-full border cursor-pointer transition-all duration-250 before:content-[''] before:absolute before:-inset-y-2.5 before:-inset-x-1 ${
-                           slideIndex === index
-                              ? "w-6 bg-feedback-success border-feedback-success"
-                              : "w-2 bg-surface-nested border-border-strong hover:border-border-strong"
-                        }`}
-                        aria-label={`Go to slide ${index + 1} of ${
-                           LAST_SLIDE_INDEX + 1
-                        }`}
-                        aria-current={slideIndex === index ? "step" : "false"}
-                        onClick={() => go(index)}
+                     <feTurbulence
+                        type="fractalNoise"
+                        baseFrequency="0.9"
+                        numOctaves="2"
+                        seed="3"
+                        result="n"
                      />
-                  ))}
-               </div>
-               <div
-                  className="w-[64px] h-[48px] flex items-center justify-end shrink-0"
-                  data-testid="wrapped-modal-mascot-header"
-               >
-                  <WrappedMascot
-                     variant={mascotVariant}
-                     mood={slideMood}
-                     size="sm"
-                  />
-               </div>
-            </div>
-
-            {/* 1 · intro */}
-            <section
-               ref={(element) => {
-                  slideRefs.current[0] = element;
-               }}
-               className={slideClass(0)}
-               aria-label="Intro"
-            >
-               <div className="flex-1 min-h-0 grid place-items-center md:h-full [&>svg]:w-full [&>svg]:max-w-artwork-sm md:[&>svg]:max-w-artwork-md [&>svg]:max-h-full">
-                  <svg viewBox="0 0 160 160" aria-hidden="true">
-                     <use href="#wrapped-stopwatch" />
-                  </svg>
-               </div>
-               <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
-                  <div className="grid gap-2.5">
-                     <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
-                        {story.periodLabel}
-                     </p>
-                     <h2 className="font-display font-extrabold text-[clamp(30px,8vw,40px)] md:text-display-lg leading-[1.05] tracking-tight text-text-primary m-0 text-balance max-h-[720px]:text-[clamp(26px,7vw,34px)]">
-                        Your challenge wrapped is here!
-                     </h2>
-                  </div>
-                  <div className="flex gap-2.5 mt-auto">
-                     <button
-                        type="button"
-                        className="flex-1 h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 whitespace-nowrap"
-                        data-focus-target
-                        onClick={() => go(1)}
-                     >
-                        <span>Show me</span>
-                        <ArrowRightIcon className="w-4 h-4 shrink-0" />
-                     </button>
-                  </div>
-               </div>
-            </section>
-
-            {/* 2 · time */}
-            <section
-               ref={(element) => {
-                  slideRefs.current[1] = element;
-               }}
-               className={slideClass(1)}
-               aria-label="Time studied"
-            >
-               <div className="flex-1 min-h-0 grid place-items-center md:h-full [&>svg]:w-full [&>svg]:max-w-artwork-sm md:[&>svg]:max-w-artwork-md [&>svg]:max-h-full">
-                  <svg viewBox="0 0 160 160" fill="none" aria-hidden="true">
+                     <feDisplacementMap
+                        in="SourceGraphic"
+                        in2="n"
+                        scale="2.4"
+                     />
+                  </filter>
+                  <symbol id="wrapped-stopwatch" viewBox="0 0 160 160">
                      <rect
-                        x="14"
-                        y="108"
-                        width="132"
-                        height="30"
-                        rx="6"
-                        fill="var(--color-surface-elevated)"
-                        stroke="var(--color-border-strong)"
-                        strokeWidth="4"
-                     />
-                     <path
-                        d="M36 108v30M124 108v30"
-                        stroke="var(--color-border-default)"
-                        strokeWidth="4"
+                        x="60"
+                        y="6"
+                        width="40"
+                        height="13"
+                        rx="4"
+                        fill="var(--color-border-strong)"
                      />
                      <rect
-                        x="30"
-                        y="76"
-                        width="104"
-                        height="30"
-                        rx="6"
-                        fill="var(--color-feedback-info)"
-                        fillOpacity="0.2"
-                        stroke="var(--color-feedback-info)"
-                        strokeWidth="4"
+                        x="73"
+                        y="16"
+                        width="14"
+                        height="16"
+                        fill="var(--color-border-strong)"
                      />
-                     <path
-                        d="M52 76v30"
-                        stroke="var(--color-feedback-info)"
-                        strokeWidth="4"
-                     />
-                     <rect
-                        x="22"
-                        y="44"
-                        width="116"
-                        height="30"
-                        rx="6"
-                        fill="var(--color-feedback-success)"
-                        fillOpacity="0.2"
-                        stroke="var(--color-feedback-success)"
-                        strokeWidth="4"
-                     />
-                     <path
-                        d="M120 44v30"
-                        stroke="var(--color-feedback-success)"
-                        strokeWidth="4"
-                     />
-                     <path
-                        d="M54 22c10-8 20 8 30 0s20 8 30 0"
-                        stroke="var(--color-text-tertiary)"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                     />
-                  </svg>
-               </div>
-               <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
-                  <div className="grid gap-2.5">
-                     <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
-                        Time studied
-                     </p>
-                     <p className="font-display font-extrabold text-[clamp(64px,19vw,92px)] md:text-display-2xl leading-[0.88] tracking-tight text-text-primary m-0 font-sans font-sans-tabular flex items-baseline max-h-[640px]:text-display-xl">
-                        <span>{displayedMinutes.toLocaleString("en-US")}</span>
-                        <small className="text-[0.3em] font-medium tracking-normal text-text-tertiary ml-[0.15em]">
-                           mins
-                        </small>
-                     </p>
-                     <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-primary m-0 text-pretty">
-                        Over this challenge, you studied for{" "}
-                        <span className="font-bold text-feedback-success">
-                           {story.time.totalHuman}
-                        </span>
-                        . That&apos;s a lot of showing up.
-                     </p>
-                  </div>
-                  <div className="flex gap-2.5 mt-auto">
-                     <button
-                        type="button"
-                        className="flex-none w-control-md h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer inline-flex items-center justify-center transition-colors"
-                        aria-label="Previous"
-                        onClick={() => go(slideIndex - 1)}
-                     >
-                        <ArrowLeftIcon className="w-4 h-4 shrink-0" />
-                     </button>
-                     <button
-                        type="button"
-                        className="flex-1 h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 whitespace-nowrap"
-                        data-focus-target
-                        onClick={() => go(slideIndex + 1)}
-                     >
-                        <span>Next</span>
-                        <ArrowRightIcon className="w-4 h-4 shrink-0" />
-                     </button>
-                  </div>
-               </div>
-            </section>
-
-            {/* 3 · chart */}
-            <section
-               ref={(element) => {
-                  slideRefs.current[2] = element;
-               }}
-               className={slideClass(2)}
-               aria-label="Your study days"
-            >
-               <div className="flex-1 min-h-0 grid place-items-center md:h-full [&>div]:w-full">
-                  <div style={{ width: "100%" }}>
-                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-2.5 font-sans font-medium text-xs">
-                        <ul className="flex gap-4 list-none m-0 p-0">
-                           <li className="inline-flex items-center gap-1.5 text-text-primary">
-                              <i
-                                 className="inline-block w-[18px] h-0 border-t-[3px] border-feedback-success rounded-xs"
-                                 aria-hidden="true"
-                              />
-                              You
-                           </li>
-                           <li className="inline-flex items-center gap-1.5 text-text-tertiary">
-                              <i
-                                 className="inline-block w-[18px] h-0 border-t-2 border-border-strong rounded-xs"
-                                 aria-hidden="true"
-                              />
-                              Average person
-                           </li>
-                        </ul>
-                        <span className="font-sans text-meta uppercase tracking-wider text-text-tertiary font-medium">
-                           hours per day
-                        </span>
-                     </div>
-                     <div className="relative w-full" data-no-swipe>
-                        <svg
-                           ref={svgRef}
-                           viewBox={`0 0 ${chart.width} ${chart.height}`}
-                           role="img"
-                           className="w-full h-auto block overflow-visible"
-                           aria-label={`Line chart of hours studied on each challenge day. You studied ${story.time.totalHuman} in total.`}
-                        >
-                           {Array.from(
-                              { length: Math.max(0, chart.yMax - 1) },
-                              (_, index) => {
-                                 const value = index + 1;
-                                 const y =
-                                    chart.base -
-                                    (value / chart.yMax) *
-                                       (chart.base - chart.top);
-                                 return (
-                                    <g key={value}>
-                                       <line
-                                          className="stroke-border-default stroke-[1]"
-                                          x1={chart.x0}
-                                          x2={chart.x1}
-                                          y1={y}
-                                          y2={y}
-                                       />
-                                       <text
-                                          className="font-sans text-label fill-text-tertiary font-medium"
-                                          x={chart.x0 - 6}
-                                          y={y + 3}
-                                          textAnchor="end"
-                                       >
-                                          {value}h
-                                       </text>
-                                    </g>
-                                 );
-                              }
-                           )}
-                           <line
-                              className="stroke-border-strong stroke-[1]"
-                              x1={chart.x0}
-                              x2={chart.x1}
-                              y1={chart.base}
-                              y2={chart.base}
-                           />
-                           <text
-                              className="font-sans text-label fill-text-tertiary font-medium"
-                              x={chart.x0 - 6}
-                              y={chart.base + 3}
-                              textAnchor="end"
-                           >
-                              0
-                           </text>
-                           {chart.ticks.map((dayIndex) => (
-                              <text
-                                 key={dayIndex}
-                                 className="font-sans text-label fill-text-tertiary font-medium"
-                                 x={chart.x[dayIndex]}
-                                 y={chart.base + 17}
-                                 textAnchor="middle"
-                              >
-                                 {dayIndex === 0
-                                    ? chart.days[dayIndex]?.label
-                                    : chart.days[dayIndex]?.dayNumber}
-                              </text>
-                           ))}
-                           <path
-                              className={`fill-feedback-success fill-opacity-10 stroke-none ${slideIndex === 2 ? "animate-wrapped-fadein" : ""}`}
-                              d={chart.areaPath}
-                           />
-                           <path
-                              className={`fill-none stroke-text-tertiary stroke-linecap-round stroke-linejoin-round stroke-[2] ${slideIndex === 2 ? "animate-wrapped-draw" : ""}`}
-                              pathLength={1}
-                              d={chart.avgPath}
-                           />
-                           <path
-                              className={`fill-none stroke-feedback-success stroke-linecap-round stroke-linejoin-round stroke-[3] ${slideIndex === 2 ? "animate-wrapped-draw" : ""}`}
-                              pathLength={1}
-                              d={chart.youPath}
-                           />
-                           {chart.bestIndex >= 0 && (
-                              <g
-                                 className={
-                                    slideIndex === 2
-                                       ? "animate-wrapped-fadein"
-                                       : ""
-                                 }
-                              >
-                                 <circle
-                                    className="stroke-border-subtle stroke-2 fill-feedback-success"
-                                    cx={chart.x[chart.bestIndex]}
-                                    cy={chart.yYou[chart.bestIndex]}
-                                    r={4}
-                                 />
-                                 <text
-                                    className="font-sans text-label fill-feedback-success font-semibold"
-                                    x={bestTextX}
-                                    y={chart.yYou[chart.bestIndex] + 3}
-                                    textAnchor={bestTextAnchor}
-                                 >
-                                    Best day · {chart.bestLabel} ·{" "}
-                                    {chart.bestHuman}
-                                 </text>
-                              </g>
-                           )}
-                           {hoverIndex !== null && (
-                              <line
-                                 className="stroke-border-strong stroke-[1] stroke-dasharray-[2_2]"
-                                 x1={chart.x[hoverIndex]}
-                                 x2={chart.x[hoverIndex]}
-                                 y1={chart.top}
-                                 y2={chart.base}
-                              />
-                           )}
-                           {hoverIndex !== null && (
-                              <>
-                                 <circle
-                                    className="stroke-border-subtle stroke-2 fill-feedback-success"
-                                    cx={chart.x[hoverIndex]}
-                                    cy={chart.yYou[hoverIndex]}
-                                    r={4}
-                                 />
-                                 <circle
-                                    className="stroke-border-subtle stroke-2 fill-text-tertiary"
-                                    cx={chart.x[hoverIndex]}
-                                    cy={chart.yAvg[hoverIndex]}
-                                    r={4}
-                                 />
-                              </>
-                           )}
-                           <rect
-                              className="touch-pan-y cursor-crosshair"
-                              x={chart.x0 - 8}
-                              y={0}
-                              width={chart.x1 - chart.x0 + 16}
-                              height={chart.base + 4}
-                              fill="transparent"
-                              onPointerMove={handleChartPointer}
-                              onPointerDown={handleChartPointer}
-                              onPointerLeave={() => setHoverIndex(null)}
-                              onPointerCancel={() => setHoverIndex(null)}
-                           />
-                        </svg>
-                        {hoverDay && (
-                           <div
-                              className={`absolute z-10 pointer-events-none -translate-y-full whitespace-nowrap bg-surface-elevated border border-border-default text-text-primary shadow-xl rounded-xl py-2 px-3 font-sans text-xs leading-snug font-medium ${
-                                 chart.days.length > 1 && hoverDay.index === 0
-                                    ? "translate-x-0"
-                                    : chart.days.length > 1 &&
-                                        hoverDay.index === chart.days.length - 1
-                                      ? "-translate-x-full"
-                                      : "-translate-x-1/2"
-                              }`}
-                              style={{
-                                 left: `${
-                                    (chart.x[hoverDay.index] / chart.width) *
-                                    100
-                                 }%`,
-                                 top: "-6px",
-                              }}
-                           >
-                              <div className="font-sans text-label tracking-wider uppercase text-text-tertiary font-semibold mb-1">
-                                 {hoverDay.label}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                 <i className="inline-block w-3 border-t-[3px] border-feedback-success rounded-xs" />
-                                 <b className="text-text-primary">
-                                    {formatMinutes(hoverDay.minutesYou) ||
-                                       "No study"}
-                                 </b>
-                                 <span className="text-text-tertiary">You</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                 <i className="inline-block w-3 border-t-2 border-border-strong rounded-xs" />
-                                 <b className="text-text-tertiary">
-                                    {formatMinutes(hoverDay.minutesAvg) ||
-                                       "No study"}
-                                 </b>
-                                 <span className="text-text-tertiary">
-                                    Average person
-                                 </span>
-                              </div>
-                           </div>
-                        )}
-                        <table className="sr-only">
-                           <caption>Time studied on each challenge day</caption>
-                           <thead>
-                              <tr>
-                                 <th>Day</th>
-                                 <th>You</th>
-                                 <th>Average person</th>
-                              </tr>
-                           </thead>
-                           <tbody>
-                              {chart.days.map((day) => (
-                                 <tr key={day.index}>
-                                    <td>{day.label}</td>
-                                    <td>
-                                       {formatMinutes(day.minutesYou) ||
-                                          "No study"}
-                                    </td>
-                                    <td>
-                                       {formatMinutes(day.minutesAvg) ||
-                                          "No study"}
-                                    </td>
-                                 </tr>
-                              ))}
-                           </tbody>
-                        </table>
-                     </div>
-                  </div>
-               </div>
-               <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
-                  <div className="grid gap-2.5">
-                     <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
-                        You vs the average person
-                     </p>
-                     {story.chartCopy.timesVsAverage !== null ? (
-                        <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-primary m-0 text-pretty">
-                           You studied{" "}
-                           <span className="font-bold text-feedback-success">
-                              {story.chartCopy.timesVsAverage}× as much
-                           </span>{" "}
-                           as the average person. Seriously good work,{" "}
-                           {wrapped?.viewer?.displayName ?? "friend"}.
-                        </p>
-                     ) : (
-                        <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-tertiary m-0 text-pretty">
-                           The average-person comparison unlocks once more study
-                           time is logged.
-                        </p>
-                     )}
-                     <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-primary m-0 text-pretty">
-                        {chart.bestIndex >= 0 ? (
-                           <>
-                              Your best day was{" "}
-                              <span className="font-bold text-feedback-success">
-                                 {chart.bestLabel}
-                              </span>
-                              , and you carried{" "}
-                              <span className="font-bold text-feedback-success">
-                                 {story.chartCopy.contributionPercent}%
-                              </span>{" "}
-                              of {story.chartCopy.teamName}&apos;s growth.
-                           </>
-                        ) : (
-                           "No study days were logged this time — the next challenge is a fresh start."
-                        )}
-                     </p>
-                     <div
-                        className="h-2.5 rounded-full bg-surface-elevated border border-border-default overflow-hidden mt-1"
-                        aria-hidden="true"
-                     >
-                        <i
-                           className="block h-full bg-feedback-success rounded-full transition-[width] duration-900 delay-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
-                           style={{
-                              width:
-                                 slideIndex === 2
-                                    ? `${story.chartCopy.contributionPercent}%`
-                                    : "0%",
-                           }}
-                        />
-                     </div>
-                  </div>
-                  <div className="flex gap-2.5 mt-auto">
-                     <button
-                        type="button"
-                        className="flex-none w-control-md h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer inline-flex items-center justify-center transition-colors"
-                        aria-label="Previous"
-                        onClick={() => go(slideIndex - 1)}
-                     >
-                        <ArrowLeftIcon className="w-4 h-4 shrink-0" />
-                     </button>
-                     <button
-                        type="button"
-                        className="flex-1 h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 whitespace-nowrap"
-                        data-focus-target
-                        onClick={() => go(slideIndex + 1)}
-                     >
-                        <span>Next</span>
-                        <ArrowRightIcon className="w-4 h-4 shrink-0" />
-                     </button>
-                  </div>
-               </div>
-            </section>
-
-            {/* 4 · verdict */}
-            <section
-               ref={(element) => {
-                  slideRefs.current[3] = element;
-               }}
-               className={slideClass(3)}
-               aria-label="Saved or punished"
-            >
-               <div
-                  className="flex-1 min-h-0 grid place-items-center gap-3.5 content-center md:h-full"
-                  data-no-swipe
-               >
-                  <button
-                     ref={holdRef}
-                     type="button"
-                     className={`relative w-full max-w-[210px] md:max-w-artwork-md aspect-square rounded-[32px] border-2 border-dashed border-border-strong bg-surface-elevated/50 text-text-primary cursor-pointer p-0 grid place-items-center select-none touch-none transition-colors hover:border-border-strong ${
-                        revealed
-                           ? "border-solid !border-transparent bg-transparent animate-wrapped-hit"
-                           : ""
-                     }`}
-                     aria-label="Press and hold to reveal your result"
-                     onPointerDown={(event) => {
-                        if (event.button > 0) {
-                           return;
-                        }
-                        try {
-                           event.currentTarget.setPointerCapture(
-                              event.pointerId
-                           );
-                        } catch {
-                           // Pointer capture is best-effort.
-                        }
-                        startHold();
-                     }}
-                     onPointerUp={endHold}
-                     onPointerCancel={endHold}
-                     onLostPointerCapture={endHold}
-                     onContextMenu={(event) => event.preventDefault()}
-                     onKeyDown={(event) => {
-                        if (
-                           (event.key === " " || event.key === "Enter") &&
-                           !event.repeat
-                        ) {
-                           event.preventDefault();
-                           startHold();
-                        }
-                     }}
-                     onKeyUp={(event) => {
-                        if (event.key === " " || event.key === "Enter") {
-                           event.preventDefault();
-                           endHold();
-                        }
-                     }}
-                     onBlur={endHold}
-                  >
-                     <svg
-                        className={`absolute inset-3 w-[calc(100%-24px)] h-[calc(100%-24px)] -rotate-90 ${
-                           revealed
-                              ? "opacity-0 transition-opacity duration-200"
-                              : ""
-                        }`}
-                        viewBox="0 0 200 200"
-                        aria-hidden="true"
-                     >
-                        <circle
-                           className="fill-none stroke-border-default stroke-[8]"
-                           cx="100"
-                           cy="100"
-                           r="88"
-                        />
-                        <circle
-                           ref={ringRef}
-                           className="fill-none stroke-[8] stroke-linecap-round"
-                           stroke={verdictToneColors.ring}
-                           style={{
-                              strokeDasharray: RING_CIRCUMFERENCE,
-                              strokeDashoffset: RING_CIRCUMFERENCE,
-                           }}
-                           cx="100"
-                           cy="100"
-                           r="88"
-                        />
-                     </svg>
-                     <span
-                        className={`relative grid gap-1.5 justify-items-center text-center font-sans text-xs leading-tight tracking-wider uppercase font-semibold text-text-tertiary ${
-                           revealed
-                              ? "opacity-0 transition-opacity duration-200"
-                              : ""
-                        }`}
-                        aria-hidden="true"
-                     >
-                        <svg
-                           viewBox="0 0 48 48"
-                           fill="none"
-                           stroke="currentColor"
-                           strokeWidth="3"
-                           strokeLinecap="round"
-                           strokeLinejoin="round"
-                           className="w-10 h-10 md:w-11 md:h-11 text-text-tertiary"
-                        >
-                           <path d="M17 26V12a3 3 0 0 1 6 0v10M23 20v-3a3 3 0 0 1 6 0v5M29 22a3 3 0 0 1 6 0v8c0 7-5 12-12 12-5 0-8-2-11-6l-5-8a3 3 0 0 1 5-3l3 4" />
-                        </svg>
-                        <span ref={holdTextRef}>Hold to reveal</span>
-                     </span>
-                     <span
-                        className="absolute inset-0 grid place-items-center pointer-events-none"
-                        aria-hidden="true"
-                     >
-                        <span
-                           className={`block font-display font-black text-[clamp(26px,7.5vw,34px)] md:text-display-sm leading-none tracking-wider uppercase py-2 px-3.5 border-[5px] rounded-xl -rotate-6 shadow-xl backdrop-blur-xs opacity-0 filter-[url(#wrapped-rough)] ${verdictToneColors.stampBorder} ${verdictToneColors.stampText} ${verdictToneColors.stampBg} ${revealed ? "animate-wrapped-slam opacity-100" : ""}`}
-                        >
-                           {revealed ? verdict.stamp : ""}
-                        </span>
-                     </span>
-                  </button>
-               </div>
-               <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
-                  <div className="grid gap-2" aria-live="polite">
-                     <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
-                        The verdict
-                     </p>
-                     <h2 className="font-display font-extrabold text-[clamp(28px,8vw,38px)] md:text-display-md leading-[1.05] tracking-tight text-text-primary m-0 text-balance">
-                        {revealed
-                           ? verdict.headline
-                           : "Did you hit the target?"}
-                     </h2>
-                     <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-primary m-0 text-pretty">
-                        {revealed ? (
-                           <>
-                              <span
-                                 className={`font-bold ${verdictToneColors.highlight}`}
-                              >
-                                 {verdict.totalHuman}
-                              </span>{" "}
-                              against a {verdict.targetHuman} target.
-                           </>
-                        ) : (
-                           "Press and hold the card until the ring closes."
-                        )}
-                     </p>
-                     <p className="font-sans text-sm text-text-tertiary m-0 text-pretty font-medium empty:hidden">
-                        {revealed ? verdict.note : ""}
-                     </p>
-                     {!revealed && (
-                        <button
-                           type="button"
-                           className="self-start bg-transparent border-0 py-1 px-0 cursor-pointer font-sans text-xs text-text-tertiary underline underline-offset-[3px] hover:text-text-primary transition-colors"
-                           onClick={reveal}
-                        >
-                           Can&apos;t hold? Tap to reveal
-                        </button>
-                     )}
-                  </div>
-                  <div className="flex gap-2.5 mt-auto">
-                     <button
-                        type="button"
-                        className="flex-none w-control-md h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer inline-flex items-center justify-center transition-colors"
-                        aria-label="Previous"
-                        onClick={() => go(slideIndex - 1)}
-                     >
-                        <ArrowLeftIcon className="w-4 h-4 shrink-0" />
-                     </button>
-                     <button
-                        type="button"
-                        className="flex-1 h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 disabled:opacity-30 disabled:pointer-events-none whitespace-nowrap"
-                        data-verdict-next
-                        disabled={!revealed}
-                        onClick={() => go(slideIndex + 1)}
-                     >
-                        <span>Next</span>
-                        <ArrowRightIcon className="w-4 h-4 shrink-0" />
-                     </button>
-                  </div>
-               </div>
-            </section>
-
-            {/* 5 · feedback */}
-            <section
-               ref={(element) => {
-                  slideRefs.current[4] = element;
-               }}
-               className={slideClass(4)}
-               aria-label="Feedback"
-            >
-               <div className="flex-1 min-h-0 grid place-items-center md:h-full [&>svg]:w-full [&>svg]:max-w-artwork-sm md:[&>svg]:max-w-artwork-md [&>svg]:max-h-full">
-                  <svg viewBox="0 0 160 160" fill="none" aria-hidden="true">
                      <circle
-                        cx="116"
-                        cy="40"
-                        r="26"
-                        fill="var(--color-feedback-info)"
-                        fillOpacity="0.25"
-                     />
-                     <path
-                        d="M26 30h108a10 10 0 0 1 10 10v62a10 10 0 0 1-10 10H78l-28 24v-24H26a10 10 0 0 1-10-10V40a10 10 0 0 1 10-10Z"
+                        cx="80"
+                        cy="95"
+                        r="58"
                         fill="var(--color-surface-elevated)"
                         stroke="var(--color-border-strong)"
+                        strokeWidth="6"
+                     />
+                     <path
+                        d="M80 95 L80 45 A50 50 0 0 1 123.3 120 Z"
+                        fill="var(--color-feedback-success)"
+                        fillOpacity="0.25"
+                        stroke="var(--color-feedback-success)"
                         strokeWidth="4"
                         strokeLinejoin="round"
                      />
                      <path
-                        d="M40 58h80M40 74h60M40 90h42"
+                        d="M80 45 V57 M80 133 V145 M30 95 H42 M118 95 H130"
                         stroke="var(--color-text-tertiary)"
-                        strokeWidth="4"
+                        strokeWidth="5"
                         strokeLinecap="round"
                      />
-                  </svg>
-               </div>
-               <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
-                  <div className="grid gap-2.5">
-                     <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
-                        Anonymous · 2 minutes
-                     </p>
-                     <h2 className="font-display font-extrabold text-[clamp(30px,8vw,40px)] md:text-display-lg leading-[1.05] tracking-tight text-text-primary m-0 text-balance">
-                        How was this challenge?
-                     </h2>
-                     <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-tertiary m-0 text-pretty">
-                        Tell us what worked and what didn&apos;t. Your answers
-                        aren&apos;t tied to your name.
-                     </p>
+                     <circle
+                        cx="80"
+                        cy="95"
+                        r="7"
+                        fill="var(--color-text-primary)"
+                     />
+                  </symbol>
+               </svg>
+
+               <div
+                  ref={cardRef}
+                  className="relative w-full max-w-panel-sm h-[min(calc(100vh-32px),700px)] h-[min(calc(100dvh-32px),700px)] rounded-[30px] overflow-hidden bg-surface-primary border border-border-default text-text-primary shadow-2xl touch-pan-y [&_button:focus-visible]:outline-[2px] [&_button:focus-visible]:outline-feedback-success [&_button:focus-visible]:outline-offset-[2px] md:max-w-panel-lg md:w-full md:aspect-[16/9] md:h-auto md:max-h-[min(520px,calc(100dvh-48px))] md:rounded-[32px]"
+                  data-i={slideIndex}
+                  onPointerDown={onCardPointerDown}
+                  onPointerUp={onCardPointerUp}
+               >
+                  <div className="absolute z-10 top-0 inset-x-0 flex items-center gap-3 pt-4 px-4 md:pt-4 md:px-6">
+                     {(!isMandatoryFeedback || effectiveFeedback) && (
+                        <button
+                           type="button"
+                           className="w-[38px] h-[38px] rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer grid place-items-center p-0 shrink-0 transition-colors"
+                           onClick={close}
+                           aria-label="Close wrapped"
+                        >
+                           <svg
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.4"
+                              strokeLinecap="round"
+                              aria-hidden="true"
+                              className="w-4 h-4"
+                           >
+                              <path d="M3 3l10 10M13 3L3 13" />
+                           </svg>
+                        </button>
+                     )}
+                     <div className="flex-1 flex justify-center gap-2">
+                        {Array.from(
+                           { length: LAST_SLIDE_INDEX + 1 },
+                           (_, index) => (
+                              <button
+                                 key={index}
+                                 type="button"
+                                 className={`relative h-2 p-0 rounded-full border cursor-pointer transition-all duration-250 before:content-[''] before:absolute before:-inset-y-2.5 before:-inset-x-1 ${
+                                    slideIndex === index
+                                       ? "w-6 bg-feedback-success border-feedback-success"
+                                       : "w-2 bg-surface-nested border-border-strong hover:border-border-strong"
+                                 }`}
+                                 aria-label={`Go to slide ${index + 1} of ${
+                                    LAST_SLIDE_INDEX + 1
+                                 }`}
+                                 aria-current={
+                                    slideIndex === index ? "step" : "false"
+                                 }
+                                 onClick={() => go(index)}
+                              />
+                           )
+                        )}
+                     </div>
+                     <div
+                        className="w-[64px] h-[48px] flex items-center justify-end shrink-0"
+                        data-testid="wrapped-modal-mascot-header"
+                     >
+                        <WrappedMascot
+                           variant={mascotVariant}
+                           mood={slideMood}
+                           size="sm"
+                        />
+                     </div>
                   </div>
-                  <div className="flex gap-2.5 mt-auto">
-                     <button
-                        type="button"
-                        className="flex-none w-control-md h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer inline-flex items-center justify-center transition-colors"
-                        aria-label="Previous"
-                        onClick={() => go(slideIndex - 1)}
+
+                  {/* 1 · intro */}
+                  <section
+                     ref={(element) => {
+                        slideRefs.current[0] = element;
+                     }}
+                     className={slideClass(0)}
+                     aria-label="Intro"
+                  >
+                     <div className="flex-1 min-h-0 grid place-items-center md:h-full [&>svg]:w-full [&>svg]:max-w-artwork-sm md:[&>svg]:max-w-artwork-md [&>svg]:max-h-full">
+                        <svg viewBox="0 0 160 160" aria-hidden="true">
+                           <use href="#wrapped-stopwatch" />
+                        </svg>
+                     </div>
+                     <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
+                        <div className="grid gap-2.5">
+                           <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
+                              {story.periodLabel}
+                           </p>
+                           <h2 className="font-display font-extrabold text-[clamp(30px,8vw,40px)] md:text-display-lg leading-[1.05] tracking-tight text-text-primary m-0 text-balance max-h-[720px]:text-[clamp(26px,7vw,34px)]">
+                              Your challenge wrapped is here!
+                           </h2>
+                        </div>
+                        <div className="flex gap-2.5 mt-auto">
+                           <button
+                              type="button"
+                              className="flex-1 h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 whitespace-nowrap"
+                              data-focus-target
+                              onClick={() => go(1)}
+                           >
+                              <span>Show me</span>
+                              <ArrowRightIcon className="w-4 h-4 shrink-0" />
+                           </button>
+                        </div>
+                     </div>
+                  </section>
+
+                  {/* 2 · time */}
+                  <section
+                     ref={(element) => {
+                        slideRefs.current[1] = element;
+                     }}
+                     className={slideClass(1)}
+                     aria-label="Time studied"
+                  >
+                     <div className="flex-1 min-h-0 grid place-items-center md:h-full [&>svg]:w-full [&>svg]:max-w-artwork-sm md:[&>svg]:max-w-artwork-md [&>svg]:max-h-full">
+                        <svg
+                           viewBox="0 0 160 160"
+                           fill="none"
+                           aria-hidden="true"
+                        >
+                           <rect
+                              x="14"
+                              y="108"
+                              width="132"
+                              height="30"
+                              rx="6"
+                              fill="var(--color-surface-elevated)"
+                              stroke="var(--color-border-strong)"
+                              strokeWidth="4"
+                           />
+                           <path
+                              d="M36 108v30M124 108v30"
+                              stroke="var(--color-border-default)"
+                              strokeWidth="4"
+                           />
+                           <rect
+                              x="30"
+                              y="76"
+                              width="104"
+                              height="30"
+                              rx="6"
+                              fill="var(--color-feedback-info)"
+                              fillOpacity="0.2"
+                              stroke="var(--color-feedback-info)"
+                              strokeWidth="4"
+                           />
+                           <path
+                              d="M52 76v30"
+                              stroke="var(--color-feedback-info)"
+                              strokeWidth="4"
+                           />
+                           <rect
+                              x="22"
+                              y="44"
+                              width="116"
+                              height="30"
+                              rx="6"
+                              fill="var(--color-feedback-success)"
+                              fillOpacity="0.2"
+                              stroke="var(--color-feedback-success)"
+                              strokeWidth="4"
+                           />
+                           <path
+                              d="M120 44v30"
+                              stroke="var(--color-feedback-success)"
+                              strokeWidth="4"
+                           />
+                           <path
+                              d="M54 22c10-8 20 8 30 0s20 8 30 0"
+                              stroke="var(--color-text-tertiary)"
+                              strokeWidth="4"
+                              strokeLinecap="round"
+                           />
+                        </svg>
+                     </div>
+                     <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
+                        <div className="grid gap-2.5">
+                           <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
+                              Time studied
+                           </p>
+                           <p className="font-display font-extrabold text-[clamp(64px,19vw,92px)] md:text-display-2xl leading-[0.88] tracking-tight text-text-primary m-0 font-sans font-sans-tabular flex items-baseline max-h-[640px]:text-display-xl">
+                              <span>
+                                 {displayedMinutes.toLocaleString("en-US")}
+                              </span>
+                              <small className="text-[0.3em] font-medium tracking-normal text-text-tertiary ml-[0.15em]">
+                                 mins
+                              </small>
+                           </p>
+                           <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-primary m-0 text-pretty">
+                              Over this challenge, you studied for{" "}
+                              <span className="font-bold text-feedback-success">
+                                 {story.time.totalHuman}
+                              </span>
+                              . That&apos;s a lot of showing up.
+                           </p>
+                        </div>
+                        <div className="flex gap-2.5 mt-auto">
+                           <button
+                              type="button"
+                              className="flex-none w-control-md h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer inline-flex items-center justify-center transition-colors"
+                              aria-label="Previous"
+                              onClick={() => go(slideIndex - 1)}
+                           >
+                              <ArrowLeftIcon className="w-4 h-4 shrink-0" />
+                           </button>
+                           <button
+                              type="button"
+                              className="flex-1 h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 whitespace-nowrap"
+                              data-focus-target
+                              onClick={() => go(slideIndex + 1)}
+                           >
+                              <span>Next</span>
+                              <ArrowRightIcon className="w-4 h-4 shrink-0" />
+                           </button>
+                        </div>
+                     </div>
+                  </section>
+
+                  {/* 3 · chart */}
+                  <section
+                     ref={(element) => {
+                        slideRefs.current[2] = element;
+                     }}
+                     className={slideClass(2)}
+                     aria-label="Your study days"
+                  >
+                     <div className="flex-1 min-h-0 grid place-items-center md:h-full [&>div]:w-full">
+                        <div style={{ width: "100%" }}>
+                           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-2.5 font-sans font-medium text-xs">
+                              <ul className="flex gap-4 list-none m-0 p-0">
+                                 <li className="inline-flex items-center gap-1.5 text-text-primary">
+                                    <i
+                                       className="inline-block w-[18px] h-0 border-t-[3px] border-feedback-success rounded-xs"
+                                       aria-hidden="true"
+                                    />
+                                    You
+                                 </li>
+                                 <li className="inline-flex items-center gap-1.5 text-text-tertiary">
+                                    <i
+                                       className="inline-block w-[18px] h-0 border-t-2 border-border-strong rounded-xs"
+                                       aria-hidden="true"
+                                    />
+                                    Average person
+                                 </li>
+                              </ul>
+                              <span className="font-sans text-meta uppercase tracking-wider text-text-tertiary font-medium">
+                                 hours per day
+                              </span>
+                           </div>
+                           <div className="relative w-full" data-no-swipe>
+                              <svg
+                                 ref={svgRef}
+                                 viewBox={`0 0 ${chart.width} ${chart.height}`}
+                                 role="img"
+                                 className="w-full h-auto block overflow-visible"
+                                 aria-label={`Line chart of hours studied on each challenge day. You studied ${story.time.totalHuman} in total.`}
+                              >
+                                 {Array.from(
+                                    { length: Math.max(0, chart.yMax - 1) },
+                                    (_, index) => {
+                                       const value = index + 1;
+                                       const y =
+                                          chart.base -
+                                          (value / chart.yMax) *
+                                             (chart.base - chart.top);
+                                       return (
+                                          <g key={value}>
+                                             <line
+                                                className="stroke-border-default stroke-[1]"
+                                                x1={chart.x0}
+                                                x2={chart.x1}
+                                                y1={y}
+                                                y2={y}
+                                             />
+                                             <text
+                                                className="font-sans text-label fill-text-tertiary font-medium"
+                                                x={chart.x0 - 6}
+                                                y={y + 3}
+                                                textAnchor="end"
+                                             >
+                                                {value}h
+                                             </text>
+                                          </g>
+                                       );
+                                    }
+                                 )}
+                                 <line
+                                    className="stroke-border-strong stroke-[1]"
+                                    x1={chart.x0}
+                                    x2={chart.x1}
+                                    y1={chart.base}
+                                    y2={chart.base}
+                                 />
+                                 <text
+                                    className="font-sans text-label fill-text-tertiary font-medium"
+                                    x={chart.x0 - 6}
+                                    y={chart.base + 3}
+                                    textAnchor="end"
+                                 >
+                                    0
+                                 </text>
+                                 {chart.ticks.map((dayIndex) => (
+                                    <text
+                                       key={dayIndex}
+                                       className="font-sans text-label fill-text-tertiary font-medium"
+                                       x={chart.x[dayIndex]}
+                                       y={chart.base + 17}
+                                       textAnchor="middle"
+                                    >
+                                       {dayIndex === 0
+                                          ? chart.days[dayIndex]?.label
+                                          : chart.days[dayIndex]?.dayNumber}
+                                    </text>
+                                 ))}
+                                 <path
+                                    className={`fill-feedback-success fill-opacity-10 stroke-none ${slideIndex === 2 ? "animate-wrapped-fadein" : ""}`}
+                                    d={chart.areaPath}
+                                 />
+                                 <path
+                                    className={`fill-none stroke-text-tertiary stroke-linecap-round stroke-linejoin-round stroke-[2] ${slideIndex === 2 ? "animate-wrapped-draw" : ""}`}
+                                    pathLength={1}
+                                    d={chart.avgPath}
+                                 />
+                                 <path
+                                    className={`fill-none stroke-feedback-success stroke-linecap-round stroke-linejoin-round stroke-[3] ${slideIndex === 2 ? "animate-wrapped-draw" : ""}`}
+                                    pathLength={1}
+                                    d={chart.youPath}
+                                 />
+                                 {chart.bestIndex >= 0 && (
+                                    <g
+                                       className={
+                                          slideIndex === 2
+                                             ? "animate-wrapped-fadein"
+                                             : ""
+                                       }
+                                    >
+                                       <circle
+                                          className="stroke-border-subtle stroke-2 fill-feedback-success"
+                                          cx={chart.x[chart.bestIndex]}
+                                          cy={chart.yYou[chart.bestIndex]}
+                                          r={4}
+                                       />
+                                       <text
+                                          className="font-sans text-label fill-feedback-success font-semibold"
+                                          x={bestTextX}
+                                          y={chart.yYou[chart.bestIndex] + 3}
+                                          textAnchor={bestTextAnchor}
+                                       >
+                                          Best day · {chart.bestLabel} ·{" "}
+                                          {chart.bestHuman}
+                                       </text>
+                                    </g>
+                                 )}
+                                 {hoverIndex !== null && (
+                                    <line
+                                       className="stroke-border-strong stroke-[1] stroke-dasharray-[2_2]"
+                                       x1={chart.x[hoverIndex]}
+                                       x2={chart.x[hoverIndex]}
+                                       y1={chart.top}
+                                       y2={chart.base}
+                                    />
+                                 )}
+                                 {hoverIndex !== null && (
+                                    <>
+                                       <circle
+                                          className="stroke-border-subtle stroke-2 fill-feedback-success"
+                                          cx={chart.x[hoverIndex]}
+                                          cy={chart.yYou[hoverIndex]}
+                                          r={4}
+                                       />
+                                       <circle
+                                          className="stroke-border-subtle stroke-2 fill-text-tertiary"
+                                          cx={chart.x[hoverIndex]}
+                                          cy={chart.yAvg[hoverIndex]}
+                                          r={4}
+                                       />
+                                    </>
+                                 )}
+                                 <rect
+                                    className="touch-pan-y cursor-crosshair"
+                                    x={chart.x0 - 8}
+                                    y={0}
+                                    width={chart.x1 - chart.x0 + 16}
+                                    height={chart.base + 4}
+                                    fill="transparent"
+                                    onPointerMove={handleChartPointer}
+                                    onPointerDown={handleChartPointer}
+                                    onPointerLeave={() => setHoverIndex(null)}
+                                    onPointerCancel={() => setHoverIndex(null)}
+                                 />
+                              </svg>
+                              {hoverDay && (
+                                 <div
+                                    className={`absolute z-10 pointer-events-none -translate-y-full whitespace-nowrap bg-surface-elevated border border-border-default text-text-primary shadow-xl rounded-xl py-2 px-3 font-sans text-xs leading-snug font-medium ${
+                                       chart.days.length > 1 &&
+                                       hoverDay.index === 0
+                                          ? "translate-x-0"
+                                          : chart.days.length > 1 &&
+                                              hoverDay.index ===
+                                                 chart.days.length - 1
+                                            ? "-translate-x-full"
+                                            : "-translate-x-1/2"
+                                    }`}
+                                    style={{
+                                       left: `${
+                                          (chart.x[hoverDay.index] /
+                                             chart.width) *
+                                          100
+                                       }%`,
+                                       top: "-6px",
+                                    }}
+                                 >
+                                    <div className="font-sans text-label tracking-wider uppercase text-text-tertiary font-semibold mb-1">
+                                       {hoverDay.label}
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                       <i className="inline-block w-3 border-t-[3px] border-feedback-success rounded-xs" />
+                                       <b className="text-text-primary">
+                                          {formatMinutes(hoverDay.minutesYou) ||
+                                             "No study"}
+                                       </b>
+                                       <span className="text-text-tertiary">
+                                          You
+                                       </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                       <i className="inline-block w-3 border-t-2 border-border-strong rounded-xs" />
+                                       <b className="text-text-tertiary">
+                                          {formatMinutes(hoverDay.minutesAvg) ||
+                                             "No study"}
+                                       </b>
+                                       <span className="text-text-tertiary">
+                                          Average person
+                                       </span>
+                                    </div>
+                                 </div>
+                              )}
+                              <table className="sr-only">
+                                 <caption>
+                                    Time studied on each challenge day
+                                 </caption>
+                                 <thead>
+                                    <tr>
+                                       <th>Day</th>
+                                       <th>You</th>
+                                       <th>Average person</th>
+                                    </tr>
+                                 </thead>
+                                 <tbody>
+                                    {chart.days.map((day) => (
+                                       <tr key={day.index}>
+                                          <td>{day.label}</td>
+                                          <td>
+                                             {formatMinutes(day.minutesYou) ||
+                                                "No study"}
+                                          </td>
+                                          <td>
+                                             {formatMinutes(day.minutesAvg) ||
+                                                "No study"}
+                                          </td>
+                                       </tr>
+                                    ))}
+                                 </tbody>
+                              </table>
+                           </div>
+                        </div>
+                     </div>
+                     <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
+                        <div className="grid gap-2.5">
+                           <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
+                              You vs the average person
+                           </p>
+                           {story.chartCopy.timesVsAverage !== null ? (
+                              <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-primary m-0 text-pretty">
+                                 You studied{" "}
+                                 <span className="font-bold text-feedback-success">
+                                    {story.chartCopy.timesVsAverage}× as much
+                                 </span>{" "}
+                                 as the average person. Seriously good work,{" "}
+                                 {wrapped?.viewer?.displayName ?? "friend"}.
+                              </p>
+                           ) : (
+                              <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-tertiary m-0 text-pretty">
+                                 The average-person comparison unlocks once more
+                                 study time is logged.
+                              </p>
+                           )}
+                           <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-primary m-0 text-pretty">
+                              {chart.bestIndex >= 0 ? (
+                                 <>
+                                    Your best day was{" "}
+                                    <span className="font-bold text-feedback-success">
+                                       {chart.bestLabel}
+                                    </span>
+                                    , and you carried{" "}
+                                    <span className="font-bold text-feedback-success">
+                                       {story.chartCopy.contributionPercent}%
+                                    </span>{" "}
+                                    of {story.chartCopy.teamName}&apos;s growth.
+                                 </>
+                              ) : (
+                                 "No study days were logged this time — the next challenge is a fresh start."
+                              )}
+                           </p>
+                           <div
+                              className="h-2.5 rounded-full bg-surface-elevated border border-border-default overflow-hidden mt-1"
+                              aria-hidden="true"
+                           >
+                              <i
+                                 className="block h-full bg-feedback-success rounded-full transition-[width] duration-900 delay-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+                                 style={{
+                                    width:
+                                       slideIndex === 2
+                                          ? `${story.chartCopy.contributionPercent}%`
+                                          : "0%",
+                                 }}
+                              />
+                           </div>
+                        </div>
+                        <div className="flex gap-2.5 mt-auto">
+                           <button
+                              type="button"
+                              className="flex-none w-control-md h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer inline-flex items-center justify-center transition-colors"
+                              aria-label="Previous"
+                              onClick={() => go(slideIndex - 1)}
+                           >
+                              <ArrowLeftIcon className="w-4 h-4 shrink-0" />
+                           </button>
+                           <button
+                              type="button"
+                              className="flex-1 h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 whitespace-nowrap"
+                              data-focus-target
+                              onClick={() => go(slideIndex + 1)}
+                           >
+                              <span>Next</span>
+                              <ArrowRightIcon className="w-4 h-4 shrink-0" />
+                           </button>
+                        </div>
+                     </div>
+                  </section>
+
+                  {/* 4 · verdict */}
+                  <section
+                     ref={(element) => {
+                        slideRefs.current[3] = element;
+                     }}
+                     className={slideClass(3)}
+                     aria-label="Saved or punished"
+                  >
+                     <div
+                        className="flex-1 min-h-0 grid place-items-center gap-3.5 content-center md:h-full"
+                        data-no-swipe
                      >
-                        <ArrowLeftIcon className="w-4 h-4 shrink-0" />
-                     </button>
-                     <button
-                        type="button"
-                        className="flex-1 h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-primary hover:border-border-strong font-semibold text-body cursor-pointer inline-flex items-center justify-center transition-colors whitespace-nowrap"
-                        data-focus-target
-                        onClick={close}
-                     >
-                        Maybe later
-                     </button>
-                     <button
-                        type="button"
-                        className="flex-[1.4] h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 whitespace-nowrap"
-                        onClick={() => setIsFeedbackDialogOpen(true)}
-                     >
-                        Give feedback
-                     </button>
-                  </div>
+                        <button
+                           ref={holdRef}
+                           type="button"
+                           className={`relative w-full max-w-[210px] md:max-w-artwork-md aspect-square rounded-[32px] border-2 border-dashed border-border-strong bg-surface-elevated/50 text-text-primary cursor-pointer p-0 grid place-items-center select-none touch-none transition-colors hover:border-border-strong ${
+                              revealed
+                                 ? "border-solid !border-transparent bg-transparent animate-wrapped-hit"
+                                 : ""
+                           }`}
+                           aria-label="Press and hold to reveal your result"
+                           onPointerDown={(event) => {
+                              if (event.button > 0) {
+                                 return;
+                              }
+                              try {
+                                 event.currentTarget.setPointerCapture(
+                                    event.pointerId
+                                 );
+                              } catch {
+                                 // Pointer capture is best-effort.
+                              }
+                              startHold();
+                           }}
+                           onPointerUp={endHold}
+                           onPointerCancel={endHold}
+                           onLostPointerCapture={endHold}
+                           onContextMenu={(event) => event.preventDefault()}
+                           onKeyDown={(event) => {
+                              if (
+                                 (event.key === " " || event.key === "Enter") &&
+                                 !event.repeat
+                              ) {
+                                 event.preventDefault();
+                                 startHold();
+                              }
+                           }}
+                           onKeyUp={(event) => {
+                              if (event.key === " " || event.key === "Enter") {
+                                 event.preventDefault();
+                                 endHold();
+                              }
+                           }}
+                           onBlur={endHold}
+                        >
+                           <svg
+                              className={`absolute inset-3 w-[calc(100%-24px)] h-[calc(100%-24px)] -rotate-90 ${
+                                 revealed
+                                    ? "opacity-0 transition-opacity duration-200"
+                                    : ""
+                              }`}
+                              viewBox="0 0 200 200"
+                              aria-hidden="true"
+                           >
+                              <circle
+                                 className="fill-none stroke-border-default stroke-[8]"
+                                 cx="100"
+                                 cy="100"
+                                 r="88"
+                              />
+                              <circle
+                                 ref={ringRef}
+                                 className="fill-none stroke-[8] stroke-linecap-round"
+                                 stroke={verdictToneColors.ring}
+                                 style={{
+                                    strokeDasharray: RING_CIRCUMFERENCE,
+                                    strokeDashoffset: RING_CIRCUMFERENCE,
+                                 }}
+                                 cx="100"
+                                 cy="100"
+                                 r="88"
+                              />
+                           </svg>
+                           <span
+                              className={`relative grid gap-1.5 justify-items-center text-center font-sans text-xs leading-tight tracking-wider uppercase font-semibold text-text-tertiary ${
+                                 revealed
+                                    ? "opacity-0 transition-opacity duration-200"
+                                    : ""
+                              }`}
+                              aria-hidden="true"
+                           >
+                              <svg
+                                 viewBox="0 0 48 48"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 strokeWidth="3"
+                                 strokeLinecap="round"
+                                 strokeLinejoin="round"
+                                 className="w-10 h-10 md:w-11 md:h-11 text-text-tertiary"
+                              >
+                                 <path d="M17 26V12a3 3 0 0 1 6 0v10M23 20v-3a3 3 0 0 1 6 0v5M29 22a3 3 0 0 1 6 0v8c0 7-5 12-12 12-5 0-8-2-11-6l-5-8a3 3 0 0 1 5-3l3 4" />
+                              </svg>
+                              <span ref={holdTextRef}>Hold to reveal</span>
+                           </span>
+                           <span
+                              className="absolute inset-0 grid place-items-center pointer-events-none"
+                              aria-hidden="true"
+                           >
+                              <span
+                                 className={`block font-display font-black text-[clamp(26px,7.5vw,34px)] md:text-display-sm leading-none tracking-wider uppercase py-2 px-3.5 border-[5px] rounded-xl -rotate-6 shadow-xl backdrop-blur-xs opacity-0 filter-[url(#wrapped-rough)] ${verdictToneColors.stampBorder} ${verdictToneColors.stampText} ${verdictToneColors.stampBg} ${revealed ? "animate-wrapped-slam opacity-100" : ""}`}
+                              >
+                                 {revealed ? verdict.stamp : ""}
+                              </span>
+                           </span>
+                        </button>
+                     </div>
+                     <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
+                        <div className="grid gap-2" aria-live="polite">
+                           <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
+                              The verdict
+                           </p>
+                           <h2 className="font-display font-extrabold text-[clamp(28px,8vw,38px)] md:text-display-md leading-[1.05] tracking-tight text-text-primary m-0 text-balance">
+                              {revealed
+                                 ? verdict.headline
+                                 : "Did you hit the target?"}
+                           </h2>
+                           <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-primary m-0 text-pretty">
+                              {revealed ? (
+                                 <>
+                                    <span
+                                       className={`font-bold ${verdictToneColors.highlight}`}
+                                    >
+                                       {verdict.totalHuman}
+                                    </span>{" "}
+                                    against a {verdict.targetHuman} target.
+                                 </>
+                              ) : (
+                                 "Press and hold the card until the ring closes."
+                              )}
+                           </p>
+                           <p className="font-sans text-sm text-text-tertiary m-0 text-pretty font-medium empty:hidden">
+                              {revealed ? verdict.note : ""}
+                           </p>
+                           {!revealed && (
+                              <button
+                                 type="button"
+                                 className="self-start bg-transparent border-0 py-1 px-0 cursor-pointer font-sans text-xs text-text-tertiary underline underline-offset-[3px] hover:text-text-primary transition-colors"
+                                 onClick={reveal}
+                              >
+                                 Can&apos;t hold? Tap to reveal
+                              </button>
+                           )}
+                        </div>
+                        <div className="flex gap-2.5 mt-auto">
+                           <button
+                              type="button"
+                              className="flex-none w-control-md h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer inline-flex items-center justify-center transition-colors"
+                              aria-label="Previous"
+                              onClick={() => go(slideIndex - 1)}
+                           >
+                              <ArrowLeftIcon className="w-4 h-4 shrink-0" />
+                           </button>
+                           <button
+                              type="button"
+                              className="flex-1 h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 disabled:opacity-30 disabled:pointer-events-none whitespace-nowrap"
+                              data-verdict-next
+                              disabled={!revealed}
+                              onClick={() => go(slideIndex + 1)}
+                           >
+                              <span>Next</span>
+                              <ArrowRightIcon className="w-4 h-4 shrink-0" />
+                           </button>
+                        </div>
+                     </div>
+                  </section>
+
+                  {/* 5 · feedback */}
+                  <section
+                     ref={(element) => {
+                        slideRefs.current[4] = element;
+                     }}
+                     className={slideClass(4)}
+                     aria-label="Feedback"
+                  >
+                     <div className="flex-1 min-h-0 grid place-items-center md:h-full [&>svg]:w-full [&>svg]:max-w-artwork-sm md:[&>svg]:max-w-artwork-md [&>svg]:max-h-full">
+                        <svg
+                           viewBox="0 0 160 160"
+                           fill="none"
+                           aria-hidden="true"
+                        >
+                           <circle
+                              cx="116"
+                              cy="40"
+                              r="26"
+                              fill="var(--color-feedback-info)"
+                              fillOpacity="0.25"
+                           />
+                           <path
+                              d="M26 30h108a10 10 0 0 1 10 10v62a10 10 0 0 1-10 10H78l-28 24v-24H26a10 10 0 0 1-10-10V40a10 10 0 0 1 10-10Z"
+                              fill="var(--color-surface-elevated)"
+                              stroke="var(--color-border-strong)"
+                              strokeWidth="4"
+                              strokeLinejoin="round"
+                           />
+                           <path
+                              d="M40 58h80M40 74h60M40 90h42"
+                              stroke="var(--color-text-tertiary)"
+                              strokeWidth="4"
+                              strokeLinecap="round"
+                           />
+                        </svg>
+                     </div>
+                     <div className="flex flex-col justify-between gap-4 md:h-full md:py-3">
+                        <div className="grid gap-2.5">
+                           <p className="font-sans text-xs font-semibold uppercase tracking-wider text-text-tertiary m-0">
+                              Anonymous · 2 minutes
+                           </p>
+                           <h2 className="font-display font-extrabold text-[clamp(30px,8vw,40px)] md:text-display-lg leading-[1.05] tracking-tight text-text-primary m-0 text-balance">
+                              How was this challenge?
+                           </h2>
+                           <p className="font-sans font-medium text-body md:text-body-lg leading-[1.4] text-text-tertiary m-0 text-pretty">
+                              Tell us what worked and what didn&apos;t. Your
+                              answers aren&apos;t tied to your name.
+                           </p>
+                        </div>
+                        <div className="flex gap-2.5 mt-auto">
+                           <button
+                              type="button"
+                              className="flex-none w-control-md h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong cursor-pointer inline-flex items-center justify-center transition-colors"
+                              aria-label="Previous"
+                              onClick={() => go(slideIndex - 1)}
+                           >
+                              <ArrowLeftIcon className="w-4 h-4 shrink-0" />
+                           </button>
+                           {(!isMandatoryFeedback || effectiveFeedback) && (
+                              <button
+                                 type="button"
+                                 className="flex-1 h-control-md rounded-xl border border-border-default bg-surface-elevated text-text-primary hover:border-border-strong font-semibold text-body cursor-pointer inline-flex items-center justify-center transition-colors whitespace-nowrap"
+                                 data-focus-target
+                                 onClick={close}
+                              >
+                                 Maybe later
+                              </button>
+                           )}
+                           <button
+                              type="button"
+                              className="flex-[1.4] h-control-md rounded-xl bg-feedback-success text-text-inverse font-bold text-body cursor-pointer inline-flex items-center justify-center gap-2 transition-all hover:bg-feedback-success hover:-translate-y-0.5 shadow-md shadow-feedback-success/10 whitespace-nowrap"
+                              onClick={() => setIsFeedbackDialogOpen(true)}
+                           >
+                              Give feedback
+                           </button>
+                        </div>
+                     </div>
+                  </section>
                </div>
-            </section>
-         </div>
+            </div>
+         )}
 
          <div
             className={`fixed left-1/2 bottom-[calc(20px+env(safe-area-inset-bottom,0px))] z-70 max-w-[calc(100%-32px)] bg-surface-elevated border border-border-default text-text-primary shadow-xl py-2.5 px-4 rounded-xl font-sans font-medium text-sm -translate-x-1/2 pointer-events-none transition-all duration-250 ${
@@ -1524,14 +1598,16 @@ export function ChallengeWrappedModal({
             isOpen={isFeedbackDialogOpen}
             challengeId={challenge.id}
             challengeTitle={challenge.title}
+            mandatory={Boolean(isMandatoryFeedback && !effectiveFeedback)}
             onClose={() => setIsFeedbackDialogOpen(false)}
             onSuccess={() => {
+               setEffectiveFeedback(true);
                showToast("Thank you for your feedback!");
                setTimeout(() => {
                   close();
                }, 600);
             }}
          />
-      </div>
+      </>
    );
 }

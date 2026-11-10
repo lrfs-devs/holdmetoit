@@ -192,11 +192,8 @@ describe("wrapped.actions", () => {
       challengeId: "chal_1",
       consistency: "Yes, significantly" as const,
       fairnessRating: 5,
-      trackingPreference: "Strictly YPT" as const,
       teamBattleFeedback: "Loved the competition!",
-      workSchoolHours: "No, dont include them" as const,
-      soloStyle: "Competitive (Keep a leaderboard)" as const,
-      soloPunishment: "Yes, keep the punishment" as const,
+      joinReason: "Accountability",
       soloIdeas: "More challenges please",
    };
 

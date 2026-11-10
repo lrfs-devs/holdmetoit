@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+   isMandatoryFeedbackEnabled,
    isWrappedFeatureEnabled,
+   MANDATORY_FEEDBACK_FEATURE_FLAG_KEY,
    WRAPPED_FEATURE_FLAG_KEY,
 } from "./wrapped-flag";
 import * as flagsServerModule from "@/features/feature-flags/api/server";
@@ -32,5 +34,18 @@ describe("wrapped-flag", () => {
       vi.mocked(flagsServerModule.isFeatureEnabled).mockResolvedValue(false);
 
       await expect(isWrappedFeatureEnabled()).resolves.toBe(false);
+   });
+
+   it("pins the canonical mandatory_feedback_v1 key and delegates evaluation", async () => {
+      expect(MANDATORY_FEEDBACK_FEATURE_FLAG_KEY).toBe("mandatory_feedback_v1");
+
+      vi.mocked(flagsServerModule.isFeatureEnabled).mockResolvedValue(true);
+      await expect(isMandatoryFeedbackEnabled()).resolves.toBe(true);
+      expect(flagsServerModule.isFeatureEnabled).toHaveBeenCalledWith(
+         "mandatory_feedback_v1"
+      );
+
+      vi.mocked(flagsServerModule.isFeatureEnabled).mockResolvedValue(false);
+      await expect(isMandatoryFeedbackEnabled()).resolves.toBe(false);
    });
 });
