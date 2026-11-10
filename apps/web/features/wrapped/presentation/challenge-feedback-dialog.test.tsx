@@ -51,7 +51,7 @@ describe("ChallengeFeedbackDialog", () => {
       expect(html).not.toContain("Part 2");
    });
 
-   it("renders all 8 survey questions", () => {
+   it("renders all 5 survey questions", () => {
       const html = renderToHtml(<ChallengeFeedbackDialog {...defaultProps} />);
 
       // Q1
@@ -71,40 +71,30 @@ describe("ChallengeFeedbackDialog", () => {
 
       // Q3
       expect(html).toContain(
-         "Which tracking method do you prefer for future challenges?"
-      );
-      expect(html).toContain("Strictly YPT");
-      expect(html).toContain("Allow all apps with no restrictions");
-
-      // Q4
-      expect(html).toContain(
          "Suggestions to improve Team Battles or any complaints?"
       );
 
+      // Q4
+      expect(html).toContain("Why did you join the battle?");
+      expect(html).toContain("One word only");
+
       // Q5
       expect(html).toContain(
+         "Any other ideas or thoughts for the upcoming Solo Challenge?"
+      );
+
+      // Assert removed questions are absent
+      expect(html).not.toContain(
+         "Which tracking method do you prefer for future challenges?"
+      );
+      expect(html).not.toContain(
          "Should we adjust targets to account for work or school hours?"
       );
-      expect(html).toContain("Yes, include work and school hours");
-      expect(html).toContain("No, dont include them");
-
-      // Q6
-      expect(html).toContain(
+      expect(html).not.toContain(
          "How would you prefer the Solo Challenge to operate?"
       );
-      expect(html).toContain("Competitive (Keep a leaderboard)");
-      expect(html).toContain("Laid-back (Personal goals for role rewards)");
-
-      // Q7
-      expect(html).toContain(
+      expect(html).not.toContain(
          "Should we keep the punishment PFP system for the Solo Challenge?"
-      );
-      expect(html).toContain("Yes, keep the punishment");
-      expect(html).toContain("No, remove the punishment");
-
-      // Q8
-      expect(html).toContain(
-         "Any other ideas or thoughts for the upcoming Solo Challenge?"
       );
    });
 

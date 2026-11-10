@@ -164,11 +164,8 @@ export async function submitChallengeFeedbackAction(
          challengeId,
          consistency,
          fairnessRating,
-         trackingPreference,
          teamBattleFeedback,
-         workSchoolHours,
-         soloStyle,
-         soloPunishment,
+         joinReason,
          soloIdeas,
       } = parsed.data;
 
@@ -199,11 +196,8 @@ export async function submitChallengeFeedbackAction(
                userId: user.id,
                consistency,
                fairnessRating,
-               trackingPreference,
                teamBattleFeedback,
-               workSchoolHours,
-               soloStyle,
-               soloPunishment,
+               joinReason,
                soloIdeas,
             },
             tx
@@ -216,11 +210,8 @@ export async function submitChallengeFeedbackAction(
          appUrl: getServerEnv().AUTH_URL,
          consistency,
          fairnessRating,
-         trackingPreference,
          teamBattleFeedback,
-         workSchoolHours,
-         soloStyle,
-         soloPunishment,
+         joinReason,
          soloIdeas,
          reporter: {
             userId: user.id,

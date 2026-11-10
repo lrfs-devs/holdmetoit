@@ -6,12 +6,13 @@ export interface SaveChallengeFeedbackParams {
    userId: string;
    consistency: string;
    fairnessRating: number;
-   trackingPreference: string;
    teamBattleFeedback?: string | null;
-   workSchoolHours: string;
-   soloStyle: string;
-   soloPunishment: string;
+   joinReason?: string | null;
    soloIdeas?: string | null;
+   trackingPreference?: string | null;
+   workSchoolHours?: string | null;
+   soloStyle?: string | null;
+   soloPunishment?: string | null;
    discordMessageId?: string | null;
 }
 
@@ -35,22 +36,24 @@ export async function saveChallengeFeedback(
          userId: data.userId,
          consistency: data.consistency,
          fairnessRating: data.fairnessRating,
-         trackingPreference: data.trackingPreference,
+         trackingPreference: data.trackingPreference || null,
          teamBattleFeedback: data.teamBattleFeedback || null,
-         workSchoolHours: data.workSchoolHours,
-         soloStyle: data.soloStyle,
-         soloPunishment: data.soloPunishment,
+         workSchoolHours: data.workSchoolHours || null,
+         soloStyle: data.soloStyle || null,
+         joinReason: data.joinReason?.trim() || null,
+         soloPunishment: data.soloPunishment || null,
          soloIdeas: data.soloIdeas || null,
          discordMessageId: data.discordMessageId || null,
       },
       update: {
          consistency: data.consistency,
          fairnessRating: data.fairnessRating,
-         trackingPreference: data.trackingPreference,
+         trackingPreference: data.trackingPreference || null,
          teamBattleFeedback: data.teamBattleFeedback || null,
-         workSchoolHours: data.workSchoolHours,
-         soloStyle: data.soloStyle,
-         soloPunishment: data.soloPunishment,
+         workSchoolHours: data.workSchoolHours || null,
+         soloStyle: data.soloStyle || null,
+         joinReason: data.joinReason?.trim() || null,
+         soloPunishment: data.soloPunishment || null,
          soloIdeas: data.soloIdeas || null,
          discordMessageId: data.discordMessageId || null,
       },

@@ -201,6 +201,7 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 - **Behavior change:** a `PARTICIPANT` newly added to `DEV_DISCORD_IDS` becomes `DEV` at next sign-in (previously the session callback elevated them immediately). An existing `ADMIN` is promoted within the window.
 - **Validation:** web auth/admin suites green (199 tests) incl. new policy, revalidation, guild-service and action tests; `lint:web` 0 errors; Prettier clean. `typecheck:web` and the full `test:web` were **not** run to completion in the authoring sandbox (Prisma engine download blocked, so no generated client): the type error count did not increase versus `dev`. Re-run both in CI or locally.
 - **NEXT:** run `npm run typecheck:web` and `npm run test:web` with a generated Prisma client; open PR `fix/auth-role-revalidation-227` → `dev` and move #227 to `In Review` (not `Done` until merged to `dev` and released to `main`). Ensure `AUTH_URL` is set in every deployed environment.
+
 ### Session 205 — 2026-11-09 (Feat: 1-Click Discord Todo Export for Daily & Weekly Tasks on `krish` · GH #260 / Jira KAN-97)
 
 - **Scope & Objectives:** Implemented 1-click clipboard export for Daily and Weekly todos from the website directly to Discord-ready text. Linked with GitHub Issue #260 and Jira Ticket KAN-97 (assigned to Krish Jaiswal).
@@ -3134,4 +3135,37 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
    5. **Quality Gates & Verification:**
       - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
       - `npm run test:web`: ✅ 255 test files (2,696 tests) passing 100% green.
-- **NEXT STEP:** Merge PR into `dev` after review approvals.
+- **NEXT STEP (completed in Session 208):** Challenge feedback question modernization (single-word join motivation).
+
+### Session 208 — 2026-11-10 (feat(wrapped): challenge ending feedback survey updates — streamline survey to 5 questions & add single-word join motivation — on `afnan-jr`)
+
+- **Context & Objectives:** Modernize and streamline the post-challenge feedback survey dialog (`ChallengeFeedbackDialog`) by removing 4 obsolete questions (`soloPunishment`, `trackingPreference`, `workSchoolHours`, and `soloStyle`), adding a single-word join reason prompt to capture participant motivation, and renumbering the survey to a focused 5-question form.
+- **Changes Completed:**
+   1. **Database Schema & Migration (`packages/database`):**
+      - Updated `ChallengeFeedback` model in `schema.prisma`: added `joinReason String? @db.Text` and altered `soloPunishment`, `trackingPreference`, `workSchoolHours`, and `soloStyle` to `String?` (nullable) to preserve historical challenge survey responses without destructive data loss.
+      - Added migration `packages/database/prisma/migrations/20261110000000_update_challenge_feedback_questions/migration.sql`.
+      - Documented migration in `packages/database/prisma/migrations/README.md`.
+      - Re-generated Prisma client and built `@holdmetoit/database`.
+   2. **Pure Domain Logic & Embed Builder (`apps/web/features/wrapped/domain/`):**
+      - `challenge-feedback.schema.ts`: Added pure `countWords(value)` helper and updated `submitChallengeFeedbackSchema` to validate `joinReason` with max 50 chars and a refinement enforcing at most one word (`countWords(val) <= 1`). Removed `soloPunishmentOptions`, `trackingPreferenceOptions`, `workSchoolHoursOptions`, and `soloStyleOptions`.
+      - `challenge-feedback.schema.test.ts`: Added tests verifying `countWords`, valid single-word submissions, rejection of multi-word answers, 50-character limit, and empty optional text. Removed obsolete field assertions.
+      - `challenge-feedback-embed.ts`: Streamlined Discord embed fields to 5 base inline fields (`Submitter`, `Fairness Rating`, `Improved Consistency?`, `⚔️ Why Did You Join?`, `Challenge`) plus 2 optional multiline blocks (`Suggestions & Complaints`, `Solo Ideas`). Removed obsolete tracking, work/school, solo style, and punishment fields.
+      - `challenge-feedback-embed.test.ts`: Updated tests to assert presence of `⚔️ Why Did You Join?` and absence of all 4 removed questions.
+   3. **Data Access & Server Actions (`apps/web/features/wrapped/data/` & `api/`):**
+      - `challenge-feedback.repository.ts`: Updated `SaveChallengeFeedbackParams` and `upsert` create/update to persist `joinReason` and handle nullable removed fields.
+      - `challenge-feedback.repository.test.ts`: Updated mock payloads and assertions.
+      - `wrapped.actions.ts`: Updated `submitChallengeFeedbackAction` to unpack `joinReason` from validated input and pass to repository and Discord embed builder.
+      - `wrapped.actions.test.ts`: Updated fixtures and verified action dispatch.
+   4. **Presentation Layer (`apps/web/features/wrapped/presentation/`):**
+      - `challenge-feedback-dialog.tsx`: Streamlined dialog to 5 focused questions:
+         1. Consistency (`consistency`)
+         2. Fairness rating (`fairnessRating`)
+         3. Suggestions / complaints (`teamBattleFeedback`)
+         4. Why did you join the battle? (`joinReason`, single word with dynamic `One word only` indicator)
+         5. Any other ideas or thoughts for the upcoming Solo Challenge? (`soloIdeas`)
+      - `challenge-feedback-dialog.test.tsx`: Updated tests to assert all 5 survey questions render and all 4 removed questions are absent.
+   5. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 260 test files (2,768 tests) passing 100% green.
+      - `npm run build:web`: ✅ Production build clean (21 routes compiled, 0 errors).
+- **NEXT STEP:** Merge `afnan-jr` into `dev` via PR once peer-reviewed.
