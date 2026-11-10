@@ -15,6 +15,7 @@ import { useWrappedMascotPreference } from "./wrapped-storage";
 interface DashboardWrappedProps {
    challenge: ChallengeScoreboardViewModel;
    variantOverride?: WrappedMascotVariant;
+   isMandatoryFeedback?: boolean;
 }
 
 /**
@@ -26,6 +27,7 @@ interface DashboardWrappedProps {
 export function DashboardWrapped({
    challenge,
    variantOverride,
+   isMandatoryFeedback = false,
 }: DashboardWrappedProps) {
    const [isModalOpen, setIsModalOpen] = useState(false);
    const { variant: mascotVariant } =
@@ -64,6 +66,7 @@ export function DashboardWrapped({
             isOpen={isModalOpen ? true : undefined}
             onClose={() => setIsModalOpen(false)}
             mascotVariantOverride={mascotVariant}
+            isMandatoryFeedback={isMandatoryFeedback}
          />
 
          {/* Shy Card parked on the right edge */}

@@ -37,6 +37,8 @@ interface ChallengeViewProps {
    isWithdrawalEnabled?: boolean;
    /** Server-evaluated `global_leaderboard_v1`. Gates trophy rank badges in standings. */
    isGlobalLeaderboardEnabled?: boolean;
+   /** Server-evaluated `mandatory_feedback_v1`. Gates non-dismissable post-event feedback enforcement. */
+   isMandatoryFeedback?: boolean;
 }
 
 /** Renders the challenge shell and coordinates its active tab. */
@@ -53,6 +55,7 @@ export function ChallengeView({
    isBettingEnabled = true,
    isWithdrawalEnabled = false,
    isGlobalLeaderboardEnabled = false,
+   isMandatoryFeedback = false,
 }: ChallengeViewProps) {
    const isSummaryVisible =
       isWrappedEnabled && Boolean(challenge.resultsLockedAt);
@@ -211,7 +214,10 @@ export function ChallengeView({
          )}
 
          {isSummaryVisible && challenge.currentUser.isEnrolled && (
-            <ChallengeWrappedModal challenge={challenge} />
+            <ChallengeWrappedModal
+               challenge={challenge}
+               isMandatoryFeedback={isMandatoryFeedback}
+            />
          )}
       </div>
    );

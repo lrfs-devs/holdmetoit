@@ -204,12 +204,13 @@ describe("isWrappedPopupDue", () => {
       ).toBe(true);
    });
 
-   it("stops being due once seen (even if feedback is still not filled)", () => {
+   it("stops being due once seen when mandatory feedback flag is disabled", () => {
       expect(
          isWrappedPopupDue({
             resultsLockedAt: LOCKED_AT,
             isWrappedSeen: true,
             isFeedbackFilled: false,
+            isMandatoryFeedback: false,
             now: openNow,
          })
       ).toBe(false);
@@ -219,6 +220,29 @@ describe("isWrappedPopupDue", () => {
             resultsLockedAt: LOCKED_AT,
             isWrappedSeen: true,
             isFeedbackFilled: true,
+            isMandatoryFeedback: false,
+            now: openNow,
+         })
+      ).toBe(false);
+   });
+
+   it("remains due if seen but feedback is unfilled when mandatory feedback flag is enabled", () => {
+      expect(
+         isWrappedPopupDue({
+            resultsLockedAt: LOCKED_AT,
+            isWrappedSeen: true,
+            isFeedbackFilled: false,
+            isMandatoryFeedback: true,
+            now: openNow,
+         })
+      ).toBe(true);
+
+      expect(
+         isWrappedPopupDue({
+            resultsLockedAt: LOCKED_AT,
+            isWrappedSeen: true,
+            isFeedbackFilled: true,
+            isMandatoryFeedback: true,
             now: openNow,
          })
       ).toBe(false);
@@ -230,6 +254,9 @@ describe("isWrappedPopupDue", () => {
             resultsLockedAt: LOCKED_AT,
             isWrappedSeen: false,
             localSeen: true,
+            isFeedbackFilled: false,
+            localFeedback: true,
+            isMandatoryFeedback: true,
             now: openNow,
          })
       ).toBe(false);
@@ -239,6 +266,21 @@ describe("isWrappedPopupDue", () => {
             resultsLockedAt: LOCKED_AT,
             isWrappedSeen: true,
             localSeen: false,
+            isFeedbackFilled: true,
+            localFeedback: false,
+            isMandatoryFeedback: true,
+            now: openNow,
+         })
+      ).toBe(true);
+
+      expect(
+         isWrappedPopupDue({
+            resultsLockedAt: LOCKED_AT,
+            isWrappedSeen: true,
+            localSeen: true,
+            isFeedbackFilled: true,
+            localFeedback: false,
+            isMandatoryFeedback: true,
             now: openNow,
          })
       ).toBe(true);

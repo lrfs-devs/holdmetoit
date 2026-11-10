@@ -58,6 +58,7 @@ export interface HomeCockpitViewProps {
    profileUrl?: string;
    initialCollapsedCategoryIds?: string[];
    initialIsRolloverSnoozed?: boolean;
+   isMandatoryFeedback?: boolean;
 }
 
 /** Renders the authenticated home cockpit and its participant workflows. */
@@ -74,6 +75,7 @@ export function HomeCockpitView({
    profileUrl,
    initialCollapsedCategoryIds,
    initialIsRolloverSnoozed,
+   isMandatoryFeedback = false,
 }: HomeCockpitViewProps) {
    const effectiveIsAdmin = isAdmin ?? hasAdminPrivileges(user?.role);
    const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
@@ -289,7 +291,12 @@ export function HomeCockpitView({
             />
          )}
 
-         {wrappedChallenge && <DashboardWrapped challenge={wrappedChallenge} />}
+         {wrappedChallenge && (
+            <DashboardWrapped
+               challenge={wrappedChallenge}
+               isMandatoryFeedback={isMandatoryFeedback}
+            />
+         )}
       </div>
    );
 }

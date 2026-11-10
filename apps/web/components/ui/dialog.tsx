@@ -31,33 +31,41 @@ export type DialogContentProps = React.ComponentPropsWithoutRef<
    typeof DialogPrimitive.Content
 > & {
    overlayClassName?: string;
+   hideCloseButton?: boolean;
 };
 
 /** Renders the shared modal panel (portalled, focus-trapped, scroll-locked). */
 const DialogContent = React.forwardRef<
    React.ElementRef<typeof DialogPrimitive.Content>,
    DialogContentProps
->(({ className, overlayClassName, children, ...props }, ref) => (
-   <DialogPortal>
-      <DialogOverlay className={overlayClassName} />
-      <DialogPrimitive.Content
-         ref={ref}
-         className={cn(
-            "fixed left-1/2 top-1/2 z-50 grid max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-2xl border border-border-default bg-modal-bg p-6 text-text-primary shadow-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-            className
-         )}
-         {...props}
-      >
-         {children}
-         <DialogPrimitive.Close
-            aria-label="Close dialog"
-            className="absolute right-4 top-4 rounded-lg p-1 text-text-tertiary transition-colors hover:bg-surface-nested hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:pointer-events-none"
+>(
+   (
+      { className, overlayClassName, hideCloseButton, children, ...props },
+      ref
+   ) => (
+      <DialogPortal>
+         <DialogOverlay className={overlayClassName} />
+         <DialogPrimitive.Content
+            ref={ref}
+            className={cn(
+               "fixed left-1/2 top-1/2 z-50 grid max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-2xl border border-border-default bg-modal-bg p-6 text-text-primary shadow-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+               className
+            )}
+            {...props}
          >
-            <X className="h-4 w-4" />
-         </DialogPrimitive.Close>
-      </DialogPrimitive.Content>
-   </DialogPortal>
-));
+            {children}
+            {!hideCloseButton && (
+               <DialogPrimitive.Close
+                  aria-label="Close dialog"
+                  className="absolute right-4 top-4 rounded-lg p-1 text-text-tertiary transition-colors hover:bg-surface-nested hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:pointer-events-none"
+               >
+                  <X className="h-4 w-4" />
+               </DialogPrimitive.Close>
+            )}
+         </DialogPrimitive.Content>
+      </DialogPortal>
+   )
+);
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({

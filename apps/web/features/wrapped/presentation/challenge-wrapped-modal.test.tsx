@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
    ChallengeScoreboardViewModel,
@@ -137,6 +137,11 @@ function buildChallenge(
 }
 
 describe("ChallengeWrappedModal design token migration & responsive layout", () => {
+   beforeEach(() => {
+      modalState.isOpen = true;
+      modalState.slideIndex = 0;
+      modalState.revealed = false;
+   });
    it("renders dialog scrim, card with 16:9 desktop ratio, and correctly sized arrow icons", () => {
       modalState.isOpen = true;
       modalState.slideIndex = 0;
@@ -279,7 +284,7 @@ describe("ChallengeWrappedModal design token migration & responsive layout", () 
       modalState.slideIndex = 0;
       const challenge = buildChallenge({
          isWrappedSeen: false,
-         isFeedbackFilled: false,
+         isFeedbackFilled: true,
       });
 
       const markup = renderToStaticMarkup(
@@ -296,6 +301,46 @@ describe("ChallengeWrappedModal design token migration & responsive layout", () 
       expect(markup).toContain(
          "translate-x-[30px] opacity-0 invisible pointer-events-none"
       );
+   });
+
+   it("omits Maybe later button and modal close button when mandatory feedback flag is enabled and feedback is unfilled", () => {
+      modalState.isOpen = true;
+      modalState.slideIndex = 4;
+      const challenge = buildChallenge({
+         isWrappedSeen: true,
+         isFeedbackFilled: false,
+      });
+
+      const markup = renderToStaticMarkup(
+         <ChallengeWrappedModal
+            challenge={challenge}
+            isMandatoryFeedback={true}
+         />
+      );
+
+      expect(markup).toContain("Give feedback");
+      expect(markup).not.toContain("Maybe later");
+      expect(markup).not.toContain('aria-label="Close wrapped"');
+   });
+
+   it("allows Maybe later and close buttons when mandatory feedback flag is disabled", () => {
+      modalState.isOpen = true;
+      modalState.slideIndex = 4;
+      const challenge = buildChallenge({
+         isWrappedSeen: true,
+         isFeedbackFilled: false,
+      });
+
+      const markup = renderToStaticMarkup(
+         <ChallengeWrappedModal
+            challenge={challenge}
+            isMandatoryFeedback={false}
+         />
+      );
+
+      expect(markup).toContain("Give feedback");
+      expect(markup).toContain("Maybe later");
+      expect(markup).toContain('aria-label="Close wrapped"');
    });
    it("renders the customizable mascot companion in modal header with slide-appropriate mood", () => {
       const challenge = buildChallenge({

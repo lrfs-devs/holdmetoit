@@ -112,10 +112,21 @@ describe("ChallengeFeedbackDialog", () => {
       expect(html).not.toContain("var(--ink)");
    });
 
-   it("includes submit and cancel action buttons", () => {
+   it("includes submit and cancel action buttons by default", () => {
       const html = renderToHtml(<ChallengeFeedbackDialog {...defaultProps} />);
 
       expect(html).toContain("Submit Feedback");
       expect(html).toContain("Cancel");
+      expect(html).toContain("Close dialog");
+   });
+
+   it("omits cancel and close buttons when mandatory is true", () => {
+      const html = renderToHtml(
+         <ChallengeFeedbackDialog {...defaultProps} mandatory={true} />
+      );
+
+      expect(html).toContain("Submit Feedback");
+      expect(html).not.toContain("Cancel");
+      expect(html).not.toContain("Close dialog");
    });
 });

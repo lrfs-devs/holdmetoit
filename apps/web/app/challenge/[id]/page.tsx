@@ -104,6 +104,9 @@ export default async function ChallengePage({
    const isGlobalLeaderboardEnabled = await isFeatureEnabled(
       FEATURE_FLAG_KEYS.globalLeaderboard
    );
+   const isMandatoryFeedbackEnabled = await isFeatureEnabled(
+      FEATURE_FLAG_KEYS.mandatoryFeedback
+   );
 
    let challenge: Awaited<ReturnType<typeof getChallengeScoreboard>> = null;
    try {
@@ -159,6 +162,7 @@ export default async function ChallengePage({
          isBettingEnabled={isBettingEnabled}
          isWithdrawalEnabled={isWithdrawalEnabled}
          isGlobalLeaderboardEnabled={isGlobalLeaderboardEnabled}
+         isMandatoryFeedback={isMandatoryFeedbackEnabled}
       />
    );
 }

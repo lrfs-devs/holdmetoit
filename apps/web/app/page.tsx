@@ -13,6 +13,7 @@ import {
 import { getChallengeScoreboard } from "@/features/leaderboard/data/leaderboard-data";
 import { getUserCategorizedTasks } from "@/features/tasks/data/task.repository";
 import { isFeatureEnabled } from "@/features/feature-flags/api/server";
+import { FEATURE_FLAG_KEYS } from "@/features/feature-flags/domain/feature-flag-keys";
 import { WRAPPED_FEATURE_FLAG_KEY } from "@/features/wrapped/api/wrapped-flag";
 import {
    COLLAPSED_CATEGORIES_COOKIE,
@@ -76,6 +77,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       fetchedUpcomingChallenge,
       eligibleWrapped,
       isWrappedEnabled,
+      isMandatoryFeedbackEnabled,
    ] = await Promise.all([
       userId
          ? getParticipantCockpit(userId, query.challenge)
@@ -89,6 +91,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
          : Promise.resolve(null),
       userId
          ? isFeatureEnabled(WRAPPED_FEATURE_FLAG_KEY)
+         : Promise.resolve(false),
+      userId
+         ? isFeatureEnabled(FEATURE_FLAG_KEYS.mandatoryFeedback)
          : Promise.resolve(false),
    ]);
 
@@ -168,6 +173,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                profileUrl={profileUrl}
                initialCollapsedCategoryIds={initialCollapsedCategoryIds}
                initialIsRolloverSnoozed={initialIsRolloverSnoozed}
+               isMandatoryFeedback={isMandatoryFeedbackEnabled}
             />
          </main>
       </div>

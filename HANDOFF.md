@@ -4,7 +4,7 @@
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
 > **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-09 (Session 208 — fix(auth): revalidate Discord roles, shorten sessions, restrict admin role editing; GH #227)
+> **Last Updated:** 2026-11-10 (Session 209 — feat(wrapped): persistent mandatory feedback modal gated behind mandatory_feedback_v1 feature flag)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
@@ -3167,5 +3167,38 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
    5. **Quality Gates & Verification:**
       - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
       - `npm run test:web`: ✅ 260 test files (2,768 tests) passing 100% green.
+      - `npm run build:web`: ✅ Production build clean (21 routes compiled, 0 errors).
+- **NEXT STEP (completed in Session 209):** Persistent mandatory feedback screen with feature flag toggle.
+
+### Session 209 — 2026-11-10 (feat(wrapped): persistent mandatory feedback modal gated behind mandatory_feedback_v1 feature flag — on `afnan-jr`)
+
+- **Context & Objectives:** Implement an unclosable, persistent feedback survey flow for participants who have completed a challenge but not submitted their feedback survey, while strictly gating the enforcement behind a runtime feature flag (`mandatory_feedback_v1`) so operators can toggle between gentle (opt-in) and mandatory modes via `/devboard`.
+- **Changes Completed:**
+   1. **Feature Flag Architecture & Registration (`packages/database` & `apps/web/features/feature-flags/`):**
+      - Registered `mandatoryFeedback: "mandatory_feedback_v1"` in `FEATURE_FLAG_KEYS` (`apps/web/features/feature-flags/domain/feature-flag-keys.ts`).
+      - Added `mandatory_feedback_v1` definition to `SYSTEM_FEATURE_FLAGS` in `packages/database/prisma/seed-feature-flags.ts` with stage `BETA`, default status `DISABLED`, description, and categorization tags.
+      - Documented the flag in `docs/feature-flags/README.md` and `docs/feature-flag/README.md` under Section 6.1 Flag Registry with operational behavior notes.
+      - Seeded the flag row as `DISABLED` in both local PostgreSQL (`localhost:5433/holdmetoit3`) and Supabase.
+   2. **Server-Side Evaluation & Route Wiring (`apps/web/features/wrapped/api/` & `app/`):**
+      - Added `isMandatoryFeedbackEnabled()` helper in `apps/web/features/wrapped/api/wrapped-flag.ts` delegating to `isFeatureEnabled(FEATURE_FLAG_KEYS.mandatoryFeedback)` with fail-closed safety and unit tests in `wrapped-flag.test.ts`.
+      - Evaluated `isMandatoryFeedback` server-side in `app/page.tsx` (for authenticated users) and `app/challenge/[id]/page.tsx`.
+      - Forwarded `isMandatoryFeedback` through `HomeCockpitView`, `GuestCockpitView`, `DashboardWrapped`, `ChallengeView`, and `ChallengeWrappedModal`.
+   3. **Pure Domain Logic & Due Evaluation (`apps/web/features/wrapped/domain/`):**
+      - Updated `isWrappedPopupDue` in `wrapped.ts` to accept optional `isMandatoryFeedback?: boolean`.
+      - When `isMandatoryFeedback: true`: the wrapped popup remains due as long as `!seen || !feedbackCompleted`.
+      - When `isMandatoryFeedback: false` (or omitted): reverts cleanly to standard behavior (`!seen`).
+      - Added comprehensive unit tests in `wrapped.test.ts` verifying flag ON vs flag OFF behavior with combinations of localStorage and server-synced feedback state.
+   4. **Presentation Layer & Mandatory Dialog Enforcements (`apps/web/features/wrapped/presentation/`):**
+      - `challenge-wrapped-modal.tsx`:
+         - When `isMandatoryFeedback` is true and feedback is incomplete: automatically opens `ChallengeFeedbackDialog` on mount (even if story slides were already viewed), hides Slide 4 "Maybe later" bypass, removes modal close button (`X`), and disables Escape key & backdrop dismissal.
+         - When `isMandatoryFeedback` is false: preserves original gentle behavior ("Maybe later" button present, `X` close icon visible, Escape and backdrop dismissal permitted).
+      - `challenge-feedback-dialog.tsx`: Added `mandatory?: boolean` prop. When mandatory, removes `Cancel` button, hides Radix `X` close icon via `hideCloseButton`, and blocks pointer-down outside and Escape key events.
+      - `components/ui/dialog.tsx`: Added `hideCloseButton?: boolean` to `DialogContentProps` for clean Radix UI primitive control.
+      - Unit and component tests updated in `challenge-wrapped-modal.test.tsx` and `challenge-feedback-dialog.test.tsx` to assert both flag-enabled and flag-disabled states.
+   5. **Database Migration Alignment:**
+      - Applied missing migration `20261110000000_update_challenge_feedback_questions` to local PostgreSQL (`localhost:5433/holdmetoit3`) database to resolve Prisma P2022 column drift (`joinReason`).
+   6. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 260 test files (2,773 tests) passing 100% green.
       - `npm run build:web`: ✅ Production build clean (21 routes compiled, 0 errors).
 - **NEXT STEP:** Merge `afnan-jr` into `dev` via PR once peer-reviewed.

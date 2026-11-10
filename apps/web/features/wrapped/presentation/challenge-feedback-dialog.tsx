@@ -23,6 +23,7 @@ export interface ChallengeFeedbackDialogProps {
    challengeTitle: string;
    onClose: () => void;
    onSuccess?: () => void;
+   mandatory?: boolean;
 }
 
 /**
@@ -34,6 +35,7 @@ export function ChallengeFeedbackDialog({
    challengeTitle,
    onClose,
    onSuccess,
+   mandatory = false,
 }: ChallengeFeedbackDialogProps) {
    const [isPending, startTransition] = useTransition();
    const [isSubmitted, setIsSubmitted] = useState(false);
@@ -107,10 +109,23 @@ export function ChallengeFeedbackDialog({
       <Dialog
          open={isOpen}
          onOpenChange={(open) => {
-            if (!open) onClose();
+            if (!open && !mandatory) onClose();
          }}
       >
-         <DialogContent className="max-w-panel-md z-[70] flex flex-col rounded-2xl sm:rounded-3xl bg-surface-primary border-border-default text-text-primary">
+         <DialogContent
+            className="max-w-panel-md z-[70] flex flex-col rounded-2xl sm:rounded-3xl bg-surface-primary border-border-default text-text-primary"
+            hideCloseButton={mandatory}
+            onPointerDownOutside={(e) => {
+               if (mandatory) {
+                  e.preventDefault();
+               }
+            }}
+            onEscapeKeyDown={(e) => {
+               if (mandatory) {
+                  e.preventDefault();
+               }
+            }}
+         >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-border-default shrink-0">
                <div>
@@ -329,14 +344,16 @@ export function ChallengeFeedbackDialog({
 
                   {/* Footer actions */}
                   <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-default bg-surface-primary shrink-0 rounded-b-2xl sm:rounded-b-3xl">
-                     <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={isPending}
-                        className="px-4 py-2 rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong font-sans font-medium text-xs transition-colors cursor-pointer"
-                     >
-                        Cancel
-                     </button>
+                     {!mandatory && (
+                        <button
+                           type="button"
+                           onClick={onClose}
+                           disabled={isPending}
+                           className="px-4 py-2 rounded-xl border border-border-default bg-surface-elevated text-text-tertiary hover:text-text-primary hover:border-border-strong font-sans font-medium text-xs transition-colors cursor-pointer"
+                        >
+                           Cancel
+                        </button>
+                     )}
                      <button
                         type="submit"
                         disabled={isPending}
