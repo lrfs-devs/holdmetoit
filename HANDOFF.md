@@ -4,7 +4,7 @@
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
 > **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-09 (Session 208 — fix(auth): revalidate Discord roles, shorten sessions, restrict admin role editing; GH #227)
+> **Last Updated:** 2026-11-10 (Session 209 — feat(wrapped): persistent mandatory feedback modal gated behind mandatory_feedback_v1 feature flag)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
@@ -201,6 +201,7 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 - **Behavior change:** a `PARTICIPANT` newly added to `DEV_DISCORD_IDS` becomes `DEV` at next sign-in (previously the session callback elevated them immediately). An existing `ADMIN` is promoted within the window.
 - **Validation:** web auth/admin suites green (199 tests) incl. new policy, revalidation, guild-service and action tests; `lint:web` 0 errors; Prettier clean. `typecheck:web` and the full `test:web` were **not** run to completion in the authoring sandbox (Prisma engine download blocked, so no generated client): the type error count did not increase versus `dev`. Re-run both in CI or locally.
 - **NEXT:** run `npm run typecheck:web` and `npm run test:web` with a generated Prisma client; open PR `fix/auth-role-revalidation-227` → `dev` and move #227 to `In Review` (not `Done` until merged to `dev` and released to `main`). Ensure `AUTH_URL` is set in every deployed environment.
+
 ### Session 205 — 2026-11-09 (Feat: 1-Click Discord Todo Export for Daily & Weekly Tasks on `krish` · GH #260 / Jira KAN-97)
 
 - **Scope & Objectives:** Implemented 1-click clipboard export for Daily and Weekly todos from the website directly to Discord-ready text. Linked with GitHub Issue #260 and Jira Ticket KAN-97 (assigned to Krish Jaiswal).
@@ -2931,6 +2932,29 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - `npm run typecheck:web`: ✅ 0 compiler errors (`tsc --noEmit` exits with 0).
       - `npm run lint:web`: ✅ 0 errors (design-token guard passed).
       - Unit test suites: ✅ 100% green exit across all wrapped tests (17 files, 126 tests) and profile tests.
+- **NEXT STEP (completed in Session 202):** PR #242 submitted to `dev`, Jira issue KAN-93 transitioned to `In Review`. Ready for peer review and merge into `dev`.
+
+### Session 199 — 2026-11-09 (feat(ypt-bot): remove challenge lockdown grace period and lock immediately upon completion — on `afnan-jr`)
+
+- **Context & Objectives:** Remove the post-challenge 6-hour lockdown grace window completely. Challenges now lock immediately upon reaching `endAt` (`now >= endAt`) during ingestion:
+   1. `apps/ypt-bot/src/db/challenge-repository.js`:
+      - Set `CHALLENGE_GRACE_WINDOW_MS = 0`.
+      - Updated `getChallengeLifecycle`: removed `DAY7_GRACE` state; challenges transition directly from `ACTIVE` to `EXPIRED` (`canIngest: false, isGracePeriod: false`) as soon as `now > endAt`.
+      - Updated `lockExpiredChallengesAfterGrace`: cutoff set to `now` (`endAt: { lte: now }`); audit reason and `newValue.title` standardized to `"challenge ended"`.
+      - Updated `getActiveChallenge`: queries active challenges with `endAt: { gte: now }`.
+   2. `apps/ypt-bot/src/ingest/daily-study-log.js`:
+      - Removed legacy Day 7 grace session accumulation branch; unified ingestion to compute daily integer seconds with session and daily clamps during active challenge days.
+      - Updated comments to reflect immediate auto-lock on challenge expiry.
+   3. `apps/ypt-bot/test/db/challenge-repository.test.js`:
+      - Updated lifecycle tests to verify active boundary at `endAt` and immediate `EXPIRED` at `endAt + 1s`.
+      - Updated auto-lock tests: asserts challenge does not lock while active (`now < endAt`), and locks immediately with `auditReason: "challenge ended"` and `newValue.title: "challenge ended"` once `now >= endAt`.
+      - Updated simulation tests and verified idempotency and reconciliation retries.
+   4. `docs/ypt-bot/doc.md`:
+      - Updated lifecycle documentation and audit log specifications in Section 6 and test summary in Section 8.
+- **Quality Gates:**
+   - `apps/ypt-bot` test suite: ✅ 98/98 tests passing across all 33 test suites (`npm test` in `apps/ypt-bot`).
+   - `apps/web` unit tests: ✅ 64/64 challenge-day tests and 23/23 challenge-lifecycle tests green.
+- **NEXT STEP:** Changes verified across YPT bot and web apps. Ready for review and merge.
 - **NEXT STEP:** PR #242 submitted to `dev`, Jira issue KAN-93 transitioned to `In Review`. Ready for peer review and merge into `dev`.
 
 ### Session 201 — 2026-11-05 (feat(identity): platform usernames backend engine, UI unification, and feature flag gating — on `untitled-worktree`)
@@ -3111,4 +3135,70 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
    5. **Quality Gates & Verification:**
       - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
       - `npm run test:web`: ✅ 255 test files (2,696 tests) passing 100% green.
-- **NEXT STEP:** Merge PR into `dev` after review approvals.
+- **NEXT STEP (completed in Session 208):** Challenge feedback question modernization (single-word join motivation).
+
+### Session 208 — 2026-11-10 (feat(wrapped): challenge ending feedback survey updates — streamline survey to 5 questions & add single-word join motivation — on `afnan-jr`)
+
+- **Context & Objectives:** Modernize and streamline the post-challenge feedback survey dialog (`ChallengeFeedbackDialog`) by removing 4 obsolete questions (`soloPunishment`, `trackingPreference`, `workSchoolHours`, and `soloStyle`), adding a single-word join reason prompt to capture participant motivation, and renumbering the survey to a focused 5-question form.
+- **Changes Completed:**
+   1. **Database Schema & Migration (`packages/database`):**
+      - Updated `ChallengeFeedback` model in `schema.prisma`: added `joinReason String? @db.Text` and altered `soloPunishment`, `trackingPreference`, `workSchoolHours`, and `soloStyle` to `String?` (nullable) to preserve historical challenge survey responses without destructive data loss.
+      - Added migration `packages/database/prisma/migrations/20261110000000_update_challenge_feedback_questions/migration.sql`.
+      - Documented migration in `packages/database/prisma/migrations/README.md`.
+      - Re-generated Prisma client and built `@holdmetoit/database`.
+   2. **Pure Domain Logic & Embed Builder (`apps/web/features/wrapped/domain/`):**
+      - `challenge-feedback.schema.ts`: Added pure `countWords(value)` helper and updated `submitChallengeFeedbackSchema` to validate `joinReason` with max 50 chars and a refinement enforcing at most one word (`countWords(val) <= 1`). Removed `soloPunishmentOptions`, `trackingPreferenceOptions`, `workSchoolHoursOptions`, and `soloStyleOptions`.
+      - `challenge-feedback.schema.test.ts`: Added tests verifying `countWords`, valid single-word submissions, rejection of multi-word answers, 50-character limit, and empty optional text. Removed obsolete field assertions.
+      - `challenge-feedback-embed.ts`: Streamlined Discord embed fields to 5 base inline fields (`Submitter`, `Fairness Rating`, `Improved Consistency?`, `⚔️ Why Did You Join?`, `Challenge`) plus 2 optional multiline blocks (`Suggestions & Complaints`, `Solo Ideas`). Removed obsolete tracking, work/school, solo style, and punishment fields.
+      - `challenge-feedback-embed.test.ts`: Updated tests to assert presence of `⚔️ Why Did You Join?` and absence of all 4 removed questions.
+   3. **Data Access & Server Actions (`apps/web/features/wrapped/data/` & `api/`):**
+      - `challenge-feedback.repository.ts`: Updated `SaveChallengeFeedbackParams` and `upsert` create/update to persist `joinReason` and handle nullable removed fields.
+      - `challenge-feedback.repository.test.ts`: Updated mock payloads and assertions.
+      - `wrapped.actions.ts`: Updated `submitChallengeFeedbackAction` to unpack `joinReason` from validated input and pass to repository and Discord embed builder.
+      - `wrapped.actions.test.ts`: Updated fixtures and verified action dispatch.
+   4. **Presentation Layer (`apps/web/features/wrapped/presentation/`):**
+      - `challenge-feedback-dialog.tsx`: Streamlined dialog to 5 focused questions:
+         1. Consistency (`consistency`)
+         2. Fairness rating (`fairnessRating`)
+         3. Suggestions / complaints (`teamBattleFeedback`)
+         4. Why did you join the battle? (`joinReason`, single word with dynamic `One word only` indicator)
+         5. Any other ideas or thoughts for the upcoming Solo Challenge? (`soloIdeas`)
+      - `challenge-feedback-dialog.test.tsx`: Updated tests to assert all 5 survey questions render and all 4 removed questions are absent.
+   5. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 260 test files (2,768 tests) passing 100% green.
+      - `npm run build:web`: ✅ Production build clean (21 routes compiled, 0 errors).
+- **NEXT STEP (completed in Session 209):** Persistent mandatory feedback screen with feature flag toggle.
+
+### Session 209 — 2026-11-10 (feat(wrapped): persistent mandatory feedback modal gated behind mandatory_feedback_v1 feature flag — on `afnan-jr`)
+
+- **Context & Objectives:** Implement an unclosable, persistent feedback survey flow for participants who have completed a challenge but not submitted their feedback survey, while strictly gating the enforcement behind a runtime feature flag (`mandatory_feedback_v1`) so operators can toggle between gentle (opt-in) and mandatory modes via `/devboard`.
+- **Changes Completed:**
+   1. **Feature Flag Architecture & Registration (`packages/database` & `apps/web/features/feature-flags/`):**
+      - Registered `mandatoryFeedback: "mandatory_feedback_v1"` in `FEATURE_FLAG_KEYS` (`apps/web/features/feature-flags/domain/feature-flag-keys.ts`).
+      - Added `mandatory_feedback_v1` definition to `SYSTEM_FEATURE_FLAGS` in `packages/database/prisma/seed-feature-flags.ts` with its key, name, and description, seeding new flags with rollout mode `DISABLED`.
+      - Documented the flag in `docs/feature-flags/README.md` and `docs/feature-flag/README.md` under Section 6.1 Flag Registry with operational behavior notes.
+      - Seeded the flag row as `DISABLED` in both local PostgreSQL (`localhost:5433/holdmetoit3`) and Supabase.
+   2. **Server-Side Evaluation & Route Wiring (`apps/web/features/wrapped/api/` & `app/`):**
+      - Added `isMandatoryFeedbackEnabled()` helper in `apps/web/features/wrapped/api/wrapped-flag.ts` delegating to `isFeatureEnabled(FEATURE_FLAG_KEYS.mandatoryFeedback)` with fail-closed safety and unit tests in `wrapped-flag.test.ts`.
+      - Evaluated `isMandatoryFeedback` server-side in `app/page.tsx` (for authenticated users) and `app/challenge/[id]/page.tsx`.
+      - Forwarded `isMandatoryFeedback` through `HomeCockpitView`, `GuestCockpitView`, `DashboardWrapped`, `ChallengeView`, and `ChallengeWrappedModal`.
+   3. **Pure Domain Logic & Due Evaluation (`apps/web/features/wrapped/domain/`):**
+      - Updated `isWrappedPopupDue` in `wrapped.ts` to accept optional `isMandatoryFeedback?: boolean`.
+      - When `isMandatoryFeedback: true`: the wrapped popup remains due as long as `!seen || !feedbackCompleted`.
+      - When `isMandatoryFeedback: false` (or omitted): reverts cleanly to standard behavior (`!seen`).
+      - Added comprehensive unit tests in `wrapped.test.ts` verifying flag ON vs flag OFF behavior with combinations of localStorage and server-synced feedback state.
+   4. **Presentation Layer & Mandatory Dialog Enforcements (`apps/web/features/wrapped/presentation/`):**
+      - `challenge-wrapped-modal.tsx`:
+         - When `isMandatoryFeedback` is true and feedback is incomplete: automatically opens `ChallengeFeedbackDialog` on mount (even if story slides were already viewed), hides Slide 4 "Maybe later" bypass, removes modal close button (`X`), and disables Escape key & backdrop dismissal.
+         - When `isMandatoryFeedback` is false: preserves original gentle behavior ("Maybe later" button present, `X` close icon visible, Escape and backdrop dismissal permitted).
+      - `challenge-feedback-dialog.tsx`: Added `mandatory?: boolean` prop. When mandatory, removes `Cancel` button, hides Radix `X` close icon via `hideCloseButton`, and blocks pointer-down outside and Escape key events.
+      - `components/ui/dialog.tsx`: Added `hideCloseButton?: boolean` to `DialogContentProps` for clean Radix UI primitive control.
+      - Unit and component tests updated in `challenge-wrapped-modal.test.tsx` and `challenge-feedback-dialog.test.tsx` to assert both flag-enabled and flag-disabled states.
+   5. **Database Migration Alignment:**
+      - Applied missing migration `20261110000000_update_challenge_feedback_questions` to local PostgreSQL (`localhost:5433/holdmetoit3`) database to resolve Prisma P2022 column drift (`joinReason`).
+   6. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web`: ✅ 260 test files (2,773 tests) passing 100% green.
+      - `npm run build:web`: ✅ Production build clean (21 routes compiled, 0 errors).
+- **NEXT STEP:** Merge `afnan-jr` into `dev` via PR once peer-reviewed.

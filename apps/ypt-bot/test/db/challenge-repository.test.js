@@ -36,33 +36,18 @@ describe("getChallengeLifecycle", () => {
       assert.strictEqual(lifecycle.isGracePeriod, false);
    });
 
-   test("returns DAY7_GRACE during the 6 hours immediately following Day 7 completion", () => {
+   test("returns ACTIVE at exact endAt boundary", () => {
       const challenge = { startAt, endAt, resultsLockedAt: null };
-      // 2 hours into Monday after Day 7 ended
-      const now = new Date("2026-10-12T02:00:00.000Z");
-      const lifecycle = getChallengeLifecycle(challenge, now);
+      const lifecycle = getChallengeLifecycle(challenge, endAt);
 
-      assert.strictEqual(lifecycle.state, "DAY7_GRACE");
+      assert.strictEqual(lifecycle.state, "ACTIVE");
       assert.strictEqual(lifecycle.canIngest, true);
-      assert.strictEqual(lifecycle.isGracePeriod, true);
-      assert.strictEqual(lifecycle.day7End.getTime(), endAt.getTime());
+      assert.strictEqual(lifecycle.isGracePeriod, false);
    });
 
-   test("returns DAY7_GRACE at exact upper boundary of 6-hour window", () => {
+   test("returns EXPIRED immediately once challenge endAt has passed (no grace period)", () => {
       const challenge = { startAt, endAt, resultsLockedAt: null };
-      const exactEnd = new Date(endAt.getTime() + CHALLENGE_GRACE_WINDOW_MS);
-      const lifecycle = getChallengeLifecycle(challenge, exactEnd);
-
-      assert.strictEqual(lifecycle.state, "DAY7_GRACE");
-      assert.strictEqual(lifecycle.canIngest, true);
-      assert.strictEqual(lifecycle.isGracePeriod, true);
-   });
-
-   test("returns EXPIRED once 6 hours past Day 7 completion have elapsed", () => {
-      const challenge = { startAt, endAt, resultsLockedAt: null };
-      const pastEnd = new Date(
-         endAt.getTime() + CHALLENGE_GRACE_WINDOW_MS + 1000
-      ); // 6h + 1s
+      const pastEnd = new Date(endAt.getTime() + 1000); // 1s past end
       const lifecycle = getChallengeLifecycle(challenge, pastEnd);
 
       assert.strictEqual(lifecycle.state, "EXPIRED");
@@ -84,7 +69,7 @@ describe("getChallengeLifecycle", () => {
       assert.strictEqual(lifecycle.isGracePeriod, false);
    });
 
-   test("returns LOCKED during the grace period if resultsLockedAt was triggered", () => {
+   test("returns LOCKED when resultsLockedAt has passed after challenge endAt", () => {
       const challenge = {
          startAt,
          endAt,
@@ -98,122 +83,20 @@ describe("getChallengeLifecycle", () => {
    });
 });
 
-describe("Day 7 Grace Period Bucket Anchoring", () => {
+describe("Challenge Day Bucket Anchoring", () => {
    const startAt = new Date("2026-10-05T00:00:00.000Z");
    const endAt = new Date("2026-10-12T00:00:00.000Z"); // Day 7 completion (Monday 00:00 UTC)
 
-   test("grace period anchors logDate strictly to Day 7 (Sunday 2026-10-11)", () => {
+   test("anchors logDate strictly to Day 7 for timestamps within Day 7", () => {
       const challenge = { startAt, endAt, resultsLockedAt: null };
-      const nowGrace = new Date("2026-10-12T04:30:00.000Z"); // 4.5h past Day 7 completion
-      const lifecycle = getChallengeLifecycle(challenge, nowGrace);
+      const nowDay7 = new Date("2026-10-11T23:30:00.000Z"); // 30m before completion
+      const lifecycle = getChallengeLifecycle(challenge, nowDay7);
 
-      assert.strictEqual(lifecycle.isGracePeriod, true);
+      assert.strictEqual(lifecycle.state, "ACTIVE");
+      assert.strictEqual(lifecycle.isGracePeriod, false);
 
-      // Using the 1s offset before day7End anchors the bucket to Day 7
-      const logDate = computeChallengeDayLogDate(
-         new Date(lifecycle.day7End.getTime() - 1000),
-         challenge.startAt
-      );
-
+      const logDate = computeChallengeDayLogDate(nowDay7, challenge.startAt);
       assert.strictEqual(logDate.toISOString().slice(0, 10), "2026-10-11");
-   });
-});
-
-describe("Day 7 Grace Period Session Filtering Logic", () => {
-   const day7End = new Date("2026-10-12T00:00:00.000Z");
-   const day7EndMs = day7End.getTime();
-
-   // Helper matching daily-study-log.js grace session derivation logic
-   function filterGraceSession({ member, existing }) {
-      const isStudying = Boolean(member.isStudying);
-      const sessionStartMs = member.sessionStartMs
-         ? Number(member.sessionStartMs)
-         : null;
-      const isOldSession =
-         isStudying && sessionStartMs !== null && sessionStartMs < day7EndMs;
-      const wasStudyingOldSession = existing?.status === "STUDYING";
-
-      let durationSeconds;
-      let status;
-
-      if (isOldSession) {
-         const studyMs = Math.max(
-            Number(member.todayStudyMs || 0) +
-               Number(member.sessionElapsedMs || 0)
-         );
-         durationSeconds = Math.floor(studyMs / 1000);
-         status = "STUDYING";
-      } else if (wasStudyingOldSession && !isStudying) {
-         const finalized = Math.floor(Number(member.todayStudyMs || 0) / 1000);
-         durationSeconds = Math.max(existing?.durationSeconds || 0, finalized);
-         status = "OFFLINE";
-      } else {
-         durationSeconds = existing ? existing.durationSeconds : 0;
-         status = "OFFLINE";
-      }
-
-      return { durationSeconds, status };
-   }
-
-   test("permits in-progress old session started before Day 7 completion to accumulate", () => {
-      const member = {
-         isStudying: true,
-         sessionStartMs: new Date("2026-10-11T23:30:00.000Z").getTime(), // 30m before completion
-         sessionElapsedMs: 75 * 60 * 1000, // 1h 15m elapsed
-         todayStudyMs: 3600 * 1000, // 1h previously recorded
-      };
-      const existing = { durationSeconds: 3600, status: "STUDYING" };
-
-      const result = filterGraceSession({ member, existing });
-      assert.strictEqual(result.status, "STUDYING");
-      assert.strictEqual(result.durationSeconds, 8100); // 3600s + 4500s
-   });
-
-   test("finalizes old session when member goes offline during grace window", () => {
-      const member = {
-         isStudying: false,
-         sessionStartMs: null,
-         sessionElapsedMs: 0,
-         todayStudyMs: 8100 * 1000, // completed 2h 15m total
-      };
-      // In previous cycle, was logged as STUDYING in the old session
-      const existing = { durationSeconds: 7800, status: "STUDYING" };
-
-      const result = filterGraceSession({ member, existing });
-      assert.strictEqual(result.status, "OFFLINE");
-      assert.strictEqual(result.durationSeconds, 8100);
-   });
-
-   test("rejects new session started on or after Day 7 completion", () => {
-      const member = {
-         isStudying: true,
-         sessionStartMs: new Date("2026-10-12T00:30:00.000Z").getTime(), // 30m AFTER completion
-         sessionElapsedMs: 30 * 60 * 1000,
-         todayStudyMs: 5000 * 1000,
-      };
-      const existing = { durationSeconds: 3600, status: "OFFLINE" };
-
-      const result = filterGraceSession({ member, existing });
-      assert.strictEqual(result.status, "OFFLINE");
-      assert.strictEqual(
-         result.durationSeconds,
-         3600,
-         "Day 7 duration must not increase from new session"
-      );
-   });
-
-   test("keeps offline members without pending old session unchanged", () => {
-      const member = {
-         isStudying: false,
-         sessionStartMs: null,
-         sessionElapsedMs: 0,
-         todayStudyMs: 9000 * 1000, // new study time in YPT
-      };
-      const existing = { durationSeconds: 3600, status: "OFFLINE" };
-
-      const result = filterGraceSession({ member, existing });
-      assert.strictEqual(result.status, "OFFLINE");
-      assert.strictEqual(result.durationSeconds, 3600);
    });
 });
 
@@ -255,8 +138,8 @@ describe(
          );
       });
 
-      test("returns null when past 6h grace window (expired)", async () => {
-         const expiredTime = new Date("2026-10-12T07:00:00.000Z"); // 7h past endAt
+      test("returns null when past endAt (expired)", async () => {
+         const expiredTime = new Date("2026-10-12T00:05:00.000Z"); // 5m past endAt
          const challenge = await getActiveChallenge(expiredTime);
 
          assert.strictEqual(
@@ -267,7 +150,7 @@ describe(
       });
 
       test("returns latest challenge when allowFallback is explicitly true for expired query", async () => {
-         const expiredTime = new Date("2026-10-12T07:00:00.000Z");
+         const expiredTime = new Date("2026-10-12T00:05:00.000Z");
          const challenge = await getActiveChallenge(expiredTime, {
             allowFallback: true,
          });
@@ -349,8 +232,8 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
       },
    ];
 
-   test("ingests old sessions and rejects new sessions into Day 7 during DAY7_GRACE", async () => {
-      const nowGrace = new Date("2026-10-12T02:00:00.000Z"); // 2 hours after Day 7 completion
+   test("ingests member study telemetry on Day 7 of active challenge", async () => {
+      const nowActive = new Date("2026-10-11T20:00:00.000Z"); // Day 7 evening before completion
 
       const origChallengeFindMany = prisma.challenge.findMany;
       const origChallengeUpdateMany = prisma.challenge.updateMany;
@@ -363,7 +246,7 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
       const updateCalls = [];
 
       prisma.challenge.findMany = async ({ where } = {}) => {
-         // If called from lockExpiredChallengesAfterGrace, mockChallenge is not expired (< 6h)
+         // If called from lockExpiredChallengesAfterGrace, mockChallenge is not expired (before endAt)
          if (where?.endAt?.lte) return [];
          return [mockChallenge];
       };
@@ -417,23 +300,23 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
 
       try {
          const members = [
-            // Alice: ongoing old session (started 23:30 on Day 7)
+            // Alice: ongoing session
             {
                userId: "ypt-alice",
                isStudying: true,
-               sessionStartMs: new Date("2026-10-11T23:30:00.000Z").getTime(),
+               sessionStartMs: new Date("2026-10-11T18:30:00.000Z").getTime(),
                sessionElapsedMs: 90 * 60 * 1000, // 1.5h
                todayStudyMs: 3600 * 1000, // 1h base
             },
-            // Bob: new session started after Day 7 ended (started 00:30 on Monday)
+            // Bob: active session
             {
                userId: "ypt-bob",
                isStudying: true,
-               sessionStartMs: new Date("2026-10-12T00:30:00.000Z").getTime(),
+               sessionStartMs: new Date("2026-10-11T19:00:00.000Z").getTime(),
                sessionElapsedMs: 60 * 60 * 1000,
                todayStudyMs: 5000 * 1000,
             },
-            // Charlie: completed old session (now offline)
+            // Charlie: completed session (now offline)
             {
                userId: "ypt-charlie",
                isStudying: false,
@@ -445,7 +328,7 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
             {
                userId: "ypt-diana",
                isStudying: true,
-               sessionStartMs: new Date("2026-10-11T23:00:00.000Z").getTime(),
+               sessionStartMs: new Date("2026-10-11T19:00:00.000Z").getTime(),
                sessionElapsedMs: 60 * 60 * 1000,
                todayStudyMs: 5000 * 1000,
             },
@@ -461,7 +344,7 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
          const result = await ingestGroupMembersToDailyStudyLogs(
             "test-group",
             members,
-            nowGrace,
+            nowActive,
             silentLogger
          );
 
@@ -474,7 +357,7 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
          assert.strictEqual(result.skippedOverrides, 1);
          assert.strictEqual(result.upsertedCount, 3);
 
-         // Verify Alice: Old session accumulated into Day 7
+         // Verify Alice: session accumulated into Day 7
          const aliceUpsert = upsertCalls.find(
             (c) => c.where.participantId_logDate.participantId === "cp-alice"
          );
@@ -482,19 +365,15 @@ describe("ingestGroupMembersToDailyStudyLogs End-to-End Simulation (Mocked DB)",
          assert.strictEqual(aliceUpsert.create.status, "STUDYING");
          assert.strictEqual(aliceUpsert.create.durationSeconds, 9000); // 3600s + 5400s
 
-         // Verify Bob: New session rejected! Duration frozen at existing 3600s, status OFFLINE
+         // Verify Bob: Active session logged
          const bobUpsert = upsertCalls.find(
             (c) => c.where.participantId_logDate.participantId === "cp-bob"
          );
          assert.ok(bobUpsert);
-         assert.strictEqual(bobUpsert.create.status, "OFFLINE");
-         assert.strictEqual(
-            bobUpsert.create.durationSeconds,
-            3600,
-            "Bob new session must not be logged"
-         );
+         assert.strictEqual(bobUpsert.create.status, "STUDYING");
+         assert.strictEqual(bobUpsert.create.durationSeconds, 8600);
 
-         // Verify Charlie: Old session completed and finalized to OFFLINE
+         // Verify Charlie: completed session finalized to OFFLINE
          const charlieUpsert = upsertCalls.find(
             (c) => c.where.participantId_logDate.participantId === "cp-charlie"
          );
@@ -607,8 +486,8 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
       prisma.auditLog.findMany = origAuditFindMany;
    });
 
-   test("does not lock challenge while still within the 6-hour grace window", async () => {
-      const nowInsideGrace = new Date("2026-10-12T04:00:00.000Z"); // 4h into grace (< 6h)
+   test("does not lock challenge while still active (before endAt)", async () => {
+      const nowBeforeEnd = new Date("2026-10-11T23:55:00.000Z"); // 5m before endAt
 
       const origFindMany = prisma.challenge.findMany;
       const origUpdateMany = prisma.challenge.updateMany;
@@ -635,17 +514,17 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
       };
 
       try {
-         const locked = await lockExpiredChallengesAfterGrace(nowInsideGrace);
+         const locked = await lockExpiredChallengesAfterGrace(nowBeforeEnd);
          assert.strictEqual(locked.length, 0);
          assert.strictEqual(
             updateCount,
             0,
-            "Must not update challenge during grace"
+            "Must not update challenge while active"
          );
          assert.strictEqual(
             auditCount,
             0,
-            "Must not create audit log during grace"
+            "Must not create audit log while active"
          );
       } finally {
          prisma.challenge.findMany = origFindMany;
@@ -654,8 +533,8 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
       }
    });
 
-   test("locks challenge and writes audit log once 6-hour grace window has elapsed", async () => {
-      const nowPastGrace = new Date("2026-10-12T06:05:00.000Z"); // 6h 5m after Day 7 completion
+   test("locks challenge and writes audit log once challenge endAt has passed (challenge ended)", async () => {
+      const nowPastEnd = new Date("2026-10-12T00:01:00.000Z"); // 1m after Day 7 completion
 
       const origFindMany = prisma.challenge.findMany;
       const origUpdateMany = prisma.challenge.updateMany;
@@ -682,7 +561,7 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
       };
 
       try {
-         const locked = await lockExpiredChallengesAfterGrace(nowPastGrace);
+         const locked = await lockExpiredChallengesAfterGrace(nowPastEnd);
 
          assert.strictEqual(locked.length, 1);
          assert.strictEqual(locked[0].id, mockTarget.id);
@@ -693,7 +572,7 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
          assert.strictEqual(updateCalledWith.where.resultsLockedAt, null);
          assert.strictEqual(
             updateCalledWith.data.resultsLockedAt.toISOString(),
-            nowPastGrace.toISOString()
+            nowPastEnd.toISOString()
          );
 
          // Verify audit log creation
@@ -705,14 +584,8 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
          assert.strictEqual(audit.targetEntityType, "CHALLENGE");
          assert.strictEqual(audit.targetEntityName, mockTarget.title);
          assert.deepStrictEqual(audit.previousValue, { resultsLockedAt: null });
-         assert.strictEqual(
-            audit.auditReason,
-            "challenge locked after 6 hr grace hours"
-         );
-         assert.strictEqual(
-            audit.newValue.title,
-            "challenge locked after 6 hr grace hours"
-         );
+         assert.strictEqual(audit.auditReason, "challenge ended");
+         assert.strictEqual(audit.newValue.title, "challenge ended");
          assert.strictEqual(audit.newValue.autoLocked, true);
          assert.strictEqual(audit.actorUsername, "system");
       } finally {
@@ -725,7 +598,7 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
    });
 
    test("is idempotent: does not lock or create duplicate audit log if already locked", async () => {
-      const nowPastGrace = new Date("2026-10-12T06:10:00.000Z");
+      const nowPastEnd = new Date("2026-10-12T00:05:00.000Z");
 
       const origFindMany = prisma.challenge.findMany;
       const origUpdateMany = prisma.challenge.updateMany;
@@ -740,7 +613,7 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
       };
 
       try {
-         const locked = await lockExpiredChallengesAfterGrace(nowPastGrace);
+         const locked = await lockExpiredChallengesAfterGrace(nowPastEnd);
          assert.strictEqual(locked.length, 0);
          assert.strictEqual(
             auditCreated,
@@ -755,7 +628,7 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
    });
 
    test("retries previously failed challenge accountability reconciliations and deletes retry marker", async () => {
-      const nowPastGrace = new Date("2026-10-12T06:15:00.000Z");
+      const nowPastEnd = new Date("2026-10-12T00:10:00.000Z");
 
       const origFindMany = prisma.challenge.findMany;
       const origAuditDelete = prisma.auditLog.delete;
@@ -778,7 +651,7 @@ describe("lockExpiredChallengesAfterGrace & Audit Log Creation", () => {
       };
 
       try {
-         await lockExpiredChallengesAfterGrace(nowPastGrace);
+         await lockExpiredChallengesAfterGrace(nowPastEnd);
          assert.strictEqual(reconciledId, "chal-retry-123");
          assert.strictEqual(deletedAuditId, "audit-failed-1");
       } finally {

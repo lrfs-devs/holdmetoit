@@ -6,25 +6,12 @@ export const consistencyOptions = [
    "No, it did not make a difference",
 ] as const;
 
-export const trackingPreferenceOptions = [
-   "Strictly YPT",
-   "Allow all apps with no restrictions",
-] as const;
-
-export const workSchoolHoursOptions = [
-   "Yes, include work and school hours",
-   "No, dont include them",
-] as const;
-
-export const soloStyleOptions = [
-   "Competitive (Keep a leaderboard)",
-   "Laid-back (Personal goals for role rewards)",
-] as const;
-
-export const soloPunishmentOptions = [
-   "Yes, keep the punishment",
-   "No, remove the punishment",
-] as const;
+/**
+ * Counts the number of whitespace-separated words in a string.
+ */
+export function countWords(value: string): number {
+   return value.trim().split(/\s+/).filter(Boolean).length;
+}
 
 export const submitChallengeFeedbackSchema = z.object({
    challengeId: z
@@ -39,24 +26,22 @@ export const submitChallengeFeedbackSchema = z.object({
       .int("Fairness rating must be an integer")
       .min(1, "Fairness rating must be between 1 and 5")
       .max(5, "Fairness rating must be between 1 and 5"),
-   trackingPreference: z.enum(trackingPreferenceOptions, {
-      message: "Please select your preferred tracking method",
-   }),
    teamBattleFeedback: z
       .string()
       .trim()
       .max(2000, "Feedback must be under 2000 characters")
       .optional()
       .or(z.literal("")),
-   workSchoolHours: z.enum(workSchoolHoursOptions, {
-      message: "Please select an option for work or school hours",
-   }),
-   soloStyle: z.enum(soloStyleOptions, {
-      message: "Please select how you prefer the Solo Challenge to operate",
-   }),
-   soloPunishment: z.enum(soloPunishmentOptions, {
-      message: "Please indicate whether to keep the punishment PFP system",
-   }),
+   joinReason: z
+      .string()
+      .trim()
+      .max(50, "Word must be under 50 characters")
+      .refine((val) => countWords(val) <= 1, {
+         message:
+            "Why you joined must be just one word (e.g. 'Accountability')",
+      })
+      .optional()
+      .or(z.literal("")),
    soloIdeas: z
       .string()
       .trim()

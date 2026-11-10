@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -295,6 +295,7 @@ export async function runDatabaseBackup(options = {}) {
    const directory = await mkdtemp(join(tmpdir(), "supabase-backup-"));
    const filePath = join(directory, filename);
    let stored = false;
+   let fileHandle;
 
    try {
       log.info("backup_started", { objectPath });
@@ -325,7 +326,8 @@ export async function runDatabaseBackup(options = {}) {
          },
       });
 
-      const fileStats = await stat(filePath);
+      fileHandle = await open(filePath, "r");
+      const fileStats = await fileHandle.stat();
       if (fileStats.size === 0) {
          throw new Error("Backup file is empty");
       }
@@ -349,7 +351,7 @@ export async function runDatabaseBackup(options = {}) {
 
       const { error } = await bucket.upload(
          objectPath,
-         await readFile(filePath),
+         await fileHandle.readFile(),
          {
             contentType: "application/octet-stream",
             upsert: false,
@@ -383,6 +385,7 @@ export async function runDatabaseBackup(options = {}) {
          durationMs: Date.now() - startedAt,
       };
    } finally {
+      await fileHandle?.close().catch(() => {});
       if (stored) {
          await rm(directory, { recursive: true, force: true });
       } else {

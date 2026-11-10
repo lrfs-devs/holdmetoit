@@ -54,6 +54,7 @@ export interface GuestCockpitViewProps {
    isAdmin?: boolean;
    initialCollapsedCategoryIds?: string[];
    initialIsRolloverSnoozed?: boolean;
+   isMandatoryFeedback?: boolean;
    taskSection?: React.ReactNode;
 }
 
@@ -70,6 +71,7 @@ export function GuestCockpitView({
    isAdmin = false,
    initialCollapsedCategoryIds,
    initialIsRolloverSnoozed,
+   isMandatoryFeedback = false,
    taskSection,
 }: GuestCockpitViewProps) {
    const handleSignIn = loginWithDiscordAction.bind(null, "/");
@@ -581,7 +583,12 @@ export function GuestCockpitView({
          </section>
 
          {/* Optional Wrapped Challenge Modal/Story if active */}
-         {wrappedChallenge && <DashboardWrapped challenge={wrappedChallenge} />}
+         {wrappedChallenge && (
+            <DashboardWrapped
+               challenge={wrappedChallenge}
+               isMandatoryFeedback={isMandatoryFeedback}
+            />
+         )}
       </div>
    );
 }

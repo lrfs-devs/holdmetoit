@@ -262,9 +262,10 @@ To keep the application free of technical debt, every flag follows a 5-step life
 
 Live keys wired into production code, with the surfaces each one gates:
 
-| Key                    | Gated Surfaces                                                                                                                                                                                                  | Default               | Owner                             |
-| :--------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------- | :-------------------------------- |
-| `challenge_wrapped_v1` | Home dashboard wrapped popup + Shy Card; challenge **Summary** tab; challenge wrapped story popup + feedback dialog; wrapped seen-marking & feedback Server Actions (`features/wrapped/api/wrapped.actions.ts`) | `false` (fail-closed) | Participant UI / Scoring & Engine |
+| Key                     | Gated Surfaces                                                                                                                                                                                                  | Default               | Owner                             |
+| :---------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------- | :-------------------------------- |
+| `challenge_wrapped_v1`  | Home dashboard wrapped popup + Shy Card; challenge **Summary** tab; challenge wrapped story popup + feedback dialog; wrapped seen-marking & feedback Server Actions (`features/wrapped/api/wrapped.actions.ts`) | `false` (fail-closed) | Participant UI / Scoring & Engine |
+| `mandatory_feedback_v1` | Mandatory post-challenge feedback enforcement: auto-opens feedback dialog until submitted, hides "Maybe later", cancel button, and close icon, blocks backdrop and escape dismissal.                            | `false` (fail-closed) | Participant UI / Scoring & Engine |
 
 **`challenge_wrapped_v1` operator notes**
 
@@ -272,6 +273,13 @@ Live keys wired into production code, with the surfaces each one gates:
 - Enable from `/devboard`: `isEnabled = true` + `rolloutMode = GLOBAL` for everyone, or `TARGETED` with assigned Discord testers for a beta.
 - While off, `?tab=summary` clamps to Overview and the wrapped Server Actions no-op / return `FEATURE_DISABLED`, so the feature stays unreachable even from stale clients.
 - Decommission: once wrapped is permanent, remove the `isWrappedFeatureEnabled()` checks and delete the flag row (soft deletion keeps the audit trail).
+
+**`mandatory_feedback_v1` operator notes**
+
+- Source of truth: `FEATURE_FLAG_KEYS.mandatoryFeedback` in `features/feature-flags/domain/feature-flag-keys.ts` and `MANDATORY_FEEDBACK_FEATURE_FLAG_KEY` in `features/wrapped/api/wrapped-flag.ts`.
+- Evaluated server-side on `/` and `/challenge/:id`, then forwarded to `DashboardWrapped`, `ChallengeView`, and `ChallengeWrappedModal`.
+- When `DISABLED`: feedback is optional — participants can dismiss the modal ("Maybe later", "Cancel", "X", Escape, backdrop click), and reaching Slide 4 permanently dismisses the popup regardless of feedback status.
+- When `GLOBAL` (or `TARGETED` for assigned testers): participants with completed challenges cannot dismiss the dialog until feedback is successfully submitted (free-text questions remain optional).
 
 ---
 

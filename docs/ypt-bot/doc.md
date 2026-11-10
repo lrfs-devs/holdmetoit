@@ -213,20 +213,16 @@ To prevent timezone drift and misalignment across international participants:
    - `LOCKED`: `resultsLockedAt` is set on the `Challenge` and has passed.
    - `UPCOMING`: Before `startAt`.
    - `ACTIVE`: During `[startAt, endAt]` while not locked.
-   - `DAY7_GRACE`: A 6-hour grace window spanning `(endAt, endAt + 6h]` following Day 7 completion (unless locked earlier):
-      - Target bucket is locked to **Day 7** (`computeChallengeDayLogDate(day7End - 1000, challenge.startAt)`).
-      - **Old Sessions Allowed**: In-progress sessions that began before Day 7 completion (`sessionStartMs < day7End`) continue to accumulate and finalize upon going offline.
-      - **New Sessions Rejected**: Any session started on or after Day 7 completion (`sessionStartMs >= day7End`) is ignored and will not increase Day 7 study duration (status marked `OFFLINE`).
-   - `EXPIRED`: Past `endAt + 6h`.
+   - `EXPIRED`: Past `endAt` (logging prohibited; auto-lock triggers).
 - `ingestGroupMembersToDailyStudyLogs` no longer bails on a non-ingestable state: it always writes day telemetry to `DailyStudyLog`, resolving ended/locked challenges via `getActiveChallenge(nowUtc, { allowFallback: true })`, and throws when no challenge exists at all.
 - **Automatic Challenge Locking & Audit Log**:
    - `lockExpiredChallengesAfterGrace(nowUtc, log)` runs automatically at the beginning of ingestion cycles (`runIngest`, `ingestGroupMembersToDailyStudyLogs`, and `getActiveChallenge`).
-   - Any challenge past `endAt + 6h` with `resultsLockedAt == null` is atomically locked (`resultsLockedAt = nowUtc`).
+   - Any challenge past `endAt` with `resultsLockedAt == null` is atomically locked (`resultsLockedAt = nowUtc`).
    - An immutable system `AuditLog` is created:
       - `actionType`: `'CHALLENGE_LOCKED'`
-      - `auditReason`: `'challenge locked after 6 hr grace hours'`
+      - `auditReason`: `'challenge ended'`
       - `targetEntityType`: `'CHALLENGE'`
-      - `newValue`: `{ resultsLockedAt, title: 'challenge locked after 6 hr grace hours', autoLocked: true }`
+      - `newValue`: `{ resultsLockedAt, title: 'challenge ended', autoLocked: true }`
       - `actorUsername`: `'system'`, `actorDisplayName`: `'YPT Auto-Lock'`
    - Atomic conditional updates ensure idempotency across concurrent sync executions.
 - Day buckets are **challenge-anchored**: a challenge day is derived from `Challenge.startAt` in UTC.
@@ -280,9 +276,8 @@ All 57 tests across 18 test suites validate:
 - Fault tolerance when individual groups return errors.
 - Strict UTC date normalization and rollover safety.
 - Status derivation (`STUDYING` when studying/paused, `OFFLINE` when inactive).
-- Challenge lifecycle transitions (`UPCOMING`, `ACTIVE`, `DAY7_GRACE`, `EXPIRED`, `LOCKED`).
-- Day 7 grace period session filtering (old sessions accumulate, finalized on offline, new sessions rejected).
-- Automatic challenge locking after 6-hour grace window and system `AuditLog` creation.
+- Challenge lifecycle transitions (`UPCOMING`, `ACTIVE`, `EXPIRED`, `LOCKED`).
+- Immediate automatic challenge locking upon completion and system `AuditLog` creation.
 - Dynamic UTC challenge and participant resolution.
 - Historical Monday backfill, override preservation, and idempotency.
 

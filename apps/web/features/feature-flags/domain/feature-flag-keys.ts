@@ -6,6 +6,7 @@ export const FEATURE_FLAG_KEYS = {
    withdrawal: "challenge_withdrawal_v1",
    logrocket: "logrocket_v1",
    platformUsername: "platform_username",
+   mandatoryFeedback: "mandatory_feedback_v1",
 } as const;
 
 export type FeatureFlagKey =

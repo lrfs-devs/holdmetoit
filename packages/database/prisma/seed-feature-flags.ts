@@ -43,6 +43,12 @@ export const SYSTEM_FEATURE_FLAGS = [
       description:
          "Gates custom platform username claims, availability checks, and handle-based identity.",
    },
+   {
+      key: "mandatory_feedback_v1",
+      name: "Mandatory Challenge Feedback",
+      description:
+         "Enforces mandatory post-challenge feedback: auto-opens survey until completed, hides bypass and dismissal controls.",
+   },
 ] as const;
 
 export async function seedSystemFeatureFlags(prisma: PrismaClient) {

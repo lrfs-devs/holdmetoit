@@ -61,17 +61,14 @@ describe("challenge-feedback-embed", () => {
    });
 
    describe("buildChallengeFeedbackEmbed", () => {
-      it("builds a complete embed with all 8 questions answered", () => {
+      it("builds a complete embed with all questions answered", () => {
          const embed = buildChallengeFeedbackEmbed({
             challengeId: "chal_abc",
             challengeTitle: "October Study Sprint",
             consistency: "Yes, significantly",
             fairnessRating: 5,
-            trackingPreference: "Strictly YPT",
             teamBattleFeedback: "Loved the competition!",
-            workSchoolHours: "No, dont include them",
-            soloStyle: "Competitive (Keep a leaderboard)",
-            soloPunishment: "Yes, keep the punishment",
+            joinReason: "Accountability",
             soloIdeas: "Add streaks!",
             reporter: {
                userId: "u1",
@@ -87,7 +84,7 @@ describe("challenge-feedback-embed", () => {
          );
          expect(embed.color).toBe(0x22c55e);
          const fields = embed.fields ?? [];
-         expect(fields).toHaveLength(10); // 8 base fields + 2 multiline responses
+         expect(fields).toHaveLength(7); // 5 base fields + 2 multiline responses
          expect(fields[0]).toEqual({
             name: "👤 Submitter",
             value: "<@999888777>",
@@ -104,31 +101,33 @@ describe("challenge-feedback-embed", () => {
             inline: true,
          });
          expect(fields[3]).toEqual({
-            name: "⏱️ Preferred Tracking",
-            value: "Strictly YPT",
+            name: "⚔️ Why Did You Join?",
+            value: "Accountability",
             inline: true,
          });
          expect(fields[4]).toEqual({
-            name: "🎒 Count Work/School?",
-            value: "No, dont include them",
+            name: "🏆 Challenge",
+            value: "[October Study Sprint](https://holdmetoit.com/challenge/chal_abc)",
             inline: true,
          });
+         expect(
+            fields.some((f) => f.name.includes("Keep Punishment PFPs"))
+         ).toBe(false);
+         expect(fields.some((f) => f.name.includes("Preferred Tracking"))).toBe(
+            false
+         );
+         expect(fields.some((f) => f.name.includes("Count Work/School"))).toBe(
+            false
+         );
+         expect(
+            fields.some((f) => f.name.includes("Solo Challenge Style"))
+         ).toBe(false);
          expect(fields[5]).toEqual({
-            name: "🏆 Solo Challenge Style",
-            value: "Competitive (Keep a leaderboard)",
-            inline: true,
-         });
-         expect(fields[6]).toEqual({
-            name: "🎭 Keep Punishment PFPs?",
-            value: "Yes, keep the punishment",
-            inline: true,
-         });
-         expect(fields[8]).toEqual({
             name: "💬 Team Battle Suggestions & Complaints",
             value: "Loved the competition!",
             inline: false,
          });
-         expect(fields[9]).toEqual({
+         expect(fields[6]).toEqual({
             name: "💡 Solo Challenge Ideas & Thoughts",
             value: "Add streaks!",
             inline: false,
@@ -142,10 +141,7 @@ describe("challenge-feedback-embed", () => {
             challengeTitle: "Minimal Sprint",
             consistency: "Somewhat",
             fairnessRating: 4,
-            trackingPreference: "Allow all apps with no restrictions",
-            workSchoolHours: "Yes, include work and school hours",
-            soloStyle: "Laid-back (Personal goals for role rewards)",
-            soloPunishment: "No, remove the punishment",
+            joinReason: "Discipline",
             reporter: {
                userId: "u1",
                displayName: "Participant A",
@@ -153,7 +149,7 @@ describe("challenge-feedback-embed", () => {
          });
 
          const fields = embed.fields ?? [];
-         expect(fields).toHaveLength(8); // Only the 8 base fields, no multiline sections
+         expect(fields).toHaveLength(5); // Only the 5 base fields, no multiline sections
          expect(
             fields.some((f) => f.name.includes("Suggestions & Complaints"))
          ).toBe(false);
