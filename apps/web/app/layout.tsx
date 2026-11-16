@@ -65,8 +65,12 @@ export default async function RootLayout({
       <html
          lang="en"
          className={`dark ${fontSans.variable} ${fontDisplay.variable}`}
+         suppressHydrationWarning
       >
-         <body className="min-h-screen overflow-x-clip bg-surface-page text-text-primary font-sans antialiased selection:bg-surface-nested selection:text-white">
+         <body
+            suppressHydrationWarning
+            className="min-h-screen overflow-x-clip bg-surface-page text-text-primary font-sans antialiased selection:bg-surface-nested selection:text-white"
+         >
             <TooltipProvider delayDuration={200}>
                <LogRocketProvider
                   user={session?.user ?? null}
