@@ -375,6 +375,28 @@ export function CockpitTasksSection({
       useState<TaskScope>("CHALLENGE");
    const [isRolloverDismissed, setIsRolloverDismissed] = useState(false);
 
+   const openEditTask = (
+      task: TaskItem,
+      catIdx: number,
+      taskType: "daily" | "weekly"
+   ) => {
+      setEditTaskModal({
+         id: task.id,
+         text: task.text,
+         completed: task.completed,
+         status: getTaskStatus(task),
+         dueDate: task.dueDate ?? null,
+         createdAt: task.createdAt,
+         challengeId: task.challengeId ?? null,
+         catIdx,
+         taskType,
+      });
+      setEditTaskInputChallengeId(task.challengeId ?? null);
+      setEditTaskInputText(task.text);
+      setEditTaskInputStatus(getTaskStatus(task));
+      setEditTaskInputDueDate(task.dueDate ?? "");
+   };
+
    // Edit Category Modal State
    const [editCategoryModal, setEditCategoryModal] = useState<{
       id?: string;
@@ -1185,10 +1207,11 @@ export function CockpitTasksSection({
                         activeCollapsed
                      ),
                      tasks: sortedTasks
-                        .filter(
-                           (t) =>
-                              t.categoryId === c.id && t.taskType === "DAILY"
-                        )
+                        .filter((t) => {
+                           if (t.categoryId !== c.id) return false;
+                           if (c.taskType === "DAILY") return true;
+                           return t.taskType === "DAILY";
+                        })
                         .map((t) => {
                            const effectiveDueDate = t.dueDate
                               ? typeof t.dueDate === "string"
@@ -1201,10 +1224,17 @@ export function CockpitTasksSection({
                               (t.status as TaskStatus) ||
                               (t.isComplete ? "COMPLETED" : "TODO");
 
-                           if (!t.status) {
+                           const needsDailyHeal =
+                              !t.status ||
+                              t.taskType !== "DAILY" ||
+                              t.challengeId !== null;
+
+                           if (needsDailyHeal) {
                               tasksToHeal.push({
                                  ...t,
-                                 dueDate: effectiveDueDate,
+                                 taskType: "DAILY",
+                                 challengeId: null,
+                                 dueDate: effectiveDueDate || selectedDateKey,
                                  status: effectiveStatus,
                               });
                            }
@@ -1214,9 +1244,9 @@ export function CockpitTasksSection({
                               text: t.title,
                               completed: t.isComplete,
                               status: effectiveStatus,
-                              dueDate: effectiveDueDate,
+                              dueDate: effectiveDueDate || selectedDateKey,
                               createdAt: t.createdAt,
-                              challengeId: t.challengeId ?? null,
+                              challengeId: null,
                            };
                         }),
                   }));
@@ -1235,10 +1265,11 @@ export function CockpitTasksSection({
                         activeCollapsed
                      ),
                      tasks: sortedTasks
-                        .filter(
-                           (t) =>
-                              t.categoryId === c.id && t.taskType === "WEEKLY"
-                        )
+                        .filter((t) => {
+                           if (t.categoryId !== c.id) return false;
+                           if (c.taskType === "WEEKLY") return true;
+                           return t.taskType === "WEEKLY";
+                        })
                         .map((t) => {
                            const effectiveDueDate = t.dueDate
                               ? typeof t.dueDate === "string"
@@ -1251,10 +1282,16 @@ export function CockpitTasksSection({
                               (t.status as TaskStatus) ||
                               (t.isComplete ? "COMPLETED" : "TODO");
 
-                           if (!t.status) {
+                           const needsWeeklyHeal =
+                              !t.status ||
+                              t.taskType !== "WEEKLY" ||
+                              t.dueDate !== null;
+
+                           if (needsWeeklyHeal) {
                               tasksToHeal.push({
                                  ...t,
-                                 dueDate: effectiveDueDate,
+                                 taskType: "WEEKLY",
+                                 dueDate: null,
                                  status: effectiveStatus,
                               });
                            }
@@ -1264,7 +1301,7 @@ export function CockpitTasksSection({
                               text: t.title,
                               completed: t.isComplete,
                               status: effectiveStatus,
-                              dueDate: effectiveDueDate,
+                              dueDate: null,
                               createdAt: t.createdAt,
                               challengeId: t.challengeId ?? null,
                            };
@@ -3670,14 +3707,45 @@ export function CockpitTasksSection({
                .map((t) => t.id)
                .filter((id) => Boolean(id));
 
+            const isCrossCategoryMove =
+               draggedItem.sourceColumn !== targetColumn ||
+               draggedItem.sourceCatIdx !== targetCatIdx;
+
             if (isLoggedIn && userId && taskIds.length > 0) {
-               persistTasks(tasksToUpdate, {
+               const mutations: Array<Omit<QueuedMutation, "userId">> = [];
+               if (isCrossCategoryMove) {
+                  mutations.push({
+                     id: crypto.randomUUID(),
+                     entityType: "TASK",
+                     action: "MOVE",
+                     payload: {
+                        taskId: res.movedTask.id,
+                        categoryId: res.targetCategoryId,
+                        taskType: res.targetTaskType,
+                        sortOrder: destIdx,
+                        dueDate: res.movedTask.dueDate ?? null,
+                        challengeId:
+                           res.targetTaskType === "DAILY"
+                              ? null
+                              : (res.movedTask.challengeId ?? null),
+                     },
+                     createdAt: Date.now(),
+                     retryCount: 0,
+                  });
+               }
+               mutations.push({
                   id: crypto.randomUUID(),
                   entityType: "TASK",
                   action: "REORDER",
                   payload: { taskIds },
                   createdAt: Date.now() + 1,
                   retryCount: 0,
+               });
+
+               commitLocalBatch({
+                  categories: [],
+                  tasks: tasksToUpdate,
+                  mutations: mutations.map((m) => ({ ...m, userId })),
                })
                   .then(() => scheduleSync(userId))
                   .catch(() => {});
@@ -3720,6 +3788,10 @@ export function CockpitTasksSection({
                      taskType: res.targetTaskType,
                      sortOrder: destIdx,
                      dueDate: res.movedTask.dueDate ?? null,
+                     challengeId:
+                        res.targetTaskType === "DAILY"
+                           ? null
+                           : (res.movedTask.challengeId ?? null),
                   },
                   createdAt: Date.now(),
                   retryCount: 0,
@@ -4320,6 +4392,117 @@ export function CockpitTasksSection({
                         sortOrder:
                            currentDailyCats[targetDailyIdx].tasks.length,
                         dueDate: selectedDateKey,
+                     },
+                     createdAt: Date.now(),
+                     retryCount: 0,
+                  })
+                     .then(() => scheduleSync(userId))
+                     .catch(() => {});
+               }
+            }
+         } else if (
+            targetColumn === "weekly" &&
+            draggedItem.sourceColumn === "daily"
+         ) {
+            const sourceCat = dailyCategories[draggedItem.sourceCatIdx];
+            if (sourceCat) {
+               let targetWeeklyIdx = weeklyCategories.findIndex(
+                  (c) =>
+                     (sourceCat.id && c.id === sourceCat.id) ||
+                     c.name === sourceCat.name
+               );
+               let currentWeeklyCats = weeklyCategories;
+               if (targetWeeklyIdx === -1) {
+                  const newCatId = crypto.randomUUID();
+                  const newWeeklyCat: CategoryGroup = {
+                     id: newCatId,
+                     name: sourceCat.name,
+                     isCollapsed: false,
+                     tasks: [],
+                  };
+                  currentWeeklyCats = [...weeklyCategories, newWeeklyCat];
+                  targetWeeklyIdx = currentWeeklyCats.length - 1;
+
+                  persistCategory(
+                     {
+                        id: newCatId,
+                        userId: userId ?? null,
+                        name: sourceCat.name,
+                        taskType: "WEEKLY",
+                        sortOrder: targetWeeklyIdx,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        syncState: "pending",
+                     },
+                     {
+                        id: crypto.randomUUID(),
+                        entityType: "CATEGORY",
+                        action: "CREATE",
+                        payload: {
+                           id: newCatId,
+                           name: sourceCat.name,
+                           taskType: "WEEKLY",
+                           sortOrder: targetWeeklyIdx,
+                        },
+                        createdAt: Date.now(),
+                        retryCount: 0,
+                     }
+                  ).catch(() => {});
+               }
+
+               const res = moveTaskBetweenCategories({
+                  taskId: draggedItem.id,
+                  sourceCategoryIndex: draggedItem.sourceCatIdx,
+                  sourceColumn: "daily",
+                  targetCategoryIndex: targetWeeklyIdx,
+                  targetColumn: "weekly",
+                  targetTaskIndex:
+                     currentWeeklyCats[targetWeeklyIdx].tasks.length,
+                  targetDueDate: null,
+                  dailyCategories,
+                  weeklyCategories: currentWeeklyCats,
+               });
+
+               setDailyCategories(res.dailyCategories);
+               setWeeklyCategories(res.weeklyCategories);
+
+               if (res.movedTask && res.targetCategoryId) {
+                  const nowIso = new Date().toISOString();
+                  const isMovedComplete = Boolean(
+                     res.movedTask.completed ?? res.movedTask.isComplete
+                  );
+                  const movedStatus =
+                     (res.movedTask.status as TaskStatus) ||
+                     (isMovedComplete ? "COMPLETED" : "TODO");
+                  const movedLocalTask: LocalTaskRecord = {
+                     id: res.movedTask.id,
+                     userId: userId ?? null,
+                     categoryId: res.targetCategoryId,
+                     title: res.movedTask.text ?? res.movedTask.title ?? "",
+                     taskType: "WEEKLY",
+                     sortOrder: currentWeeklyCats[targetWeeklyIdx].tasks.length,
+                     isComplete: isMovedComplete,
+                     status: movedStatus,
+                     dueDate: null,
+                     createdAt: res.movedTask.createdAt
+                        ? new Date(res.movedTask.createdAt).toISOString()
+                        : nowIso,
+                     updatedAt: nowIso,
+                     completedAt: isMovedComplete ? nowIso : null,
+                     syncState: "pending",
+                  };
+
+                  persistTask(movedLocalTask, {
+                     id: crypto.randomUUID(),
+                     entityType: "TASK",
+                     action: "MOVE",
+                     payload: {
+                        taskId: res.movedTask.id,
+                        categoryId: res.targetCategoryId,
+                        taskType: "WEEKLY",
+                        sortOrder:
+                           currentWeeklyCats[targetWeeklyIdx].tasks.length,
+                        dueDate: null,
                      },
                      createdAt: Date.now(),
                      retryCount: 0,
@@ -5252,7 +5435,14 @@ export function CockpitTasksSection({
                                                                               title={
                                                                                  task.text
                                                                               }
-                                                                              className={`text-sm break-words leading-snug ${
+                                                                              onDoubleClick={() =>
+                                                                                 openEditTask(
+                                                                                    task,
+                                                                                    catIdx,
+                                                                                    "daily"
+                                                                                 )
+                                                                              }
+                                                                              className={`text-sm break-words leading-snug cursor-pointer ${
                                                                                  expandedTaskIds.has(
                                                                                     task.id
                                                                                  )
@@ -5451,13 +5641,30 @@ export function CockpitTasksSection({
                                                                onClick={(e) => {
                                                                   e.preventDefault();
                                                                   e.stopPropagation();
+                                                                  openEditTask(
+                                                                     task,
+                                                                     catIdx,
+                                                                     "daily"
+                                                                  );
+                                                               }}
+                                                               className="p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-colors shrink-0 mt-0.5"
+                                                               title="Edit task"
+                                                               aria-label={`Edit task ${task.text}`}
+                                                            >
+                                                               <Pencil className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                               type="button"
+                                                               onClick={(e) => {
+                                                                  e.preventDefault();
+                                                                  e.stopPropagation();
                                                                   handleDeleteTask(
                                                                      catIdx,
                                                                      task.id,
                                                                      "daily"
                                                                   );
                                                                }}
-                                                               className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
+                                                               className="p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-colors shrink-0 mt-0.5"
                                                                title="Delete task"
                                                                aria-label={`Delete task ${task.text}`}
                                                             >
@@ -5471,7 +5678,7 @@ export function CockpitTasksSection({
                                                                >
                                                                   <button
                                                                      type="button"
-                                                                     className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 data-[state=open]:opacity-100 p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
+                                                                     className="p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg data-[state=open]:text-white data-[state=open]:bg-input-bg transition-colors shrink-0 mt-0.5"
                                                                      title="Task options"
                                                                      aria-label={`Options for task ${task.text}`}
                                                                   >
@@ -6200,7 +6407,14 @@ export function CockpitTasksSection({
                                                                               title={
                                                                                  task.text
                                                                               }
-                                                                              className={`text-sm break-words leading-snug ${
+                                                                              onDoubleClick={() =>
+                                                                                 openEditTask(
+                                                                                    task,
+                                                                                    catIdx,
+                                                                                    "weekly"
+                                                                                 )
+                                                                              }
+                                                                              className={`text-sm break-words leading-snug cursor-pointer ${
                                                                                  expandedTaskIds.has(
                                                                                     task.id
                                                                                  )
@@ -6369,13 +6583,30 @@ export function CockpitTasksSection({
                                                                onClick={(e) => {
                                                                   e.preventDefault();
                                                                   e.stopPropagation();
+                                                                  openEditTask(
+                                                                     task,
+                                                                     catIdx,
+                                                                     "weekly"
+                                                                  );
+                                                               }}
+                                                               className="p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-colors shrink-0 mt-0.5"
+                                                               title="Edit task"
+                                                               aria-label={`Edit task ${task.text}`}
+                                                            >
+                                                               <Pencil className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                               type="button"
+                                                               onClick={(e) => {
+                                                                  e.preventDefault();
+                                                                  e.stopPropagation();
                                                                   handleDeleteTask(
                                                                      catIdx,
                                                                      task.id,
                                                                      "weekly"
                                                                   );
                                                                }}
-                                                               className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
+                                                               className="p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-colors shrink-0 mt-0.5"
                                                                title="Delete task"
                                                                aria-label={`Delete task ${task.text}`}
                                                             >
@@ -6389,7 +6620,7 @@ export function CockpitTasksSection({
                                                                >
                                                                   <button
                                                                      type="button"
-                                                                     className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 data-[state=open]:opacity-100 p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
+                                                                     className="p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg data-[state=open]:text-white data-[state=open]:bg-input-bg transition-colors shrink-0 mt-0.5"
                                                                      title="Task options"
                                                                      aria-label={`Options for task ${task.text}`}
                                                                   >

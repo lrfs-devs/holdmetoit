@@ -3202,3 +3202,38 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - `npm run test:web`: ✅ 260 test files (2,773 tests) passing 100% green.
       - `npm run build:web`: ✅ Production build clean (21 routes compiled, 0 errors).
 - **NEXT STEP:** Merge `afnan-jr` into `dev` via PR once peer-reviewed.
+
+### Session 210 — 2026-11-16 (fix(tasks): fix drag from weekly to daily task disappearance, challenge scoping, and task management UI discoverability — on `krish`)
+
+- **Context & Objectives:**
+   1. Fix weekly task disappearing when dragged to a day column in the Cockpit while persisting in profile weekly goals.
+   2. Ensure daily tasks adhere to Law L6 (Three-Condition Invariant): daily tasks cannot have challengeId links, and dragging a weekly challenge goal to daily unlinks challengeId and assigns the day's dueDate.
+   3. Fix task management and edit discoverability: the 3-dots menu button and trash button were hidden behind `opacity-0 sm:opacity-0` and only visible on hover (making them completely inaccessible on touch devices / tablets and undiscoverable on desktop). Add dedicated Pencil edit button, double-click task text to edit, and ensure options triggers are always accessible.
+- **Root Causes:**
+   1. In `features/tasks/data/task-sync.repository.ts`, `applyTaskMutation` for action `"UPDATE"` or `"MOVE"` did not update `taskType` when moving tasks across categories or when `taskType` was passed in the payload. PostgreSQL retained `taskType = "WEEKLY"` while its `categoryId` pointed to a `DAILY` category. Consequently, `getUserCategorizedTasksFromDatabase` filtered it out of the Daily board (`t.taskType === "DAILY"`), and out of the Weekly board (`c.taskType === "WEEKLY"`), causing the task to disappear on sync while remaining on the user's profile.
+   2. In `features/study-logs/presentation/cockpit/cockpit-tasks-section.tsx`, `handleTaskDrop` only enqueued action `"REORDER"` when dropping onto a category with existing tasks, omitting `"MOVE"`.
+   3. `features/tasks/domain/task-reorder.ts` did not clear `challengeId` when moving a task or category to daily.
+   4. The task row options trigger in `cockpit-tasks-section.tsx` had `opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100`. On tablets and touch devices (>640px), lack of mouse hover rendered the menu permanently invisible.
+- **Changes Completed:**
+   1. **Domain Logic (`apps/web/features/tasks/domain/task-reorder.ts`):**
+      - Added `challengeId?: string | null` to `DragTaskItem`.
+      - Updated `moveTaskBetweenCategories` to clear `challengeId: null` when `targetTaskType === "DAILY"`.
+      - Updated `moveCategoryBetweenColumns` to clear `challengeId: null` when moving categories to daily.
+   2. **Data & Synchronization (`apps/web/features/tasks/data/task-sync.repository.ts`):**
+      - In `applyTaskMutation`, correctly detect `nextTaskType` (from `payload.taskType` or `targetCategory.taskType`) and update `dataToUpdate.taskType` when it differs from `currentTaskGuard.taskType`.
+      - Clear `dataToUpdate.challengeId = null` when becoming `DAILY` or when explicitly unlinking.
+      - Clear `dataToUpdate.dueDate = null` when moving from `DAILY` to `WEEKLY` without an explicit dueDate.
+   3. **Presentation & Cockpit UI (`apps/web/features/study-logs/presentation/cockpit/cockpit-tasks-section.tsx`):**
+      - Created `openEditTask(task, catIdx, taskType)` helper function.
+      - Added quick `Pencil` edit button to each task row in both Daily and Weekly boards.
+      - Made the 3-dots `MoreVertical` options trigger and `Trash2` button always visible with gentle tertiary styling (`text-text-tertiary hover:text-white`), removing `opacity-0 sm:opacity-0` hover locks for full touch/tablet/desktop accessibility.
+      - Added `onDoubleClick` on task text spans to open the Edit Task dialog directly.
+      - In `handleTaskDrop`, enqueued `MOVE` mutation with `taskId, categoryId, taskType, sortOrder, dueDate, challengeId` on cross-category/type moves regardless of target category length.
+      - In `hydrateFromIndexedDB`, updated task filtering and added self-healing for IndexedDB tasks with mismatched `taskType`.
+   4. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web -- cockpit-tasks`: ✅ 10 test suites (108 tests) passing 100% green.
+      - `npm run test:web -- task-sync.repository.test.ts`: ✅ 38 tests passing.
+      - `npm run test:web -- task-reorder.test.ts`: ✅ 15 tests passing.
+      - `npm run test:web -- task.repository.test.ts`: ✅ 47 tests passing.
+- **NEXT STEP:** Submit PR from `krish` to `dev`.
