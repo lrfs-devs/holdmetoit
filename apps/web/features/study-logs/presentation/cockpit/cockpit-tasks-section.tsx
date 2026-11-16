@@ -1452,6 +1452,32 @@ export function CockpitTasksSection({
       writeCollapsedCategoryIds(userId, nextCollapsed);
    };
 
+   const uncollapseCategory = useCallback(
+      (
+         boardType: "daily" | "weekly",
+         cat?: { id?: string | null; name: string } | null
+      ) => {
+         if (!cat) return;
+         setCollapsedCategoryIds((prev) => {
+            const next = new Set(prev);
+            let changed = false;
+            if (cat.id && next.has(`${boardType}:${cat.id}`)) {
+               next.delete(`${boardType}:${cat.id}`);
+               changed = true;
+            }
+            if (cat.name && next.has(`${boardType}:name:${cat.name}`)) {
+               next.delete(`${boardType}:name:${cat.name}`);
+               changed = true;
+            }
+            if (!changed) return prev;
+            collapsedCategoryIdsRef.current = next;
+            writeCollapsedCategoryIds(userId, next);
+            return next;
+         });
+      },
+      [userId]
+   );
+
    const setTaskStatus = (
       catIndex: number,
       taskId: string,
@@ -2060,6 +2086,7 @@ export function CockpitTasksSection({
                id: res.movedTask.id,
                userId: userId ?? null,
                categoryId: res.targetCategoryId,
+               challengeId: res.movedTask.challengeId ?? null,
                title: res.movedTask.text ?? res.movedTask.title ?? "",
                taskType: "DAILY",
                sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
@@ -2074,6 +2101,8 @@ export function CockpitTasksSection({
                syncState: "pending",
             };
 
+            uncollapseCategory("daily", currentDailyCats[targetDailyIdx]);
+
             persistTask(movedLocalTask, {
                id: crypto.randomUUID(),
                entityType: "TASK",
@@ -2084,6 +2113,7 @@ export function CockpitTasksSection({
                   taskType: "DAILY",
                   sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
                   dueDate: targetDateKey,
+                  challengeId: res.movedTask.challengeId ?? null,
                },
                createdAt: Date.now(),
                retryCount: 0,
@@ -2276,13 +2306,21 @@ export function CockpitTasksSection({
          };
       }
       const allWeeklyTasks = weeklyCategories.flatMap((c) => c.tasks);
-      const scopedTasks = allWeeklyTasks.map((t) => ({
+      const allDailyChallengeTasks = dailyCategories
+         .flatMap((c) => c.tasks)
+         .filter((t) => t.challengeId === linkableChallengeId);
+
+      const taskMap = new Map<string, TaskItem>();
+      for (const t of allWeeklyTasks) taskMap.set(t.id, t);
+      for (const t of allDailyChallengeTasks) taskMap.set(t.id, t);
+
+      const scopedTasks = Array.from(taskMap.values()).map((t) => ({
          ...t,
          challengeId:
             t.challengeId === linkableChallengeId ? linkableChallengeId : null,
       }));
       return countScopedTasks(scopedTasks);
-   }, [weeklyCategories, linkableChallengeId]);
+   }, [weeklyCategories, dailyCategories, linkableChallengeId]);
 
    const handleRolloverIncompleteTasks = useCallback(
       (options?: { sourceDateKey?: string; taskId?: string }) => {
@@ -3683,6 +3721,7 @@ export function CockpitTasksSection({
                ? res.dailyCategories
                : res.weeklyCategories;
          const targetCatGroup = targetCats[targetCatIdx];
+         uncollapseCategory(targetColumn, targetCatGroup ?? targetCat);
 
          if (targetCatGroup && targetCatGroup.tasks.length > 0) {
             const tasksToUpdate: LocalTaskRecord[] = targetCatGroup.tasks.map(
@@ -3690,7 +3729,8 @@ export function CockpitTasksSection({
                   id: t.id,
                   userId: userId ?? null,
                   categoryId: res.targetCategoryId!,
-                  title: t.text,
+                  challengeId: t.challengeId ?? null,
+                  title: t.text ?? (t as { title?: string }).title ?? "",
                   taskType: res.targetTaskType,
                   sortOrder: idx,
                   isComplete: t.completed,
@@ -3724,10 +3764,7 @@ export function CockpitTasksSection({
                         taskType: res.targetTaskType,
                         sortOrder: destIdx,
                         dueDate: res.movedTask.dueDate ?? null,
-                        challengeId:
-                           res.targetTaskType === "DAILY"
-                              ? null
-                              : (res.movedTask.challengeId ?? null),
+                        challengeId: res.movedTask.challengeId ?? null,
                      },
                      createdAt: Date.now(),
                      retryCount: 0,
@@ -3763,6 +3800,7 @@ export function CockpitTasksSection({
                id: res.movedTask.id,
                userId: userId ?? null,
                categoryId: res.targetCategoryId,
+               challengeId: res.movedTask.challengeId ?? null,
                title: res.movedTask.text ?? res.movedTask.title ?? "",
                taskType: res.targetTaskType,
                sortOrder: destIdx,
@@ -3788,10 +3826,7 @@ export function CockpitTasksSection({
                      taskType: res.targetTaskType,
                      sortOrder: destIdx,
                      dueDate: res.movedTask.dueDate ?? null,
-                     challengeId:
-                        res.targetTaskType === "DAILY"
-                           ? null
-                           : (res.movedTask.challengeId ?? null),
+                     challengeId: res.movedTask.challengeId ?? null,
                   },
                   createdAt: Date.now(),
                   retryCount: 0,
@@ -4042,6 +4077,8 @@ export function CockpitTasksSection({
          }
       } else if (draggedItem.type === "task" && draggedItem.id) {
          // Dropping a task into a category header
+         const targetCategories =
+            targetColumn === "daily" ? dailyCategories : weeklyCategories;
          const isMovingWeeklyToDaily =
             draggedItem.sourceColumn === "weekly" && targetColumn === "daily";
          const isMovingDailyToWeekly =
@@ -4066,6 +4103,7 @@ export function CockpitTasksSection({
 
          setDailyCategories(res.dailyCategories);
          setWeeklyCategories(res.weeklyCategories);
+         uncollapseCategory(targetColumn, targetCategories[targetCatIdx]);
 
          if (res.movedTask && res.targetCategoryId) {
             const nowIso = new Date().toISOString();
@@ -4079,6 +4117,7 @@ export function CockpitTasksSection({
                id: res.movedTask.id,
                userId: userId ?? null,
                categoryId: res.targetCategoryId,
+               challengeId: res.movedTask.challengeId ?? null,
                title: res.movedTask.text ?? res.movedTask.title ?? "",
                taskType: res.targetTaskType,
                sortOrder: 0,
@@ -4103,6 +4142,7 @@ export function CockpitTasksSection({
                   taskType: res.targetTaskType,
                   sortOrder: 0,
                   dueDate: res.movedTask.dueDate ?? null,
+                  challengeId: res.movedTask.challengeId ?? null,
                },
                createdAt: Date.now(),
                retryCount: 0,
@@ -4354,6 +4394,7 @@ export function CockpitTasksSection({
 
                setDailyCategories(res.dailyCategories);
                setWeeklyCategories(res.weeklyCategories);
+               uncollapseCategory("daily", currentDailyCats[targetDailyIdx]);
 
                if (res.movedTask && res.targetCategoryId) {
                   const nowIso = new Date().toISOString();
@@ -4367,6 +4408,7 @@ export function CockpitTasksSection({
                      id: res.movedTask.id,
                      userId: userId ?? null,
                      categoryId: res.targetCategoryId,
+                     challengeId: res.movedTask.challengeId ?? null,
                      title: res.movedTask.text ?? res.movedTask.title ?? "",
                      taskType: res.targetTaskType,
                      sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
@@ -4392,6 +4434,7 @@ export function CockpitTasksSection({
                         sortOrder:
                            currentDailyCats[targetDailyIdx].tasks.length,
                         dueDate: selectedDateKey,
+                        challengeId: res.movedTask.challengeId ?? null,
                      },
                      createdAt: Date.now(),
                      retryCount: 0,
@@ -4465,6 +4508,7 @@ export function CockpitTasksSection({
 
                setDailyCategories(res.dailyCategories);
                setWeeklyCategories(res.weeklyCategories);
+               uncollapseCategory("weekly", currentWeeklyCats[targetWeeklyIdx]);
 
                if (res.movedTask && res.targetCategoryId) {
                   const nowIso = new Date().toISOString();
@@ -4478,6 +4522,7 @@ export function CockpitTasksSection({
                      id: res.movedTask.id,
                      userId: userId ?? null,
                      categoryId: res.targetCategoryId,
+                     challengeId: res.movedTask.challengeId ?? null,
                      title: res.movedTask.text ?? res.movedTask.title ?? "",
                      taskType: "WEEKLY",
                      sortOrder: currentWeeklyCats[targetWeeklyIdx].tasks.length,
@@ -4503,6 +4548,7 @@ export function CockpitTasksSection({
                         sortOrder:
                            currentWeeklyCats[targetWeeklyIdx].tasks.length,
                         dueDate: null,
+                        challengeId: res.movedTask.challengeId ?? null,
                      },
                      createdAt: Date.now(),
                      retryCount: 0,
@@ -4539,6 +4585,7 @@ export function CockpitTasksSection({
 
             setDailyCategories(res.dailyCategories);
             setWeeklyCategories(res.weeklyCategories);
+            uncollapseCategory(targetColumn, targetCategories[lastCatIdx]);
 
             if (res.movedTask && res.targetCategoryId) {
                const nowIso = new Date().toISOString();
@@ -4552,6 +4599,7 @@ export function CockpitTasksSection({
                   id: res.movedTask.id,
                   userId: userId ?? null,
                   categoryId: res.targetCategoryId,
+                  challengeId: res.movedTask.challengeId ?? null,
                   title: res.movedTask.text ?? res.movedTask.title ?? "",
                   taskType: res.targetTaskType,
                   sortOrder: targetCategories[lastCatIdx].tasks.length,
@@ -4576,6 +4624,7 @@ export function CockpitTasksSection({
                      taskType: res.targetTaskType,
                      sortOrder: targetCategories[lastCatIdx].tasks.length,
                      dueDate: res.movedTask.dueDate ?? null,
+                     challengeId: res.movedTask.challengeId ?? null,
                   },
                   createdAt: Date.now(),
                   retryCount: 0,
@@ -5636,6 +5685,29 @@ export function CockpitTasksSection({
                                                                      <RotateCcw className="h-3.5 w-3.5" />
                                                                   </button>
                                                                )}
+                                                            {Boolean(
+                                                               linkableChallengeId
+                                                            ) &&
+                                                               (task.challengeId ===
+                                                               linkableChallengeId ? (
+                                                                  <span
+                                                                     data-testid="daily-task-scope-challenge-badge"
+                                                                     className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-0.5"
+                                                                     title="Challenge Goal (evaluated at challenge lock)"
+                                                                     aria-label="Challenge Goal"
+                                                                  >
+                                                                     <Trophy className="h-3 w-3" />
+                                                                  </span>
+                                                               ) : !task.challengeId ? (
+                                                                  <span
+                                                                     data-testid="daily-task-scope-personal-badge"
+                                                                     className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-surface-nested text-text-tertiary border border-border-subtle mt-0.5"
+                                                                     title="Personal Task (excluded from challenge lock)"
+                                                                     aria-label="Personal Task"
+                                                                  >
+                                                                     <User className="h-3 w-3" />
+                                                                  </span>
+                                                               ) : null)}
                                                             <button
                                                                type="button"
                                                                onClick={(e) => {

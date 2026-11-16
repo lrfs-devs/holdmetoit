@@ -134,8 +134,7 @@ export function moveTaskBetweenCategories<
       categoryId: targetCat.id || originalTask.categoryId,
       taskType: targetTaskType,
       dueDate: resolvedDueDate,
-      challengeId:
-         targetTaskType === "DAILY" ? null : (originalTask.challengeId ?? null),
+      challengeId: originalTask.challengeId ?? null,
    };
 
    // Case 1: Same category reorder
@@ -325,7 +324,7 @@ export function moveCategoryBetweenColumns<
       ...t,
       taskType: targetTaskType,
       ...(resolvedDueDate !== undefined ? { dueDate: resolvedDueDate } : {}),
-      ...(targetTaskType === "DAILY" ? { challengeId: null } : {}),
+      challengeId: t.challengeId ?? null,
    })) as TTask[];
 
    const updatedCategory = {

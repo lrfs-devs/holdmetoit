@@ -559,6 +559,7 @@ async function applyTaskMutation(
       challengeId: string | null;
       taskType: TaskType;
       createdAt: Date;
+      title: string;
    } | null = null;
 
    if (
@@ -571,7 +572,12 @@ async function applyTaskMutation(
 
       currentTaskGuard = await tx.task.findFirst({
          where: { id: taskId, userId, isDeleted: false },
-         select: { challengeId: true, taskType: true, createdAt: true },
+         select: {
+            challengeId: true,
+            taskType: true,
+            createdAt: true,
+            title: true,
+         },
       });
 
       if (
@@ -597,13 +603,17 @@ async function applyTaskMutation(
          }
       }
 
+      const isUnlinkingOrReassigningChallenge =
+         payload.challengeId !== undefined &&
+         currentTaskGuard?.challengeId !== null &&
+         payload.challengeId !== currentTaskGuard?.challengeId;
+
+      const isRenaming = Boolean(title) && title !== currentTaskGuard?.title;
+
       const changesLockedFields =
          m.action === "DELETE" ||
          ((m.action === "UPDATE" || m.action === "MOVE") &&
-            (Boolean(title) ||
-               payload.challengeId !== undefined ||
-               (Boolean(payload.taskType) &&
-                  taskType !== currentTaskGuard?.taskType)));
+            (isRenaming || isUnlinkingOrReassigningChallenge));
 
       if (
          currentTaskGuard &&
@@ -662,15 +672,7 @@ async function applyTaskMutation(
          currentTaskGuard?.taskType ??
          "DAILY";
 
-      // Daily tasks cannot be scoped to a challenge (Law L6 Three-Condition Invariant)
       if (
-         effectiveTaskType === "DAILY" &&
-         (currentTaskGuard?.challengeId ||
-            currentTaskGuard?.taskType === "WEEKLY" ||
-            payload.challengeId === null)
-      ) {
-         dataToUpdate.challengeId = null;
-      } else if (
          effectiveTaskType === "WEEKLY" &&
          currentTaskGuard?.taskType === "DAILY" &&
          payload.dueDate === undefined
@@ -679,7 +681,9 @@ async function applyTaskMutation(
       }
 
       if (payload.challengeId !== undefined) {
-         if (effectiveTaskType === "WEEKLY") {
+         if (payload.challengeId === null) {
+            dataToUpdate.challengeId = null;
+         } else {
             const rawChalId = payload.challengeId;
             const linked = await resolveWritableChallengeLink(
                tx,
@@ -690,21 +694,6 @@ async function applyTaskMutation(
             if (linked !== undefined) {
                dataToUpdate.challengeId = linked;
             }
-         } else if (
-            payload.challengeId === null ||
-            effectiveTaskType === "DAILY"
-         ) {
-            // Allow cleanup of a legacy daily challenge link.
-            dataToUpdate.challengeId = null;
-         } else {
-            logger.warn(logEvents.tasksSyncFailed, {
-               context: {
-                  userId,
-                  mutationId: m.id,
-                  action: m.action,
-                  reason: "challenge_link_ignored_daily",
-               },
-            });
          }
       }
       if (payload.status) {

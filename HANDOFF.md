@@ -185,6 +185,27 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 
 ## 7. Session Changelog (Last 3–5 Sessions)
 
+### Session 210 — 2026-11-16 (Fix: Weekly Challenge Goal Drag-and-Drop to Daily Section on `krish` · PR #285)
+
+- **Scope & Objectives:** Resolved defect where dragging a weekly challenge goal to the daily board caused it to change its nature (losing its trophy badge/challenge link) and bounce back to the weekly column after sync.
+- **Root Cause Analysis:**
+   1. **Sync Conflict & Bounce Back:** In `task-sync.repository.ts`, `changesLockedFields` treated changing `taskType` or `dueDate` as a locked field change on weekly goals past the grace period. This resulted in `{ status: "conflict", reason: "task_locked" }`, causing the client sync engine to rollback optimistic state and bounce the task back to the weekly board.
+   2. **Stripping Challenge Goal Nature:** In `task-reorder.ts` (lines 137, 327) and `task-sync.repository.ts` (lines 665-675), code unconditionally cleared `challengeId: null` when `targetTaskType === "DAILY"`, stripping the goal of its challenge association and turning it into a plain personal task.
+   3. **Visual Representation in Daily Column:** `cockpit-tasks-section.tsx` only rendered `<Trophy />` challenge badges in the weekly column, leaving daily cards without visual challenge indicators even when linked.
+   4. **Collapsed Category Invisibility:** Dropping a task into an existing daily category (e.g. "HoldMeToIt") that was collapsed caused the task to appear to vanish.
+- **Implementation Details:**
+   - `apps/web/features/tasks/domain/task-reorder.ts`: Preserved `challengeId: originalTask.challengeId ?? null` across `moveTaskBetweenCategories` and `moveCategoryBetweenColumns`.
+   - `apps/web/features/tasks/data/task-sync.repository.ts`: Refined `changesLockedFields` so only `DELETE`, title renames, or challenge unlinking/reassignment are locked; scheduling (`dueDate`) and cross-column moves (`MOVE`) are permitted. Removed daily task `challengeId` nullification so scheduled challenge goals retain their link and nature. Added `title` to `currentTaskGuard` query.
+   - `apps/web/features/tasks/data/task-sync.repository.test.ts`: Added unit test verifying weekly goals can be scheduled to daily categories without unlinking.
+   - `apps/web/features/study-logs/presentation/cockpit/cockpit-tasks-section.tsx`:
+      - Added `uncollapseCategory` helper and hooked into all drop handlers (`moveTaskToDay`, `handleTaskDrop`, `handleCategoryDrop`, `handleColumnDrop`).
+      - Added `<Trophy className="h-3 w-3" />` badge and `<User />` badge rendering for daily tasks matching weekly cards.
+      - Updated `weeklyScopedCounts` to tally challenge goals across both weekly and daily categories so header counters remain stable.
+- **Quality Gates:**
+   - `npm run typecheck:web`: 0 errors (`tsc --noEmit` exits with 0).
+   - `npm run test:web`: 260 test files passed (2,774 tests green).
+- **PR:** Pushed to branch `krish` for PR #285 (`krish` → `dev`).
+
 ### Session 208 — 2026-11-09 (Discord role revalidation, shorter sessions, revoke-only role editor, SEC-05 / SEC-20 / GH #227 on `fix/auth-role-revalidation-227`)
 
 - **Revalidation:**
