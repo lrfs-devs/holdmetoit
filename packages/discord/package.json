@@ -23,7 +23,7 @@
       "prepare": "npm run build"
    },
    "dependencies": {
-      "discord.js": "^14.26.3"
+      "discord.js": "^14.28.1"
    },
    "devDependencies": {
       "@types/node": "^22.10.0",
