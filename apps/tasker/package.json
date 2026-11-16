@@ -17,7 +17,7 @@
       "backfill": "tsx src/scripts/backfill-tasker-data.ts"
    },
    "dependencies": {
-      "@google/genai": "^2.32.0",
+      "@google/genai": "^3.0.0",
       "@holdmetoit/database": "*",
       "@holdmetoit/discord": "*",
       "@prisma/client": "7.10.1",
