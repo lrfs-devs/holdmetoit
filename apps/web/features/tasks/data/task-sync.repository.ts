@@ -559,6 +559,7 @@ async function applyTaskMutation(
       challengeId: string | null;
       taskType: TaskType;
       createdAt: Date;
+      title: string;
    } | null = null;
 
    if (
@@ -571,7 +572,12 @@ async function applyTaskMutation(
 
       currentTaskGuard = await tx.task.findFirst({
          where: { id: taskId, userId, isDeleted: false },
-         select: { challengeId: true, taskType: true, createdAt: true },
+         select: {
+            challengeId: true,
+            taskType: true,
+            createdAt: true,
+            title: true,
+         },
       });
 
       if (
@@ -597,13 +603,17 @@ async function applyTaskMutation(
          }
       }
 
+      const isUnlinkingOrReassigningChallenge =
+         payload.challengeId !== undefined &&
+         currentTaskGuard?.challengeId !== null &&
+         payload.challengeId !== currentTaskGuard?.challengeId;
+
+      const isRenaming = Boolean(title) && title !== currentTaskGuard?.title;
+
       const changesLockedFields =
          m.action === "DELETE" ||
          ((m.action === "UPDATE" || m.action === "MOVE") &&
-            (Boolean(title) ||
-               payload.challengeId !== undefined ||
-               (Boolean(payload.taskType) &&
-                  taskType !== currentTaskGuard?.taskType)));
+            (isRenaming || isUnlinkingOrReassigningChallenge));
 
       if (
          currentTaskGuard &&
@@ -626,6 +636,7 @@ async function applyTaskMutation(
 
       const dataToUpdate: Record<string, unknown> = {};
       let categoryMissing = false;
+      let targetCategoryTaskType: TaskType | undefined;
 
       if (title) dataToUpdate.title = title;
       if (categoryId) {
@@ -634,6 +645,7 @@ async function applyTaskMutation(
          });
          if (targetCat) {
             dataToUpdate.categoryId = categoryId;
+            targetCategoryTaskType = targetCat.taskType;
          } else {
             categoryMissing = true;
          }
@@ -645,8 +657,33 @@ async function applyTaskMutation(
             ? new Date(String(payload.dueDate))
             : null;
       }
+      const nextTaskType: TaskType | undefined = payload.taskType
+         ? payload.taskType === "WEEKLY"
+            ? "WEEKLY"
+            : "DAILY"
+         : targetCategoryTaskType;
+
+      if (nextTaskType && nextTaskType !== currentTaskGuard?.taskType) {
+         dataToUpdate.taskType = nextTaskType;
+      }
+
+      const effectiveTaskType =
+         (dataToUpdate.taskType as TaskType | undefined) ??
+         currentTaskGuard?.taskType ??
+         "DAILY";
+
+      if (
+         effectiveTaskType === "WEEKLY" &&
+         currentTaskGuard?.taskType === "DAILY" &&
+         payload.dueDate === undefined
+      ) {
+         dataToUpdate.dueDate = null;
+      }
+
       if (payload.challengeId !== undefined) {
-         if (currentTaskGuard?.taskType === "WEEKLY") {
+         if (payload.challengeId === null) {
+            dataToUpdate.challengeId = null;
+         } else {
             const rawChalId = payload.challengeId;
             const linked = await resolveWritableChallengeLink(
                tx,
@@ -657,18 +694,6 @@ async function applyTaskMutation(
             if (linked !== undefined) {
                dataToUpdate.challengeId = linked;
             }
-         } else if (payload.challengeId === null) {
-            // Allow cleanup of a legacy daily challenge link.
-            dataToUpdate.challengeId = null;
-         } else {
-            logger.warn(logEvents.tasksSyncFailed, {
-               context: {
-                  userId,
-                  mutationId: m.id,
-                  action: m.action,
-                  reason: "challenge_link_ignored_daily",
-               },
-            });
          }
       }
       if (payload.status) {

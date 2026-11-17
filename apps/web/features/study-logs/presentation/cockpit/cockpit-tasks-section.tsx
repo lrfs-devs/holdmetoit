@@ -317,15 +317,20 @@ export function CockpitTasksSection({
       "daily"
    );
 
-   const toggleTaskExpand = (taskId: string, e?: React.MouseEvent) => {
+   const toggleTaskExpand = (
+      taskId: string,
+      column: "daily" | "weekly" = "daily",
+      e?: React.MouseEvent
+   ) => {
       e?.preventDefault();
       e?.stopPropagation();
+      const key = `${column}:${taskId}`;
       setExpandedTaskIds((prev) => {
          const next = new Set(prev);
-         if (next.has(taskId)) {
-            next.delete(taskId);
+         if (next.has(key)) {
+            next.delete(key);
          } else {
-            next.add(taskId);
+            next.add(key);
          }
          return next;
       });
@@ -374,6 +379,28 @@ export function CockpitTasksSection({
    const [addTodoChallengeScope, setAddTodoChallengeScope] =
       useState<TaskScope>("CHALLENGE");
    const [isRolloverDismissed, setIsRolloverDismissed] = useState(false);
+
+   const openEditTask = (
+      task: TaskItem,
+      catIdx: number,
+      taskType: "daily" | "weekly"
+   ) => {
+      setEditTaskModal({
+         id: task.id,
+         text: task.text,
+         completed: task.completed,
+         status: getTaskStatus(task),
+         dueDate: task.dueDate ?? null,
+         createdAt: task.createdAt,
+         challengeId: task.challengeId ?? null,
+         catIdx,
+         taskType,
+      });
+      setEditTaskInputChallengeId(task.challengeId ?? null);
+      setEditTaskInputText(task.text);
+      setEditTaskInputStatus(getTaskStatus(task));
+      setEditTaskInputDueDate(task.dueDate ?? "");
+   };
 
    // Edit Category Modal State
    const [editCategoryModal, setEditCategoryModal] = useState<{
@@ -1204,7 +1231,6 @@ export function CockpitTasksSection({
                            if (!t.status) {
                               tasksToHeal.push({
                                  ...t,
-                                 dueDate: effectiveDueDate,
                                  status: effectiveStatus,
                               });
                            }
@@ -1214,7 +1240,7 @@ export function CockpitTasksSection({
                               text: t.title,
                               completed: t.isComplete,
                               status: effectiveStatus,
-                              dueDate: effectiveDueDate,
+                              dueDate: effectiveDueDate || selectedDateKey,
                               createdAt: t.createdAt,
                               challengeId: t.challengeId ?? null,
                            };
@@ -1222,7 +1248,14 @@ export function CockpitTasksSection({
                   }));
 
                const weeklyCats = sortedCats
-                  .filter((c) => c.taskType === "WEEKLY")
+                  .filter(
+                     (c) =>
+                        c.taskType === "WEEKLY" ||
+                        sortedTasks.some(
+                           (t) =>
+                              t.categoryId === c.id && t.taskType === "WEEKLY"
+                        )
+                  )
                   .map((c) => ({
                      id: c.id,
                      name: c.name,
@@ -1254,7 +1287,6 @@ export function CockpitTasksSection({
                            if (!t.status) {
                               tasksToHeal.push({
                                  ...t,
-                                 dueDate: effectiveDueDate,
                                  status: effectiveStatus,
                               });
                            }
@@ -1264,7 +1296,7 @@ export function CockpitTasksSection({
                               text: t.title,
                               completed: t.isComplete,
                               status: effectiveStatus,
-                              dueDate: effectiveDueDate,
+                              dueDate: null,
                               createdAt: t.createdAt,
                               challengeId: t.challengeId ?? null,
                            };
@@ -1414,6 +1446,32 @@ export function CockpitTasksSection({
       collapsedCategoryIdsRef.current = nextCollapsed;
       writeCollapsedCategoryIds(userId, nextCollapsed);
    };
+
+   const uncollapseCategory = useCallback(
+      (
+         boardType: "daily" | "weekly",
+         cat?: { id?: string | null; name: string } | null
+      ) => {
+         if (!cat) return;
+         setCollapsedCategoryIds((prev) => {
+            const next = new Set(prev);
+            let changed = false;
+            if (cat.id && next.has(`${boardType}:${cat.id}`)) {
+               next.delete(`${boardType}:${cat.id}`);
+               changed = true;
+            }
+            if (cat.name && next.has(`${boardType}:name:${cat.name}`)) {
+               next.delete(`${boardType}:name:${cat.name}`);
+               changed = true;
+            }
+            if (!changed) return prev;
+            collapsedCategoryIdsRef.current = next;
+            writeCollapsedCategoryIds(userId, next);
+            return next;
+         });
+      },
+      [userId]
+   );
 
    const setTaskStatus = (
       catIndex: number,
@@ -2023,6 +2081,7 @@ export function CockpitTasksSection({
                id: res.movedTask.id,
                userId: userId ?? null,
                categoryId: res.targetCategoryId,
+               challengeId: res.movedTask.challengeId ?? null,
                title: res.movedTask.text ?? res.movedTask.title ?? "",
                taskType: "DAILY",
                sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
@@ -2037,6 +2096,8 @@ export function CockpitTasksSection({
                syncState: "pending",
             };
 
+            uncollapseCategory("daily", currentDailyCats[targetDailyIdx]);
+
             persistTask(movedLocalTask, {
                id: crypto.randomUUID(),
                entityType: "TASK",
@@ -2047,6 +2108,7 @@ export function CockpitTasksSection({
                   taskType: "DAILY",
                   sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
                   dueDate: targetDateKey,
+                  challengeId: res.movedTask.challengeId ?? null,
                },
                createdAt: Date.now(),
                retryCount: 0,
@@ -2239,13 +2301,21 @@ export function CockpitTasksSection({
          };
       }
       const allWeeklyTasks = weeklyCategories.flatMap((c) => c.tasks);
-      const scopedTasks = allWeeklyTasks.map((t) => ({
+      const allDailyChallengeTasks = dailyCategories
+         .flatMap((c) => c.tasks)
+         .filter((t) => t.challengeId === linkableChallengeId);
+
+      const taskMap = new Map<string, TaskItem>();
+      for (const t of allWeeklyTasks) taskMap.set(t.id, t);
+      for (const t of allDailyChallengeTasks) taskMap.set(t.id, t);
+
+      const scopedTasks = Array.from(taskMap.values()).map((t) => ({
          ...t,
          challengeId:
             t.challengeId === linkableChallengeId ? linkableChallengeId : null,
       }));
       return countScopedTasks(scopedTasks);
-   }, [weeklyCategories, linkableChallengeId]);
+   }, [weeklyCategories, dailyCategories, linkableChallengeId]);
 
    const handleRolloverIncompleteTasks = useCallback(
       (options?: { sourceDateKey?: string; taskId?: string }) => {
@@ -3646,6 +3716,7 @@ export function CockpitTasksSection({
                ? res.dailyCategories
                : res.weeklyCategories;
          const targetCatGroup = targetCats[targetCatIdx];
+         uncollapseCategory(targetColumn, targetCatGroup ?? targetCat);
 
          if (targetCatGroup && targetCatGroup.tasks.length > 0) {
             const tasksToUpdate: LocalTaskRecord[] = targetCatGroup.tasks.map(
@@ -3653,7 +3724,8 @@ export function CockpitTasksSection({
                   id: t.id,
                   userId: userId ?? null,
                   categoryId: res.targetCategoryId!,
-                  title: t.text,
+                  challengeId: t.challengeId ?? null,
+                  title: t.text ?? (t as { title?: string }).title ?? "",
                   taskType: res.targetTaskType,
                   sortOrder: idx,
                   isComplete: t.completed,
@@ -3670,14 +3742,42 @@ export function CockpitTasksSection({
                .map((t) => t.id)
                .filter((id) => Boolean(id));
 
+            const isCrossCategoryMove =
+               draggedItem.sourceColumn !== targetColumn ||
+               draggedItem.sourceCatIdx !== targetCatIdx;
+
             if (isLoggedIn && userId && taskIds.length > 0) {
-               persistTasks(tasksToUpdate, {
+               const mutations: Array<Omit<QueuedMutation, "userId">> = [];
+               if (isCrossCategoryMove) {
+                  mutations.push({
+                     id: crypto.randomUUID(),
+                     entityType: "TASK",
+                     action: "MOVE",
+                     payload: {
+                        taskId: res.movedTask.id,
+                        categoryId: res.targetCategoryId,
+                        taskType: res.targetTaskType,
+                        sortOrder: destIdx,
+                        dueDate: res.movedTask.dueDate ?? null,
+                        challengeId: res.movedTask.challengeId ?? null,
+                     },
+                     createdAt: Date.now(),
+                     retryCount: 0,
+                  });
+               }
+               mutations.push({
                   id: crypto.randomUUID(),
                   entityType: "TASK",
                   action: "REORDER",
                   payload: { taskIds },
                   createdAt: Date.now() + 1,
                   retryCount: 0,
+               });
+
+               commitLocalBatch({
+                  categories: [],
+                  tasks: tasksToUpdate,
+                  mutations: mutations.map((m) => ({ ...m, userId })),
                })
                   .then(() => scheduleSync(userId))
                   .catch(() => {});
@@ -3695,6 +3795,7 @@ export function CockpitTasksSection({
                id: res.movedTask.id,
                userId: userId ?? null,
                categoryId: res.targetCategoryId,
+               challengeId: res.movedTask.challengeId ?? null,
                title: res.movedTask.text ?? res.movedTask.title ?? "",
                taskType: res.targetTaskType,
                sortOrder: destIdx,
@@ -3720,6 +3821,7 @@ export function CockpitTasksSection({
                      taskType: res.targetTaskType,
                      sortOrder: destIdx,
                      dueDate: res.movedTask.dueDate ?? null,
+                     challengeId: res.movedTask.challengeId ?? null,
                   },
                   createdAt: Date.now(),
                   retryCount: 0,
@@ -3970,6 +4072,8 @@ export function CockpitTasksSection({
          }
       } else if (draggedItem.type === "task" && draggedItem.id) {
          // Dropping a task into a category header
+         const targetCategories =
+            targetColumn === "daily" ? dailyCategories : weeklyCategories;
          const isMovingWeeklyToDaily =
             draggedItem.sourceColumn === "weekly" && targetColumn === "daily";
          const isMovingDailyToWeekly =
@@ -3994,6 +4098,7 @@ export function CockpitTasksSection({
 
          setDailyCategories(res.dailyCategories);
          setWeeklyCategories(res.weeklyCategories);
+         uncollapseCategory(targetColumn, targetCategories[targetCatIdx]);
 
          if (res.movedTask && res.targetCategoryId) {
             const nowIso = new Date().toISOString();
@@ -4007,6 +4112,7 @@ export function CockpitTasksSection({
                id: res.movedTask.id,
                userId: userId ?? null,
                categoryId: res.targetCategoryId,
+               challengeId: res.movedTask.challengeId ?? null,
                title: res.movedTask.text ?? res.movedTask.title ?? "",
                taskType: res.targetTaskType,
                sortOrder: 0,
@@ -4031,6 +4137,7 @@ export function CockpitTasksSection({
                   taskType: res.targetTaskType,
                   sortOrder: 0,
                   dueDate: res.movedTask.dueDate ?? null,
+                  challengeId: res.movedTask.challengeId ?? null,
                },
                createdAt: Date.now(),
                retryCount: 0,
@@ -4282,6 +4389,7 @@ export function CockpitTasksSection({
 
                setDailyCategories(res.dailyCategories);
                setWeeklyCategories(res.weeklyCategories);
+               uncollapseCategory("daily", currentDailyCats[targetDailyIdx]);
 
                if (res.movedTask && res.targetCategoryId) {
                   const nowIso = new Date().toISOString();
@@ -4295,6 +4403,7 @@ export function CockpitTasksSection({
                      id: res.movedTask.id,
                      userId: userId ?? null,
                      categoryId: res.targetCategoryId,
+                     challengeId: res.movedTask.challengeId ?? null,
                      title: res.movedTask.text ?? res.movedTask.title ?? "",
                      taskType: res.targetTaskType,
                      sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
@@ -4320,6 +4429,121 @@ export function CockpitTasksSection({
                         sortOrder:
                            currentDailyCats[targetDailyIdx].tasks.length,
                         dueDate: selectedDateKey,
+                        challengeId: res.movedTask.challengeId ?? null,
+                     },
+                     createdAt: Date.now(),
+                     retryCount: 0,
+                  })
+                     .then(() => scheduleSync(userId))
+                     .catch(() => {});
+               }
+            }
+         } else if (
+            targetColumn === "weekly" &&
+            draggedItem.sourceColumn === "daily"
+         ) {
+            const sourceCat = dailyCategories[draggedItem.sourceCatIdx];
+            if (sourceCat) {
+               let targetWeeklyIdx = weeklyCategories.findIndex(
+                  (c) =>
+                     (sourceCat.id && c.id === sourceCat.id) ||
+                     c.name === sourceCat.name
+               );
+               let currentWeeklyCats = weeklyCategories;
+               if (targetWeeklyIdx === -1) {
+                  const newCatId = crypto.randomUUID();
+                  const newWeeklyCat: CategoryGroup = {
+                     id: newCatId,
+                     name: sourceCat.name,
+                     isCollapsed: false,
+                     tasks: [],
+                  };
+                  currentWeeklyCats = [...weeklyCategories, newWeeklyCat];
+                  targetWeeklyIdx = currentWeeklyCats.length - 1;
+
+                  persistCategory(
+                     {
+                        id: newCatId,
+                        userId: userId ?? null,
+                        name: sourceCat.name,
+                        taskType: "WEEKLY",
+                        sortOrder: targetWeeklyIdx,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        syncState: "pending",
+                     },
+                     {
+                        id: crypto.randomUUID(),
+                        entityType: "CATEGORY",
+                        action: "CREATE",
+                        payload: {
+                           id: newCatId,
+                           name: sourceCat.name,
+                           taskType: "WEEKLY",
+                           sortOrder: targetWeeklyIdx,
+                        },
+                        createdAt: Date.now(),
+                        retryCount: 0,
+                     }
+                  ).catch(() => {});
+               }
+
+               const res = moveTaskBetweenCategories({
+                  taskId: draggedItem.id,
+                  sourceCategoryIndex: draggedItem.sourceCatIdx,
+                  sourceColumn: "daily",
+                  targetCategoryIndex: targetWeeklyIdx,
+                  targetColumn: "weekly",
+                  targetTaskIndex:
+                     currentWeeklyCats[targetWeeklyIdx].tasks.length,
+                  targetDueDate: null,
+                  dailyCategories,
+                  weeklyCategories: currentWeeklyCats,
+               });
+
+               setDailyCategories(res.dailyCategories);
+               setWeeklyCategories(res.weeklyCategories);
+               uncollapseCategory("weekly", currentWeeklyCats[targetWeeklyIdx]);
+
+               if (res.movedTask && res.targetCategoryId) {
+                  const nowIso = new Date().toISOString();
+                  const isMovedComplete = Boolean(
+                     res.movedTask.completed ?? res.movedTask.isComplete
+                  );
+                  const movedStatus =
+                     (res.movedTask.status as TaskStatus) ||
+                     (isMovedComplete ? "COMPLETED" : "TODO");
+                  const movedLocalTask: LocalTaskRecord = {
+                     id: res.movedTask.id,
+                     userId: userId ?? null,
+                     categoryId: res.targetCategoryId,
+                     challengeId: res.movedTask.challengeId ?? null,
+                     title: res.movedTask.text ?? res.movedTask.title ?? "",
+                     taskType: "WEEKLY",
+                     sortOrder: currentWeeklyCats[targetWeeklyIdx].tasks.length,
+                     isComplete: isMovedComplete,
+                     status: movedStatus,
+                     dueDate: null,
+                     createdAt: res.movedTask.createdAt
+                        ? new Date(res.movedTask.createdAt).toISOString()
+                        : nowIso,
+                     updatedAt: nowIso,
+                     completedAt: isMovedComplete ? nowIso : null,
+                     syncState: "pending",
+                  };
+
+                  persistTask(movedLocalTask, {
+                     id: crypto.randomUUID(),
+                     entityType: "TASK",
+                     action: "MOVE",
+                     payload: {
+                        taskId: res.movedTask.id,
+                        categoryId: res.targetCategoryId,
+                        taskType: "WEEKLY",
+                        sortOrder:
+                           currentWeeklyCats[targetWeeklyIdx].tasks.length,
+                        dueDate: null,
+                        challengeId: res.movedTask.challengeId ?? null,
                      },
                      createdAt: Date.now(),
                      retryCount: 0,
@@ -4356,6 +4580,7 @@ export function CockpitTasksSection({
 
             setDailyCategories(res.dailyCategories);
             setWeeklyCategories(res.weeklyCategories);
+            uncollapseCategory(targetColumn, targetCategories[lastCatIdx]);
 
             if (res.movedTask && res.targetCategoryId) {
                const nowIso = new Date().toISOString();
@@ -4369,6 +4594,7 @@ export function CockpitTasksSection({
                   id: res.movedTask.id,
                   userId: userId ?? null,
                   categoryId: res.targetCategoryId,
+                  challengeId: res.movedTask.challengeId ?? null,
                   title: res.movedTask.text ?? res.movedTask.title ?? "",
                   taskType: res.targetTaskType,
                   sortOrder: targetCategories[lastCatIdx].tasks.length,
@@ -4393,6 +4619,7 @@ export function CockpitTasksSection({
                      taskType: res.targetTaskType,
                      sortOrder: targetCategories[lastCatIdx].tasks.length,
                      dueDate: res.movedTask.dueDate ?? null,
+                     challengeId: res.movedTask.challengeId ?? null,
                   },
                   createdAt: Date.now(),
                   retryCount: 0,
@@ -4880,8 +5107,7 @@ export function CockpitTasksSection({
                                  (task) =>
                                     getTaskDateKey(task) === selectedDateKey
                               );
-                              if (dayTasks.length === 0 && cat.tasks.length > 0)
-                                 return null;
+                              if (dayTasks.length === 0) return null;
 
                               const isCollapsed = isCategoryCollapsed(
                                  "daily",
@@ -5252,9 +5478,16 @@ export function CockpitTasksSection({
                                                                               title={
                                                                                  task.text
                                                                               }
-                                                                              className={`text-sm break-words leading-snug ${
+                                                                              onDoubleClick={() =>
+                                                                                 openEditTask(
+                                                                                    task,
+                                                                                    catIdx,
+                                                                                    "daily"
+                                                                                 )
+                                                                              }
+                                                                              className={`text-sm break-words leading-snug cursor-pointer ${
                                                                                  expandedTaskIds.has(
-                                                                                    task.id
+                                                                                    `daily:${task.id}`
                                                                                  )
                                                                                     ? "line-clamp-none"
                                                                                     : "line-clamp-2"
@@ -5291,12 +5524,13 @@ export function CockpitTasksSection({
                                                                                     e.stopPropagation();
                                                                                     toggleTaskExpand(
                                                                                        task.id,
+                                                                                       "daily",
                                                                                        e
                                                                                     );
                                                                                  }}
                                                                                  title={
                                                                                     expandedTaskIds.has(
-                                                                                       task.id
+                                                                                       `daily:${task.id}`
                                                                                     )
                                                                                        ? "Show less"
                                                                                        : "Show full task description"
@@ -5305,7 +5539,7 @@ export function CockpitTasksSection({
                                                                               >
                                                                                  <span>
                                                                                     {expandedTaskIds.has(
-                                                                                       task.id
+                                                                                       `daily:${task.id}`
                                                                                     )
                                                                                        ? "Show less"
                                                                                        : "Show more"}
@@ -5313,7 +5547,7 @@ export function CockpitTasksSection({
                                                                                  <ChevronDown
                                                                                     className={`h-3 w-3 transition-transform duration-200 ${
                                                                                        expandedTaskIds.has(
-                                                                                          task.id
+                                                                                          `daily:${task.id}`
                                                                                        )
                                                                                           ? "rotate-180"
                                                                                           : ""
@@ -5446,6 +5680,46 @@ export function CockpitTasksSection({
                                                                      <RotateCcw className="h-3.5 w-3.5" />
                                                                   </button>
                                                                )}
+                                                            {Boolean(
+                                                               linkableChallengeId
+                                                            ) &&
+                                                               (task.challengeId ===
+                                                               linkableChallengeId ? (
+                                                                  <span
+                                                                     data-testid="daily-task-scope-challenge-badge"
+                                                                     className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-0.5"
+                                                                     title="Challenge Goal (evaluated at challenge lock)"
+                                                                     aria-label="Challenge Goal"
+                                                                  >
+                                                                     <Trophy className="h-3 w-3" />
+                                                                  </span>
+                                                               ) : !task.challengeId ? (
+                                                                  <span
+                                                                     data-testid="daily-task-scope-personal-badge"
+                                                                     className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-surface-nested text-text-tertiary border border-border-subtle mt-0.5"
+                                                                     title="Personal Task (excluded from challenge lock)"
+                                                                     aria-label="Personal Task"
+                                                                  >
+                                                                     <User className="h-3 w-3" />
+                                                                  </span>
+                                                               ) : null)}
+                                                            <button
+                                                               type="button"
+                                                               onClick={(e) => {
+                                                                  e.preventDefault();
+                                                                  e.stopPropagation();
+                                                                  openEditTask(
+                                                                     task,
+                                                                     catIdx,
+                                                                     "daily"
+                                                                  );
+                                                               }}
+                                                               className="p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-colors shrink-0 mt-0.5"
+                                                               title="Edit task"
+                                                               aria-label={`Edit task ${task.text}`}
+                                                            >
+                                                               <Pencil className="h-3.5 w-3.5" />
+                                                            </button>
                                                             <button
                                                                type="button"
                                                                onClick={(e) => {
@@ -5457,7 +5731,7 @@ export function CockpitTasksSection({
                                                                      "daily"
                                                                   );
                                                                }}
-                                                               className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
+                                                               className="p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-colors shrink-0 mt-0.5"
                                                                title="Delete task"
                                                                aria-label={`Delete task ${task.text}`}
                                                             >
@@ -5471,7 +5745,7 @@ export function CockpitTasksSection({
                                                                >
                                                                   <button
                                                                      type="button"
-                                                                     className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 data-[state=open]:opacity-100 p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
+                                                                     className="p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg data-[state=open]:text-white data-[state=open]:bg-input-bg transition-colors shrink-0 mt-0.5"
                                                                      title="Task options"
                                                                      aria-label={`Options for task ${task.text}`}
                                                                   >
@@ -6200,9 +6474,16 @@ export function CockpitTasksSection({
                                                                               title={
                                                                                  task.text
                                                                               }
-                                                                              className={`text-sm break-words leading-snug ${
+                                                                              onDoubleClick={() =>
+                                                                                 openEditTask(
+                                                                                    task,
+                                                                                    catIdx,
+                                                                                    "weekly"
+                                                                                 )
+                                                                              }
+                                                                              className={`text-sm break-words leading-snug cursor-pointer ${
                                                                                  expandedTaskIds.has(
-                                                                                    task.id
+                                                                                    `weekly:${task.id}`
                                                                                  )
                                                                                     ? "line-clamp-none"
                                                                                     : "line-clamp-2"
@@ -6239,12 +6520,13 @@ export function CockpitTasksSection({
                                                                                     e.stopPropagation();
                                                                                     toggleTaskExpand(
                                                                                        task.id,
+                                                                                       "weekly",
                                                                                        e
                                                                                     );
                                                                                  }}
                                                                                  title={
                                                                                     expandedTaskIds.has(
-                                                                                       task.id
+                                                                                       `weekly:${task.id}`
                                                                                     )
                                                                                        ? "Show less"
                                                                                        : "Show full task description"
@@ -6253,7 +6535,7 @@ export function CockpitTasksSection({
                                                                               >
                                                                                  <span>
                                                                                     {expandedTaskIds.has(
-                                                                                       task.id
+                                                                                       `weekly:${task.id}`
                                                                                     )
                                                                                        ? "Show less"
                                                                                        : "Show more"}
@@ -6261,7 +6543,7 @@ export function CockpitTasksSection({
                                                                                  <ChevronDown
                                                                                     className={`h-3 w-3 transition-transform duration-200 ${
                                                                                        expandedTaskIds.has(
-                                                                                          task.id
+                                                                                          `weekly:${task.id}`
                                                                                        )
                                                                                           ? "rotate-180"
                                                                                           : ""
@@ -6369,13 +6651,30 @@ export function CockpitTasksSection({
                                                                onClick={(e) => {
                                                                   e.preventDefault();
                                                                   e.stopPropagation();
+                                                                  openEditTask(
+                                                                     task,
+                                                                     catIdx,
+                                                                     "weekly"
+                                                                  );
+                                                               }}
+                                                               className="p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-colors shrink-0 mt-0.5"
+                                                               title="Edit task"
+                                                               aria-label={`Edit task ${task.text}`}
+                                                            >
+                                                               <Pencil className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                               type="button"
+                                                               onClick={(e) => {
+                                                                  e.preventDefault();
+                                                                  e.stopPropagation();
                                                                   handleDeleteTask(
                                                                      catIdx,
                                                                      task.id,
                                                                      "weekly"
                                                                   );
                                                                }}
-                                                               className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
+                                                               className="p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-colors shrink-0 mt-0.5"
                                                                title="Delete task"
                                                                aria-label={`Delete task ${task.text}`}
                                                             >
@@ -6389,7 +6688,7 @@ export function CockpitTasksSection({
                                                                >
                                                                   <button
                                                                      type="button"
-                                                                     className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 data-[state=open]:opacity-100 p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
+                                                                     className="p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg data-[state=open]:text-white data-[state=open]:bg-input-bg transition-colors shrink-0 mt-0.5"
                                                                      title="Task options"
                                                                      aria-label={`Options for task ${task.text}`}
                                                                   >

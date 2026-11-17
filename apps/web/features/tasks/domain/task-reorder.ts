@@ -35,6 +35,7 @@ export interface DragTaskItem {
    status?: string;
    dueDate?: string | null;
    createdAt?: string | Date;
+   challengeId?: string | null;
 }
 
 export interface DragCategoryGroup<TTask extends DragTaskItem = DragTaskItem> {
@@ -133,6 +134,7 @@ export function moveTaskBetweenCategories<
       categoryId: targetCat.id || originalTask.categoryId,
       taskType: targetTaskType,
       dueDate: resolvedDueDate,
+      challengeId: originalTask.challengeId ?? null,
    };
 
    // Case 1: Same category reorder
@@ -322,6 +324,7 @@ export function moveCategoryBetweenColumns<
       ...t,
       taskType: targetTaskType,
       ...(resolvedDueDate !== undefined ? { dueDate: resolvedDueDate } : {}),
+      challengeId: t.challengeId ?? null,
    })) as TTask[];
 
    const updatedCategory = {

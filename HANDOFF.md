@@ -4,7 +4,7 @@
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
 > **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-10 (Session 209 — feat(wrapped): persistent mandatory feedback modal gated behind mandatory_feedback_v1 feature flag)
+> **Last Updated:** 2026-11-17 (Session 211 — fix(tasks): eliminate cross-column task duplication, suppress empty daily categories, decouple card expansion)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
@@ -184,6 +184,52 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 ---
 
 ## 7. Session Changelog (Last 3–5 Sessions)
+
+### Session 211 — 2026-11-17 (Fix: Eliminate Cross-Column Task Duplication, Suppress Empty Daily Categories, Decouple Card Expansion on `krish` · PR #285)
+
+- **Scope & Objectives:**
+   1. **Cross-Column Task Duplication:** Fix issue where moving a weekly task to a daily day caused it to duplicate across both the Daily and Weekly task boards simultaneously.
+   2. **Empty "Study Commitments" Category:** Fix issue where an empty container for "Study Commitments" ("No daily tasks in this category for Day X") was rendered above the moved task on days with no tasks in that category.
+   3. **Synced Task Card Expansion:** Fix issue where clicking "Show more" on a Daily task card unexpectedly expanded the corresponding Weekly task card (and vice versa) when sharing the same task ID.
+   4. **Challenge Goal Nature Preservation:** Ensure daily tasks correctly retain `challengeId` links when scheduled from weekly challenge goals without being wiped by client-side hydration healing.
+- **Root Cause Analysis:**
+   1. **Duplication:** In `hydrateFromIndexedDB`, `weeklyCats` category mapping previously used `if (c.taskType === "WEEKLY") return true;` inside `cat.tasks.filter`. If category "HoldMeToIt" was created with `taskType === "WEEKLY"`, any task belonging to that category was forced into `weeklyCats` regardless of `t.taskType === "DAILY"`. Because `dailyCats` simultaneously mapped the task under `DAILY`, the task appeared concurrently in both boards.
+   2. **Empty Daily Category Display:** In `cockpit-tasks-section.tsx`, line 5110 previously checked `if (dayTasks.length === 0 && cat.tasks.length > 0) return null;`. For an empty category like "Study Commitments" with `cat.tasks.length === 0`, it failed this guard and rendered an empty category card ("No daily tasks in this category for Day X"). Once another category gained a task on that day, `totalDailyTasksForDay > 0` and the empty category card was shown, confusing users into thinking an additional task had been created.
+   3. **Shared Card Expansion State:** `expandedTaskIds` stored raw `task.id`. When daily and weekly cards shared identical IDs, toggling one card toggled the state for both.
+   4. **Challenge ID Nullification:** Legacy healing code in `hydrateFromIndexedDB` was resetting `challengeId = null` on daily tasks, stripping challenge goal badges.
+- **Implementation Details:**
+   - `apps/web/features/study-logs/presentation/cockpit/cockpit-tasks-section.tsx`:
+      - **Strict Task Segregation:** In `hydrateFromIndexedDB`, tasks in `dailyCats` are filtered strictly by `t.categoryId === c.id && t.taskType === "DAILY"`. Tasks in `weeklyCats` are filtered strictly by `t.categoryId === c.id && t.taskType === "WEEKLY"`.
+      - **Preserve Challenge Nature:** Retained `challengeId: t.challengeId ?? null` in both maps; removed aggressive healing blocks that nulled `challengeId`, overwrote `taskType`, or wiped `dueDate`.
+      - **Suppress Empty Categories:** Updated line 5110 to `if (dayTasks.length === 0) return null;` so categories with no tasks for the active day return `null` (matching Weekly Todos behavior).
+      - **Decoupled Expansion State:** Updated `toggleTaskExpand` to key `expandedTaskIds` by `${column}:${taskId}` (e.g. `daily:task_123` vs `weekly:task_123`), completely isolating card expansion between boards.
+   - `apps/web/features/study-logs/presentation/cockpit/cockpit-tasks-expansion.test.tsx`:
+      - Added unit test asserting that expanding a daily task does not expand a weekly task sharing the same ID.
+- **Quality Gates:**
+   - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+   - `npm run test:web -- cockpit-tasks`: ✅ 10 test files passed (109 tests green).
+- **PR:** Pushed to branch `krish` for PR #285 (`krish` → `dev`).
+
+### Session 210 — 2026-11-16 (Fix: Weekly Challenge Goal Drag-and-Drop to Daily Section on `krish` · PR #285)
+
+- **Scope & Objectives:** Resolved defect where dragging a weekly challenge goal to the daily board caused it to change its nature (losing its trophy badge/challenge link) and bounce back to the weekly column after sync.
+- **Root Cause Analysis:**
+   1. **Sync Conflict & Bounce Back:** In `task-sync.repository.ts`, `changesLockedFields` treated changing `taskType` or `dueDate` as a locked field change on weekly goals past the grace period. This resulted in `{ status: "conflict", reason: "task_locked" }`, causing the client sync engine to rollback optimistic state and bounce the task back to the weekly board.
+   2. **Stripping Challenge Goal Nature:** In `task-reorder.ts` (lines 137, 327) and `task-sync.repository.ts` (lines 665-675), code unconditionally cleared `challengeId: null` when `targetTaskType === "DAILY"`, stripping the goal of its challenge association and turning it into a plain personal task.
+   3. **Visual Representation in Daily Column:** `cockpit-tasks-section.tsx` only rendered `<Trophy />` challenge badges in the weekly column, leaving daily cards without visual challenge indicators even when linked.
+   4. **Collapsed Category Invisibility:** Dropping a task into an existing daily category (e.g. "HoldMeToIt") that was collapsed caused the task to appear to vanish.
+- **Implementation Details:**
+   - `apps/web/features/tasks/domain/task-reorder.ts`: Preserved `challengeId: originalTask.challengeId ?? null` across `moveTaskBetweenCategories` and `moveCategoryBetweenColumns`.
+   - `apps/web/features/tasks/data/task-sync.repository.ts`: Refined `changesLockedFields` so only `DELETE`, title renames, or challenge unlinking/reassignment are locked; scheduling (`dueDate`) and cross-column moves (`MOVE`) are permitted. Removed daily task `challengeId` nullification so scheduled challenge goals retain their link and nature. Added `title` to `currentTaskGuard` query.
+   - `apps/web/features/tasks/data/task-sync.repository.test.ts`: Added unit test verifying weekly goals can be scheduled to daily categories without unlinking.
+   - `apps/web/features/study-logs/presentation/cockpit/cockpit-tasks-section.tsx`:
+      - Added `uncollapseCategory` helper and hooked into all drop handlers (`moveTaskToDay`, `handleTaskDrop`, `handleCategoryDrop`, `handleColumnDrop`).
+      - Added `<Trophy className="h-3 w-3" />` badge and `<User />` badge rendering for daily tasks matching weekly cards.
+      - Updated `weeklyScopedCounts` to tally challenge goals across both weekly and daily categories so header counters remain stable.
+- **Quality Gates:**
+   - `npm run typecheck:web`: 0 errors (`tsc --noEmit` exits with 0).
+   - `npm run test:web`: 260 test files passed (2,774 tests green).
+- **PR:** Pushed to branch `krish` for PR #285 (`krish` → `dev`).
 
 ### Session 208 — 2026-11-09 (Discord role revalidation, shorter sessions, revoke-only role editor, SEC-05 / SEC-20 / GH #227 on `fix/auth-role-revalidation-227`)
 
@@ -3202,3 +3248,38 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
       - `npm run test:web`: ✅ 260 test files (2,773 tests) passing 100% green.
       - `npm run build:web`: ✅ Production build clean (21 routes compiled, 0 errors).
 - **NEXT STEP:** Merge `afnan-jr` into `dev` via PR once peer-reviewed.
+
+### Session 210 — 2026-11-16 (fix(tasks): fix drag from weekly to daily task disappearance, challenge scoping, and task management UI discoverability — on `krish`)
+
+- **Context & Objectives:**
+   1. Fix weekly task disappearing when dragged to a day column in the Cockpit while persisting in profile weekly goals.
+   2. Ensure daily tasks adhere to Law L6 (Three-Condition Invariant): daily tasks cannot have challengeId links, and dragging a weekly challenge goal to daily unlinks challengeId and assigns the day's dueDate.
+   3. Fix task management and edit discoverability: the 3-dots menu button and trash button were hidden behind `opacity-0 sm:opacity-0` and only visible on hover (making them completely inaccessible on touch devices / tablets and undiscoverable on desktop). Add dedicated Pencil edit button, double-click task text to edit, and ensure options triggers are always accessible.
+- **Root Causes:**
+   1. In `features/tasks/data/task-sync.repository.ts`, `applyTaskMutation` for action `"UPDATE"` or `"MOVE"` did not update `taskType` when moving tasks across categories or when `taskType` was passed in the payload. PostgreSQL retained `taskType = "WEEKLY"` while its `categoryId` pointed to a `DAILY` category. Consequently, `getUserCategorizedTasksFromDatabase` filtered it out of the Daily board (`t.taskType === "DAILY"`), and out of the Weekly board (`c.taskType === "WEEKLY"`), causing the task to disappear on sync while remaining on the user's profile.
+   2. In `features/study-logs/presentation/cockpit/cockpit-tasks-section.tsx`, `handleTaskDrop` only enqueued action `"REORDER"` when dropping onto a category with existing tasks, omitting `"MOVE"`.
+   3. `features/tasks/domain/task-reorder.ts` did not clear `challengeId` when moving a task or category to daily.
+   4. The task row options trigger in `cockpit-tasks-section.tsx` had `opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100`. On tablets and touch devices (>640px), lack of mouse hover rendered the menu permanently invisible.
+- **Changes Completed:**
+   1. **Domain Logic (`apps/web/features/tasks/domain/task-reorder.ts`):**
+      - Added `challengeId?: string | null` to `DragTaskItem`.
+      - Updated `moveTaskBetweenCategories` to clear `challengeId: null` when `targetTaskType === "DAILY"`.
+      - Updated `moveCategoryBetweenColumns` to clear `challengeId: null` when moving categories to daily.
+   2. **Data & Synchronization (`apps/web/features/tasks/data/task-sync.repository.ts`):**
+      - In `applyTaskMutation`, correctly detect `nextTaskType` (from `payload.taskType` or `targetCategory.taskType`) and update `dataToUpdate.taskType` when it differs from `currentTaskGuard.taskType`.
+      - Clear `dataToUpdate.challengeId = null` when becoming `DAILY` or when explicitly unlinking.
+      - Clear `dataToUpdate.dueDate = null` when moving from `DAILY` to `WEEKLY` without an explicit dueDate.
+   3. **Presentation & Cockpit UI (`apps/web/features/study-logs/presentation/cockpit/cockpit-tasks-section.tsx`):**
+      - Created `openEditTask(task, catIdx, taskType)` helper function.
+      - Added quick `Pencil` edit button to each task row in both Daily and Weekly boards.
+      - Made the 3-dots `MoreVertical` options trigger and `Trash2` button always visible with gentle tertiary styling (`text-text-tertiary hover:text-white`), removing `opacity-0 sm:opacity-0` hover locks for full touch/tablet/desktop accessibility.
+      - Added `onDoubleClick` on task text spans to open the Edit Task dialog directly.
+      - In `handleTaskDrop`, enqueued `MOVE` mutation with `taskId, categoryId, taskType, sortOrder, dueDate, challengeId` on cross-category/type moves regardless of target category length.
+      - In `hydrateFromIndexedDB`, updated task filtering and added self-healing for IndexedDB tasks with mismatched `taskType`.
+   4. **Quality Gates & Verification:**
+      - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+      - `npm run test:web -- cockpit-tasks`: ✅ 10 test suites (108 tests) passing 100% green.
+      - `npm run test:web -- task-sync.repository.test.ts`: ✅ 38 tests passing.
+      - `npm run test:web -- task-reorder.test.ts`: ✅ 15 tests passing.
+      - `npm run test:web -- task.repository.test.ts`: ✅ 47 tests passing.
+- **NEXT STEP:** Submit PR from `krish` to `dev`.

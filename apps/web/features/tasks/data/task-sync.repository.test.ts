@@ -999,6 +999,50 @@ describe("processBatchSync (task-sync.repository)", () => {
          expect(prisma.task.updateMany).toHaveBeenCalled();
       });
 
+      it("allows moving/scheduling a weekly goal to a daily category after the grace period without unlinking", async () => {
+         vi.mocked(prisma.task.findFirst).mockResolvedValueOnce(
+            lockedGuard as never
+         );
+         vi.mocked(prisma.category.findFirst).mockResolvedValueOnce({
+            id: "cat_daily",
+            userId,
+            name: "HoldMeToIt",
+            taskType: "DAILY",
+            isDeleted: false,
+         } as never);
+
+         const res = await processBatchSync(userId, [
+            {
+               id: "mut-grace-move",
+               entityType: "TASK",
+               action: "MOVE",
+               payload: {
+                  taskId: "t_weekly",
+                  categoryId: "cat_daily",
+                  taskType: "DAILY",
+                  dueDate: "2026-11-16",
+               },
+               createdAt: Date.now(),
+               retryCount: 0,
+            },
+         ]);
+
+         expect(res.mutationResults?.[0]).toMatchObject({
+            id: "mut-grace-move",
+            status: "applied",
+         });
+         expect(prisma.task.updateMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+               where: expect.objectContaining({ id: "t_weekly" }),
+               data: expect.objectContaining({
+                  categoryId: "cat_daily",
+                  taskType: "DAILY",
+                  dueDate: new Date("2026-11-16"),
+               }),
+            })
+         );
+      });
+
       it("deletes a weekly goal inside the grace period", async () => {
          vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
             ...lockedGuard,
