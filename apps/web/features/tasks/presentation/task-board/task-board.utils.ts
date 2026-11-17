@@ -1,9 +1,6 @@
-import { formatDayDate } from "@/features/study-logs/domain/challenge-day";
 import type { TaskStatus, TaskType } from "@/features/tasks/domain/task.types";
 import type { LocalTaskRecord } from "@/features/tasks/domain/task-sync.types";
 import type { BoardTask } from "./task-board.types";
-
-export { formatDayDate };
 
 /** Derives the presentation status for a task item. */
 export function getTaskStatus(task: BoardTask): TaskStatus {

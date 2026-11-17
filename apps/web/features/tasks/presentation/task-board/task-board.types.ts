@@ -80,9 +80,3 @@ export interface DragOverInfo {
    targetDateKey?: string;
    position?: "above" | "below";
 }
-
-/** @deprecated Use BoardTask. Retained while the board module is migrated. */
-export type TaskItem = BoardTask;
-
-/** @deprecated Use BoardCategory. Retained while the board module is migrated. */
-export type CategoryGroup = BoardCategory;

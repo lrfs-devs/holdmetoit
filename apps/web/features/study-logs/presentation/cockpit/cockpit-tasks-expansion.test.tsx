@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { CockpitTasksSection } from "./cockpit-tasks-section";
+import { CockpitTasksSection } from "@/features/tasks/presentation/task-board";
 import type { UserCategorizedTasks } from "@/features/tasks/domain/task.types";
 
 afterEach(cleanup);

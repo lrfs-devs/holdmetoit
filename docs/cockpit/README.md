@@ -69,15 +69,22 @@ apps/web/
 ├── app/
 │   ├── page.tsx                                                      # Root server component: queries challenge repo for guests as well
 │   └── page.test.tsx                                                 # Page tests verifying guest query & rendering
-└── features/study-logs/presentation/
-    ├── home-cockpit-view.tsx                                         # Switches between GuestCockpitView and Authenticated Cockpit
-    ├── home-cockpit-view.test.tsx                                    # Home cockpit branch tests
-    └── cockpit/
-        ├── guest-cockpit-view.tsx                                    # Main GuestCockpitView component
-        ├── guest-cockpit-view.test.tsx                               # Vitest suite (8 tests) covering all guest components & actions
-        ├── cockpit-tasks-section.tsx                                 # Task manager with guest sandbox chips & event listener
-        └── index.ts                                                  # Barrel export
+├── features/study-logs/presentation/
+│   ├── home-cockpit-view.tsx                                         # Switches between GuestCockpitView and Authenticated Cockpit
+│   ├── home-cockpit-view.test.tsx                                    # Home cockpit branch tests
+│   └── cockpit/
+│       ├── guest-cockpit-view.tsx                                    # Main GuestCockpitView component
+│       ├── guest-cockpit-view.test.tsx                               # Vitest suite (8 tests) covering all guest components & actions
+│       └── index.ts                                                  # Barrel export
+└── features/tasks/presentation/task-board/
+    ├── cockpit-tasks-section.tsx                                     # Composition shell + public exports
+    ├── task-board.tsx                                                # Board layout + mobile switcher
+    ├── components/                                                   # TaskRow, TaskCategoryCard, boards, chrome
+    ├── dialogs/                                                      # Add/edit task, rename/delete category
+    └── hooks/                                                        # Persistence, hydration, state, nav, moves, mutations, DnD
 ```
+
+The task board implementation lives in the `tasks` slice; `study-logs` only composes the cockpit and imports `CockpitTasksSection` from `@/features/tasks/presentation/task-board`.
 
 ---
 

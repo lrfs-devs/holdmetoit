@@ -28,7 +28,7 @@ import {
    CockpitTasksSection,
    LOAD_SAMPLE_TASK_EVENT,
    SAMPLE_STUDY_TASKS,
-} from "./cockpit-tasks-section";
+} from "@/features/tasks/presentation/task-board";
 import type { ChallengeScoreboardViewModel } from "@/features/leaderboard/domain/leaderboard.types";
 import { DashboardWrapped } from "@/features/wrapped/presentation/dashboard-wrapped";
 

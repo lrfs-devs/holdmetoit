@@ -352,3 +352,36 @@ Enables users to export their Daily and Weekly Todo lists with a single click fr
 2. **High-Contrast Emojis:**
    - Visual emojis for Discord servers: `⬜` (TODO), `✅` (Completed), `⏳` (In Progress), `❌ ~~...~~` (Crossed Out), `🏆` (Challenge Goal).
    - Category headers formatted as `**📂 Category Name**`.
+
+---
+
+## 8. Task Board Presentation Module
+
+The former `study-logs/.../cockpit-tasks-section.tsx` mega-component now lives in the tasks slice:
+
+```
+apps/web/features/tasks/presentation/task-board/
+├── cockpit-tasks-section.tsx      # composition shell: props -> hooks -> <TaskBoard/> + dialogs
+├── task-board.tsx                 # two-column layout + mobile switcher
+├── task-board.types.ts            # BoardTask / BoardCategory / props / drag types
+├── task-board.utils.ts            # getTaskStatus + buildBoardTaskRecord + buildMoveIntent
+├── task-board.selectors.ts        # pure week bucketing, counts, visibility, board mapping
+├── components/                    # TaskRow, TaskCategoryCard, Daily/WeeklyTaskBoard, chrome
+├── dialogs/                       # AddTaskDialog, EditTaskDialog, RenameCategoryDialog, DeleteCategoryDialog
+└── hooks/
+    ├── use-task-board-persistence.ts
+    ├── use-task-board-hydration.ts
+    ├── use-task-board-state.ts
+    ├── use-week-navigation.ts
+    ├── use-task-moves.ts          # one MoveIntent seam (commitTaskMove)
+    ├── use-task-mutations.ts      # status/edit/delete/scope/rollover
+    ├── use-category-mutations.ts  # rename/delete category
+    └── use-task-drag-and-drop.ts  # drag state + drop routing
+```
+
+Rules:
+
+- Pure math stays in `features/tasks/domain/` (`task-reorder`, `task-rollover`, `task-lock`, `task-edit-patch`).
+- `task-board.selectors.ts` and `buildBoardTaskRecord` are framework-free and unit-tested.
+- Every local task write goes through `buildBoardTaskRecord` so `sortOrder`/`challengeId` cannot be dropped.
+- Every move gesture resolves a `MoveIntent` and calls `commitTaskMove`. **Known gap:** the server still ignores `taskType` on task UPDATE/MOVE and the drag-onto-task path emits REORDER only; the weekly↔daily/category revert fixes are tracked in `breaker.md` for Stage 7.**
