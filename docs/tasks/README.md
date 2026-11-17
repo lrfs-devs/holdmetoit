@@ -366,7 +366,11 @@ apps/web/features/tasks/presentation/task-board/
 ├── task-board.types.ts            # BoardTask / BoardCategory / props / drag types
 ├── task-board.utils.ts            # getTaskStatus + buildBoardTaskRecord + buildMoveIntent
 ├── task-board.selectors.ts        # pure week bucketing, counts, visibility, board mapping
-├── components/                    # TaskRow, TaskCategoryCard, Daily/WeeklyTaskBoard, chrome
+├── components/
+│   ├── task-row.tsx               # memoized task card (daily + weekly)
+│   ├── task-category-card.tsx     # memoized category header + list
+│   ├── mobile-board-switcher.tsx  # small-screen Daily/Weekly tabs
+│   └── rollover-banner.tsx        # today/past-day rollover helpers
 ├── dialogs/                       # AddTaskDialog, EditTaskDialog, RenameCategoryDialog, DeleteCategoryDialog
 └── hooks/
     ├── use-task-board-persistence.ts

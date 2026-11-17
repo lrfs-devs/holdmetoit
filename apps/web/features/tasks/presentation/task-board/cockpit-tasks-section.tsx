@@ -122,6 +122,10 @@ import { RenameCategoryDialog } from "./dialogs/rename-category-dialog";
 import { DeleteCategoryDialog } from "./dialogs/delete-category-dialog";
 import { EditTaskDialog } from "./dialogs/edit-task-dialog";
 import { AddTaskDialog } from "./dialogs/add-task-dialog";
+import { MobileBoardSwitcher } from "./components/mobile-board-switcher";
+import { TaskRow } from "./components/task-row";
+import { TaskCategoryCard } from "./components/task-category-card";
+import { RolloverBanner } from "./components/rollover-banner";
 import { TaskSyncIssueBanner } from "@/features/tasks/presentation/task-sync-issue-banner";
 import type {
    LocalCategoryRecord,
@@ -1071,57 +1075,14 @@ export function CockpitTasksSection({
    return (
       <>
          <TaskSyncIssueBanner userId={userId} />
-         {/* Mobile Segmented Switcher (< sm: 360px–639px) */}
-         <div
-            role="tablist"
-            aria-label="Tasks board view switcher"
-            className="flex sm:hidden items-center justify-between p-1 rounded-2xl bg-surface-primary border border-border-default mb-4"
-         >
-            <button
-               type="button"
-               role="tab"
-               aria-selected={mobileActiveTab === "daily"}
-               onClick={() => setMobileActiveTab("daily")}
-               className={`flex-1 min-h-control-sm py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                  mobileActiveTab === "daily"
-                     ? "bg-white text-black shadow-sm"
-                     : "text-text-tertiary hover:text-white"
-               }`}
-            >
-               <span>Daily</span>
-               <span
-                  className={`px-1.5 py-0.5 rounded-full text-micro font-semibold tabular-nums ${
-                     mobileActiveTab === "daily"
-                        ? "bg-black/10 text-black"
-                        : "bg-surface-nested text-text-tertiary"
-                  }`}
-               >
-                  {completedDailyTasksForDay}/{totalDailyTasksForDay}
-               </span>
-            </button>
-            <button
-               type="button"
-               role="tab"
-               aria-selected={mobileActiveTab === "weekly"}
-               onClick={() => setMobileActiveTab("weekly")}
-               className={`flex-1 min-h-control-sm py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                  mobileActiveTab === "weekly"
-                     ? "bg-white text-black shadow-sm"
-                     : "text-text-tertiary hover:text-white"
-               }`}
-            >
-               <span>Weekly</span>
-               <span
-                  className={`px-1.5 py-0.5 rounded-full text-micro font-semibold tabular-nums ${
-                     mobileActiveTab === "weekly"
-                        ? "bg-black/10 text-black"
-                        : "bg-surface-nested text-text-tertiary"
-                  }`}
-               >
-                  {completedWeeklyTasks}/{totalWeeklyTasks}
-               </span>
-            </button>
-         </div>
+         <MobileBoardSwitcher
+            activeTab={mobileActiveTab}
+            onTabChange={setMobileActiveTab}
+            dailyCompleted={completedDailyTasksForDay}
+            dailyTotal={totalDailyTasksForDay}
+            weeklyCompleted={completedWeeklyTasks}
+            weeklyTotal={totalWeeklyTasks}
+         />
 
          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Daily Todos */}
@@ -1337,140 +1298,21 @@ export function CockpitTasksSection({
 
                   <div className="space-y-3">
                      {/* Rollover Helper Banners */}
-                     {isActiveDayToday &&
-                        rolloverSummary.totalPastIncompleteCount > 0 &&
-                        !isRolloverDismissed &&
-                        !isRolloverSnoozed && (
-                           <div
-                              id="rollover-today-banner"
-                              data-testid="rollover-today-banner"
-                              suppressHydrationWarning
-                              className="p-3.5 rounded-2xl bg-surface-nested border border-amber-500/30 flex flex-col gap-2.5 shadow-sm animate-in fade-in duration-200"
-                           >
-                              <script
-                                 dangerouslySetInnerHTML={{
-                                    __html: `(function(){try{var k=${JSON.stringify(
-                                       ROLLOVER_SNOOZE_STORAGE_PREFIX
-                                    ).replace(
-                                       /</g,
-                                       "\\u003c"
-                                    )};var u=${JSON.stringify(
-                                       userId && userId.trim().length > 0
-                                          ? userId.trim()
-                                          : "guest"
-                                    ).replace(
-                                       /</g,
-                                       "\\u003c"
-                                    )};var d=${JSON.stringify(
-                                       effectiveTodayDate
-                                    ).replace(
-                                       /</g,
-                                       "\\u003c"
-                                    )};var c=${JSON.stringify(
-                                       ROLLOVER_SNOOZE_COOKIE
-                                    ).replace(
-                                       /</g,
-                                       "\\u003c"
-                                    )};var s=false;if(typeof localStorage!=='undefined'&&localStorage.getItem(k+u+'_'+d)==='true'){s=true;}if(!s&&typeof document!=='undefined'&&document.cookie){var m=document.cookie.match(new RegExp('(?:^|;\\\\s*)'+c+'=([^;]*)'));if(m&&m[1]){var p=JSON.parse(decodeURIComponent(m[1]));if(p&&typeof p==='object'&&p[u]===d){s=true;}}}if(s){var el=document.getElementById('rollover-today-banner');if(el)el.style.setProperty('display','none','important');}}catch(e){}})();`,
-                                 }}
-                              />
-                              <div className="flex items-start justify-between gap-2.5">
-                                 <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                    <div className="h-8 w-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                                       <RotateCcw className="h-4 w-4 text-amber-400" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                       <p className="text-xs font-semibold text-text-primary">
-                                          {rolloverSummary.yesterdayIncompleteCount >
-                                             0 &&
-                                          rolloverSummary.totalPastIncompleteCount ===
-                                             rolloverSummary.yesterdayIncompleteCount
-                                             ? `${rolloverSummary.yesterdayIncompleteCount} incomplete task${
-                                                  rolloverSummary.yesterdayIncompleteCount >
-                                                  1
-                                                     ? "s"
-                                                     : ""
-                                               } from yesterday`
-                                             : `${rolloverSummary.totalPastIncompleteCount} incomplete task${
-                                                  rolloverSummary.totalPastIncompleteCount >
-                                                  1
-                                                     ? "s"
-                                                     : ""
-                                               } from earlier days`}
-                                       </p>
-                                       <p className="text-meta text-text-tertiary mt-0.5">
-                                          Carry over unfinished tasks to today
-                                          with one click.
-                                       </p>
-                                    </div>
-                                 </div>
-                                 <button
-                                    type="button"
-                                    onClick={handleSnoozeRolloverToday}
-                                    aria-label="Dismiss rollover helper"
-                                    className="p-1 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-elevated transition-colors shrink-0 -mr-1 -mt-1"
-                                 >
-                                    <X className="h-4 w-4" />
-                                 </button>
-                              </div>
-                              <div className="flex items-center flex-wrap gap-2 pt-0.5">
-                                 <button
-                                    type="button"
-                                    onClick={() =>
-                                       handleRolloverIncompleteTasks()
-                                    }
-                                    data-testid="rollover-all-button"
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition-colors shadow-sm"
-                                 >
-                                    <RotateCcw className="h-3.5 w-3.5" />
-                                    <span>Roll over to Today</span>
-                                 </button>
-                                 <button
-                                    type="button"
-                                    onClick={handleSnoozeRolloverToday}
-                                    title="Don't remind today"
-                                    data-testid="rollover-snooze-today-button"
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-xl text-text-tertiary hover:text-text-primary hover:bg-surface-elevated transition-colors border border-border-subtle/60 hover:border-border-subtle"
-                                 >
-                                    <span>Don&apos;t remind today</span>
-                                 </button>
-                              </div>
-                           </div>
-                        )}
-
-                     {rolloverSummary.isViewingPastDay &&
-                        rolloverSummary.selectedDayIncompleteCount > 0 && (
-                           <div
-                              data-testid="rollover-past-day-banner"
-                              className="p-2.5 rounded-xl bg-surface-nested border border-amber-500/20 flex items-center justify-between gap-2 animate-in fade-in duration-200"
-                           >
-                              <div className="flex items-center gap-2 text-xs text-text-secondary min-w-0">
-                                 <RotateCcw className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                                 <span className="truncate">
-                                    {rolloverSummary.selectedDayIncompleteCount}{" "}
-                                    incomplete task
-                                    {rolloverSummary.selectedDayIncompleteCount >
-                                    1
-                                       ? "s"
-                                       : ""}{" "}
-                                    on this day
-                                 </span>
-                              </div>
-                              <button
-                                 type="button"
-                                 onClick={() =>
-                                    handleRolloverIncompleteTasks({
-                                       sourceDateKey: selectedDateKey,
-                                    })
-                                 }
-                                 data-testid="rollover-day-button"
-                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition-colors shrink-0"
-                              >
-                                 <RotateCcw className="h-3 w-3" />
-                                 <span>Roll over to Today</span>
-                              </button>
-                           </div>
-                        )}
+                     <RolloverBanner
+                        summary={rolloverSummary}
+                        isActiveDayToday={isActiveDayToday}
+                        isDismissed={isRolloverDismissed}
+                        isSnoozed={isRolloverSnoozed}
+                        userId={userId}
+                        effectiveTodayDate={effectiveTodayDate}
+                        onRolloverAll={() => handleRolloverIncompleteTasks()}
+                        onRolloverDay={() =>
+                           handleRolloverIncompleteTasks({
+                              sourceDateKey: selectedDateKey,
+                           })
+                        }
+                        onSnooze={handleSnoozeRolloverToday}
+                     />
 
                      {totalDailyTasksForDay === 0 ? (
                         <div className="rounded-xl border border-dashed border-border-strong bg-surface-tertiary/50 p-6 text-center space-y-2">
@@ -1561,9 +1403,24 @@ export function CockpitTasksSection({
                                  dragOverInfo.targetCatIdx === catIdx;
 
                               return (
-                                 <div
+                                 <TaskCategoryCard
                                     key={cat.id || cat.name}
-                                    data-drag-card="category"
+                                    category={cat}
+                                    variant="daily"
+                                    isCollapsed={isCollapsed}
+                                    isDragging={isCatDragging}
+                                    isOver={isCatOver}
+                                    dropPosition={dragOverInfo?.position}
+                                    onToggleCollapse={() =>
+                                       toggleDailyCollapse(catIdx)
+                                    }
+                                    onDragStart={(e) =>
+                                       handleCategoryDragStart(
+                                          e,
+                                          catIdx,
+                                          "daily"
+                                       )
+                                    }
                                     onDragOver={(e) =>
                                        handleCategoryDragOver(
                                           e,
@@ -1574,801 +1431,395 @@ export function CockpitTasksSection({
                                     onDrop={(e) =>
                                        handleCategoryDrop(e, catIdx, "daily")
                                     }
-                                    className={`rounded-xl bg-surface-nested overflow-hidden border transition-all ${
-                                       isCatDragging
-                                          ? "opacity-30 border-dashed border-brand-2 bg-surface-elevated scale-[0.99]"
-                                          : ""
-                                    } ${
-                                       isCatOver &&
-                                       dragOverInfo?.position === "above"
-                                          ? "border-t-2 border-t-[#e08a32] border-border-strong"
-                                          : isCatOver &&
-                                              dragOverInfo?.position === "below"
-                                            ? "border-b-2 border-b-[#e08a32] border-border-strong"
-                                            : isCatOver
-                                              ? "border-brand-2"
-                                              : "border-border-strong"
-                                    }`}
+                                    onDragEnd={handleDragEnd}
+                                    menuContent={
+                                       <CategoryMenuItems
+                                          isChallengeActive={
+                                             hasChallengeContext
+                                          }
+                                          cat={cat}
+                                          catType="daily"
+                                          dailyCategories={dailyCategories}
+                                          weeklyCategories={weeklyCategories}
+                                          selectedDateKey={selectedDateKey}
+                                          effectiveTodayDate={
+                                             effectiveTodayDate
+                                          }
+                                          dayOptions={dayOptions}
+                                          onMoveCategoryToDay={(
+                                             targetDateKey
+                                          ) =>
+                                             moveCategoryToDayAction(
+                                                catIdx,
+                                                targetDateKey,
+                                                "daily"
+                                             )
+                                          }
+                                          onRenameCategory={() => {
+                                             setEditCategoryModal({
+                                                id: cat.id,
+                                                name: cat.name,
+                                                taskType: "daily",
+                                             });
+                                             setEditCategoryInputName(cat.name);
+                                          }}
+                                          onDeleteCategory={() => {
+                                             setDeleteCategoryModal({
+                                                id: cat.id,
+                                                name: cat.name,
+                                                taskType: "daily",
+                                             });
+                                          }}
+                                          Item={DropdownMenuItem}
+                                          Separator={DropdownMenuSeparator}
+                                          Label={DropdownMenuLabel}
+                                       />
+                                    }
+                                    contextMenuContent={
+                                       <CategoryMenuItems
+                                          isChallengeActive={
+                                             hasChallengeContext
+                                          }
+                                          cat={cat}
+                                          catType="daily"
+                                          dailyCategories={dailyCategories}
+                                          weeklyCategories={weeklyCategories}
+                                          selectedDateKey={selectedDateKey}
+                                          effectiveTodayDate={
+                                             effectiveTodayDate
+                                          }
+                                          dayOptions={dayOptions}
+                                          onMoveCategoryToDay={(
+                                             targetDateKey
+                                          ) =>
+                                             moveCategoryToDayAction(
+                                                catIdx,
+                                                targetDateKey,
+                                                "daily"
+                                             )
+                                          }
+                                          onRenameCategory={() => {
+                                             setEditCategoryModal({
+                                                id: cat.id,
+                                                name: cat.name,
+                                                taskType: "daily",
+                                             });
+                                             setEditCategoryInputName(cat.name);
+                                          }}
+                                          onDeleteCategory={() => {
+                                             setDeleteCategoryModal({
+                                                id: cat.id,
+                                                name: cat.name,
+                                                taskType: "daily",
+                                             });
+                                          }}
+                                          Item={ContextMenuItem}
+                                          Separator={ContextMenuSeparator}
+                                          Label={ContextMenuLabel}
+                                       />
+                                    }
                                  >
-                                    <ContextMenu modal={false}>
-                                       <ContextMenuTrigger asChild>
-                                          <div
-                                             draggable
-                                             onDragStart={(e) =>
-                                                handleCategoryDragStart(
-                                                   e,
-                                                   catIdx,
-                                                   "daily"
-                                                )
-                                             }
-                                             onDragEnd={handleDragEnd}
-                                             onClick={() =>
-                                                toggleDailyCollapse(catIdx)
-                                             }
-                                             className="w-full flex items-center justify-between px-3 py-3 text-left font-medium text-sm text-white hover:bg-surface-nested transition-colors cursor-grab active:cursor-grabbing select-none"
-                                          >
-                                             <div
-                                                className="p-1 -ml-1 mr-1 text-text-tertiary hover:text-brand-2 rounded transition-colors shrink-0"
-                                                title="Drag category to reorder, move to day or across boards"
-                                                aria-label={`Drag category ${cat.name}`}
-                                             >
-                                                <GripVertical className="h-4 w-4" />
-                                             </div>
-                                             <span className="truncate flex-1 pr-2">
-                                                {cat.name}
-                                             </span>
-                                             <div
-                                                className="flex items-center gap-1.5 shrink-0"
+                                    {dayTasks.length === 0 ? (
+                                       <p className="text-xs text-text-tertiary py-1">
+                                          No daily tasks in this category for{" "}
+                                          {activeDayOption.shortLabel}.
+                                       </p>
+                                    ) : (
+                                       dayTasks.map((task) => {
+                                          const isTaskDragging =
+                                             draggedItem?.type === "task" &&
+                                             draggedItem.id === task.id;
+                                          const isTaskOver =
+                                             dragOverInfo?.type === "task" &&
+                                             dragOverInfo.targetId === task.id;
+
+                                          return (
+                                             <TaskRow
+                                                key={task.id}
+                                                task={task}
+                                                variant="daily"
+                                                expanded={expandedTaskIds.has(
+                                                   task.id
+                                                )}
+                                                isDragging={isTaskDragging}
+                                                isOver={isTaskOver}
+                                                dropPosition={
+                                                   dragOverInfo?.position
+                                                }
+                                                onToggleExpand={(e) =>
+                                                   toggleTaskExpand(task.id, e)
+                                                }
+                                                onToggleStatus={(e) =>
+                                                   toggleDailyTask(
+                                                      catIdx,
+                                                      task.id,
+                                                      e
+                                                   )
+                                                }
+                                                onStatusAction={(status, e) =>
+                                                   setTaskStatus(
+                                                      catIdx,
+                                                      task.id,
+                                                      "daily",
+                                                      status,
+                                                      e
+                                                   )
+                                                }
                                                 onDragStart={(e) =>
-                                                   e.stopPropagation()
+                                                   handleTaskDragStart(
+                                                      e,
+                                                      task.id,
+                                                      catIdx,
+                                                      "daily"
+                                                   )
                                                 }
-                                                onClick={(e) =>
-                                                   e.stopPropagation()
+                                                onDragOver={(e) =>
+                                                   handleTaskDragOver(
+                                                      e,
+                                                      task.id,
+                                                      catIdx,
+                                                      "daily"
+                                                   )
                                                 }
-                                             >
-                                                <DropdownMenu modal={false}>
-                                                   <DropdownMenuTrigger asChild>
+                                                onDrop={(e) =>
+                                                   handleTaskDrop(
+                                                      e,
+                                                      task.id,
+                                                      catIdx,
+                                                      "daily"
+                                                   )
+                                                }
+                                                onDragEnd={handleDragEnd}
+                                                onDelete={(e) => {
+                                                   e.preventDefault();
+                                                   e.stopPropagation();
+                                                   handleDeleteTask(
+                                                      catIdx,
+                                                      task.id,
+                                                      "daily"
+                                                   );
+                                                }}
+                                                trailingAction={
+                                                   rolloverSummary.isViewingPastDay &&
+                                                   !task.completed &&
+                                                   getTaskStatus(task) !==
+                                                      "COMPLETED" &&
+                                                   getTaskStatus(task) !==
+                                                      "CROSSED_OUT" && (
                                                       <button
                                                          type="button"
-                                                         className="p-1 rounded-md text-text-tertiary hover:text-white hover:bg-input-bg data-[state=open]:text-white data-[state=open]:bg-input-bg transition-colors"
-                                                         title="Category options"
-                                                         aria-label={`Options for category ${cat.name}`}
+                                                         onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRolloverIncompleteTasks(
+                                                               {
+                                                                  sourceDateKey:
+                                                                     selectedDateKey,
+                                                                  taskId:
+                                                                     task.id,
+                                                               }
+                                                            );
+                                                         }}
+                                                         className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-emerald-400 rounded hover:bg-surface-elevated transition-all shrink-0 mt-0.5"
+                                                         title="Roll over to Today"
+                                                         aria-label={`Roll over ${task.text} to Today`}
                                                       >
-                                                         <MoreVertical className="h-4 w-4" />
+                                                         <RotateCcw className="h-3.5 w-3.5" />
                                                       </button>
-                                                   </DropdownMenuTrigger>
-                                                   <DropdownMenuContent
-                                                      align="end"
-                                                      className="min-w-dropdown-min"
-                                                   >
-                                                      <CategoryMenuItems
-                                                         isChallengeActive={
-                                                            hasChallengeContext
-                                                         }
-                                                         cat={cat}
-                                                         catType="daily"
-                                                         dailyCategories={
-                                                            dailyCategories
-                                                         }
-                                                         weeklyCategories={
-                                                            weeklyCategories
-                                                         }
-                                                         selectedDateKey={
-                                                            selectedDateKey
-                                                         }
-                                                         effectiveTodayDate={
-                                                            effectiveTodayDate
-                                                         }
-                                                         dayOptions={dayOptions}
-                                                         onMoveCategoryToDay={(
-                                                            targetDateKey
-                                                         ) =>
-                                                            moveCategoryToDayAction(
-                                                               catIdx,
-                                                               targetDateKey,
-                                                               "daily"
-                                                            )
-                                                         }
-                                                         onRenameCategory={() => {
-                                                            setEditCategoryModal(
-                                                               {
-                                                                  id: cat.id,
-                                                                  name: cat.name,
-                                                                  taskType:
-                                                                     "daily",
-                                                               }
-                                                            );
-                                                            setEditCategoryInputName(
-                                                               cat.name
-                                                            );
-                                                         }}
-                                                         onDeleteCategory={() => {
-                                                            setDeleteCategoryModal(
-                                                               {
-                                                                  id: cat.id,
-                                                                  name: cat.name,
-                                                                  taskType:
-                                                                     "daily",
-                                                               }
-                                                            );
-                                                         }}
-                                                         Item={DropdownMenuItem}
-                                                         Separator={
-                                                            DropdownMenuSeparator
-                                                         }
-                                                         Label={
-                                                            DropdownMenuLabel
-                                                         }
-                                                      />
-                                                   </DropdownMenuContent>
-                                                </DropdownMenu>
-                                                {isCollapsed ? (
-                                                   <ChevronDown className="h-4 w-4 text-text-tertiary" />
-                                                ) : (
-                                                   <ChevronUp className="h-4 w-4 text-text-tertiary" />
-                                                )}
-                                             </div>
-                                          </div>
-                                       </ContextMenuTrigger>
-                                       <ContextMenuContent className="min-w-dropdown-min">
-                                          <CategoryMenuItems
-                                             isChallengeActive={
-                                                hasChallengeContext
-                                             }
-                                             cat={cat}
-                                             catType="daily"
-                                             dailyCategories={dailyCategories}
-                                             weeklyCategories={weeklyCategories}
-                                             selectedDateKey={selectedDateKey}
-                                             effectiveTodayDate={
-                                                effectiveTodayDate
-                                             }
-                                             dayOptions={dayOptions}
-                                             onMoveCategoryToDay={(
-                                                targetDateKey
-                                             ) =>
-                                                moveCategoryToDayAction(
-                                                   catIdx,
-                                                   targetDateKey,
-                                                   "daily"
-                                                )
-                                             }
-                                             onRenameCategory={() => {
-                                                setEditCategoryModal({
-                                                   id: cat.id,
-                                                   name: cat.name,
-                                                   taskType: "daily",
-                                                });
-                                                setEditCategoryInputName(
-                                                   cat.name
-                                                );
-                                             }}
-                                             onDeleteCategory={() => {
-                                                setDeleteCategoryModal({
-                                                   id: cat.id,
-                                                   name: cat.name,
-                                                   taskType: "daily",
-                                                });
-                                             }}
-                                             Item={ContextMenuItem}
-                                             Separator={ContextMenuSeparator}
-                                             Label={ContextMenuLabel}
-                                          />
-                                       </ContextMenuContent>
-                                    </ContextMenu>
-
-                                    {!isCollapsed && (
-                                       <div className="px-4 pb-3 pt-1 space-y-2.5 border-t border-border-strong">
-                                          {dayTasks.length === 0 ? (
-                                             <p className="text-xs text-text-tertiary py-1">
-                                                No daily tasks in this category
-                                                for {activeDayOption.shortLabel}
-                                                .
-                                             </p>
-                                          ) : (
-                                             dayTasks.map((task) => {
-                                                const isTaskDragging =
-                                                   draggedItem?.type ===
-                                                      "task" &&
-                                                   draggedItem.id === task.id;
-                                                const isTaskOver =
-                                                   dragOverInfo?.type ===
-                                                      "task" &&
-                                                   dragOverInfo.targetId ===
-                                                      task.id;
-
-                                                return (
-                                                   <ContextMenu
-                                                      key={task.id}
-                                                      modal={false}
-                                                   >
-                                                      <ContextMenuTrigger
-                                                         asChild
-                                                      >
-                                                         <div
-                                                            data-drag-card="task"
-                                                            data-task-id={
-                                                               task.id
-                                                            }
-                                                            onDragOver={(e) =>
-                                                               handleTaskDragOver(
-                                                                  e,
-                                                                  task.id,
-                                                                  catIdx,
-                                                                  "daily"
-                                                               )
-                                                            }
-                                                            onDrop={(e) =>
-                                                               handleTaskDrop(
-                                                                  e,
-                                                                  task.id,
-                                                                  catIdx,
-                                                                  "daily"
-                                                               )
-                                                            }
-                                                            className={`flex items-start justify-between gap-2 p-1.5 rounded-lg hover:bg-surface-nested transition-all group ${
-                                                               isTaskDragging
-                                                                  ? "opacity-30 border border-dashed border-brand-2 bg-surface-elevated"
-                                                                  : ""
-                                                            } ${
-                                                               isTaskOver &&
-                                                               dragOverInfo?.position ===
-                                                                  "above"
-                                                                  ? "border-t-2 border-t-[#e08a32]"
-                                                                  : isTaskOver &&
-                                                                      dragOverInfo?.position ===
-                                                                         "below"
-                                                                    ? "border-b-2 border-b-[#e08a32]"
-                                                                    : ""
-                                                            }`}
-                                                         >
-                                                            <div
-                                                               draggable
-                                                               onDragStart={(
-                                                                  e
-                                                               ) =>
-                                                                  handleTaskDragStart(
-                                                                     e,
-                                                                     task.id,
-                                                                     catIdx,
-                                                                     "daily"
-                                                                  )
-                                                               }
-                                                               onDragEnd={
-                                                                  handleDragEnd
-                                                               }
-                                                               onClick={(e) =>
-                                                                  e.stopPropagation()
-                                                               }
-                                                               className="p-1 -ml-1 text-text-tertiary hover:text-brand-2 cursor-grab active:cursor-grabbing rounded transition-colors shrink-0 mt-0.5"
-                                                               title="Drag task to reorder or move across categories"
-                                                               aria-label={`Drag task ${task.text}`}
-                                                            >
-                                                               <GripVertical className="h-3.5 w-3.5" />
-                                                            </div>
-                                                            {(() => {
-                                                               const status =
-                                                                  getTaskStatus(
-                                                                     task
-                                                                  );
-                                                               return (
-                                                                  <>
-                                                                     <div
-                                                                        role="checkbox"
-                                                                        aria-checked={
-                                                                           status ===
-                                                                           "COMPLETED"
-                                                                        }
-                                                                        onClick={(
-                                                                           e
-                                                                        ) => {
-                                                                           toggleDailyTask(
-                                                                              catIdx,
-                                                                              task.id,
-                                                                              e
-                                                                           );
-                                                                        }}
-                                                                        className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer"
-                                                                        title={
-                                                                           status ===
-                                                                           "COMPLETED"
-                                                                              ? "Status: Completed. Click to reset to To-Do"
-                                                                              : status ===
-                                                                                  "IN_PROGRESS"
-                                                                                ? "Status: In Progress. Click to mark Completed"
-                                                                                : status ===
-                                                                                    "CROSSED_OUT"
-                                                                                  ? "Status: Crossed Out. Click to mark Completed"
-                                                                                  : "Status: To-Do. Click to mark Completed"
-                                                                        }
-                                                                     >
-                                                                        <div
-                                                                           className={`h-5 w-5 rounded flex items-center justify-center border transition-all shrink-0 mt-0.5 ${
-                                                                              status ===
-                                                                              "COMPLETED"
-                                                                                 ? "border-emerald-500 bg-emerald-500/15 text-emerald-400"
-                                                                                 : status ===
-                                                                                     "IN_PROGRESS"
-                                                                                   ? "border-amber-400/80 bg-amber-500/15 text-amber-400"
-                                                                                   : status ===
-                                                                                       "CROSSED_OUT"
-                                                                                     ? "border-rose-500/80 bg-rose-500/15 text-rose-400"
-                                                                                     : "border-white bg-transparent group-hover:border-gray-300"
-                                                                           }`}
-                                                                        >
-                                                                           {status ===
-                                                                              "COMPLETED" && (
-                                                                              <Check className="h-3.5 w-3.5 stroke-[3]" />
-                                                                           )}
-                                                                           {status ===
-                                                                              "IN_PROGRESS" && (
-                                                                              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                                                                           )}
-                                                                           {status ===
-                                                                              "CROSSED_OUT" && (
-                                                                              <X className="h-3.5 w-3.5 stroke-[2.5]" />
-                                                                           )}
-                                                                        </div>
-                                                                        <div className="flex-1 min-w-0">
-                                                                           <span
-                                                                              title={
-                                                                                 task.text
-                                                                              }
-                                                                              className={`text-sm break-words leading-snug ${
-                                                                                 expandedTaskIds.has(
-                                                                                    task.id
-                                                                                 )
-                                                                                    ? "line-clamp-none"
-                                                                                    : "line-clamp-2"
-                                                                              } ${
-                                                                                 status ===
-                                                                                 "COMPLETED"
-                                                                                    ? "text-text-tertiary line-through"
-                                                                                    : status ===
-                                                                                        "CROSSED_OUT"
-                                                                                      ? "text-text-tertiary line-through decoration-rose-500/60"
-                                                                                      : status ===
-                                                                                          "IN_PROGRESS"
-                                                                                        ? "text-white font-medium"
-                                                                                        : "text-white"
-                                                                              }`}
-                                                                           >
-                                                                              {
-                                                                                 task.text
-                                                                              }
-                                                                           </span>
-                                                                           {(task
-                                                                              .text
-                                                                              .length >
-                                                                              45 ||
-                                                                              task.text.includes(
-                                                                                 "\n"
-                                                                              )) && (
-                                                                              <button
-                                                                                 type="button"
-                                                                                 onClick={(
-                                                                                    e
-                                                                                 ) => {
-                                                                                    e.preventDefault();
-                                                                                    e.stopPropagation();
-                                                                                    toggleTaskExpand(
-                                                                                       task.id,
-                                                                                       e
-                                                                                    );
-                                                                                 }}
-                                                                                 title={
-                                                                                    expandedTaskIds.has(
-                                                                                       task.id
-                                                                                    )
-                                                                                       ? "Show less"
-                                                                                       : "Show full task description"
-                                                                                 }
-                                                                                 className="text-text-tertiary hover:text-white text-xs font-medium mt-0.5 inline-flex items-center gap-1 transition-colors select-none group/expand cursor-pointer"
-                                                                              >
-                                                                                 <span>
-                                                                                    {expandedTaskIds.has(
-                                                                                       task.id
-                                                                                    )
-                                                                                       ? "Show less"
-                                                                                       : "Show more"}
-                                                                                 </span>
-                                                                                 <ChevronDown
-                                                                                    className={`h-3 w-3 transition-transform duration-200 ${
-                                                                                       expandedTaskIds.has(
-                                                                                          task.id
-                                                                                       )
-                                                                                          ? "rotate-180"
-                                                                                          : ""
-                                                                                    }`}
-                                                                                 />
-                                                                              </button>
-                                                                           )}
-                                                                        </div>
-                                                                     </div>
-
-                                                                     {status ===
-                                                                        "COMPLETED" && (
-                                                                        <button
-                                                                           type="button"
-                                                                           onClick={(
-                                                                              e
-                                                                           ) => {
-                                                                              e.stopPropagation();
-                                                                              setTaskStatus(
-                                                                                 catIdx,
-                                                                                 task.id,
-                                                                                 "daily",
-                                                                                 "TODO"
-                                                                              );
-                                                                           }}
-                                                                           title="Status: Completed. Click to reset to To-Do"
-                                                                           className="shrink-0 px-2 py-0.5 rounded-md text-label font-semibold tracking-wide uppercase transition-colors border mt-0.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
-                                                                        >
-                                                                           Completed
-                                                                        </button>
-                                                                     )}
-                                                                     {status ===
-                                                                        "IN_PROGRESS" && (
-                                                                        <button
-                                                                           type="button"
-                                                                           onClick={(
-                                                                              e
-                                                                           ) => {
-                                                                              e.stopPropagation();
-                                                                              setTaskStatus(
-                                                                                 catIdx,
-                                                                                 task.id,
-                                                                                 "daily",
-                                                                                 "COMPLETED",
-                                                                                 e
-                                                                              );
-                                                                           }}
-                                                                           title="Status: In Progress. Click to mark Completed"
-                                                                           className="shrink-0 px-2 py-0.5 rounded-md text-label font-semibold tracking-wide uppercase transition-colors border mt-0.5 bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
-                                                                        >
-                                                                           In
-                                                                           Progress
-                                                                        </button>
-                                                                     )}
-                                                                     {status ===
-                                                                        "CROSSED_OUT" && (
-                                                                        <button
-                                                                           type="button"
-                                                                           onClick={(
-                                                                              e
-                                                                           ) => {
-                                                                              e.stopPropagation();
-                                                                              setTaskStatus(
-                                                                                 catIdx,
-                                                                                 task.id,
-                                                                                 "daily",
-                                                                                 "TODO"
-                                                                              );
-                                                                           }}
-                                                                           title="Status: Crossed Out. Click to reset to To-Do"
-                                                                           className="shrink-0 px-2 py-0.5 rounded-md text-label font-semibold tracking-wide uppercase transition-colors border mt-0.5 bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20"
-                                                                        >
-                                                                           Crossed
-                                                                           Out
-                                                                        </button>
-                                                                     )}
-                                                                     {status ===
-                                                                        "TODO" && (
-                                                                        <button
-                                                                           type="button"
-                                                                           onClick={(
-                                                                              e
-                                                                           ) => {
-                                                                              e.stopPropagation();
-                                                                              setTaskStatus(
-                                                                                 catIdx,
-                                                                                 task.id,
-                                                                                 "daily",
-                                                                                 "IN_PROGRESS"
-                                                                              );
-                                                                           }}
-                                                                           title="Status: To-Do. Click to set In Progress"
-                                                                           className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 shrink-0 px-2 py-0.5 rounded-md text-label font-semibold tracking-wide uppercase transition-all border mt-0.5 bg-surface-nested text-text-tertiary hover:text-amber-400 border-border-subtle hover:border-amber-500/30 hover:bg-amber-500/10"
-                                                                        >
-                                                                           To-Do
-                                                                        </button>
-                                                                     )}
-                                                                  </>
-                                                               );
-                                                            })()}
-                                                            {rolloverSummary.isViewingPastDay &&
-                                                               !task.completed &&
+                                                   )
+                                                }
+                                                menuContent={
+                                                   <TaskMenuItems
+                                                      isChallengeActive={
+                                                         hasChallengeContext
+                                                      }
+                                                      task={task}
+                                                      catIdx={catIdx}
+                                                      taskType="daily"
+                                                      effectiveTodayDate={
+                                                         effectiveTodayDate
+                                                      }
+                                                      dayOptions={dayOptions}
+                                                      selectedDateKey={
+                                                         selectedDateKey
+                                                      }
+                                                      linkableChallengeId={
+                                                         linkableChallengeId
+                                                      }
+                                                      onToggleChallengeScope={(
+                                                         newScope
+                                                      ) =>
+                                                         toggleTaskChallengeScope(
+                                                            task.id,
+                                                            newScope
+                                                         )
+                                                      }
+                                                      onSetStatus={(status) =>
+                                                         setTaskStatus(
+                                                            catIdx,
+                                                            task.id,
+                                                            "daily",
+                                                            status
+                                                         )
+                                                      }
+                                                      onMoveToDay={(
+                                                         targetDateKey
+                                                      ) =>
+                                                         moveTaskToDay(
+                                                            task.id,
+                                                            targetDateKey,
+                                                            catIdx,
+                                                            "daily"
+                                                         )
+                                                      }
+                                                      onEditTask={() => {
+                                                         setEditTaskModal({
+                                                            id: task.id,
+                                                            text: task.text,
+                                                            completed:
+                                                               task.completed,
+                                                            status:
                                                                getTaskStatus(
                                                                   task
-                                                               ) !==
-                                                                  "COMPLETED" &&
-                                                               getTaskStatus(
-                                                                  task
-                                                               ) !==
-                                                                  "CROSSED_OUT" && (
-                                                                  <button
-                                                                     type="button"
-                                                                     onClick={(
-                                                                        e
-                                                                     ) => {
-                                                                        e.stopPropagation();
-                                                                        handleRolloverIncompleteTasks(
-                                                                           {
-                                                                              sourceDateKey:
-                                                                                 selectedDateKey,
-                                                                              taskId:
-                                                                                 task.id,
-                                                                           }
-                                                                        );
-                                                                     }}
-                                                                     className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-emerald-400 rounded hover:bg-surface-elevated transition-all shrink-0 mt-0.5"
-                                                                     title="Roll over to Today"
-                                                                     aria-label={`Roll over ${task.text} to Today`}
-                                                                  >
-                                                                     <RotateCcw className="h-3.5 w-3.5" />
-                                                                  </button>
-                                                               )}
-                                                            <button
-                                                               type="button"
-                                                               onClick={(e) => {
-                                                                  e.preventDefault();
-                                                                  e.stopPropagation();
-                                                                  handleDeleteTask(
-                                                                     catIdx,
-                                                                     task.id,
-                                                                     "daily"
-                                                                  );
-                                                               }}
-                                                               className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
-                                                               title="Delete task"
-                                                               aria-label={`Delete task ${task.text}`}
-                                                            >
-                                                               <Trash2 className="h-3.5 w-3.5" />
-                                                            </button>
-                                                            <DropdownMenu
-                                                               modal={false}
-                                                            >
-                                                               <DropdownMenuTrigger
-                                                                  asChild
-                                                               >
-                                                                  <button
-                                                                     type="button"
-                                                                     className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 data-[state=open]:opacity-100 p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
-                                                                     title="Task options"
-                                                                     aria-label={`Options for task ${task.text}`}
-                                                                  >
-                                                                     <MoreVertical className="h-3.5 w-3.5" />
-                                                                  </button>
-                                                               </DropdownMenuTrigger>
-                                                               <DropdownMenuContent
-                                                                  align="end"
-                                                                  className="min-w-dropdown-min"
-                                                               >
-                                                                  <TaskMenuItems
-                                                                     isChallengeActive={
-                                                                        hasChallengeContext
-                                                                     }
-                                                                     task={task}
-                                                                     catIdx={
-                                                                        catIdx
-                                                                     }
-                                                                     taskType="daily"
-                                                                     effectiveTodayDate={
-                                                                        effectiveTodayDate
-                                                                     }
-                                                                     dayOptions={
-                                                                        dayOptions
-                                                                     }
-                                                                     selectedDateKey={
-                                                                        selectedDateKey
-                                                                     }
-                                                                     linkableChallengeId={
-                                                                        linkableChallengeId
-                                                                     }
-                                                                     onToggleChallengeScope={(
-                                                                        newScope
-                                                                     ) =>
-                                                                        toggleTaskChallengeScope(
-                                                                           task.id,
-                                                                           newScope
-                                                                        )
-                                                                     }
-                                                                     onSetStatus={(
-                                                                        status
-                                                                     ) =>
-                                                                        setTaskStatus(
-                                                                           catIdx,
-                                                                           task.id,
-                                                                           "daily",
-                                                                           status
-                                                                        )
-                                                                     }
-                                                                     onMoveToDay={(
-                                                                        targetDateKey
-                                                                     ) =>
-                                                                        moveTaskToDay(
-                                                                           task.id,
-                                                                           targetDateKey,
-                                                                           catIdx,
-                                                                           "daily"
-                                                                        )
-                                                                     }
-                                                                     onEditTask={() => {
-                                                                        setEditTaskModal(
-                                                                           {
-                                                                              id: task.id,
-                                                                              text: task.text,
-                                                                              completed:
-                                                                                 task.completed,
-                                                                              status:
-                                                                                 getTaskStatus(
-                                                                                    task
-                                                                                 ),
-                                                                              dueDate:
-                                                                                 task.dueDate ??
-                                                                                 null,
-                                                                              createdAt:
-                                                                                 task.createdAt,
-                                                                              challengeId:
-                                                                                 task.challengeId ??
-                                                                                 null,
-                                                                              catIdx,
-                                                                              taskType:
-                                                                                 "daily",
-                                                                           }
-                                                                        );
-                                                                        setEditTaskInputChallengeId(
-                                                                           task.challengeId ??
-                                                                              null
-                                                                        );
-                                                                        setEditTaskInputText(
-                                                                           task.text
-                                                                        );
-                                                                        setEditTaskInputStatus(
-                                                                           getTaskStatus(
-                                                                              task
-                                                                           )
-                                                                        );
-                                                                        setEditTaskInputDueDate(
-                                                                           task.dueDate ||
-                                                                              selectedDateKey
-                                                                        );
-                                                                     }}
-                                                                     onDeleteTask={() =>
-                                                                        handleDeleteTask(
-                                                                           catIdx,
-                                                                           task.id,
-                                                                           "daily"
-                                                                        )
-                                                                     }
-                                                                     Item={
-                                                                        DropdownMenuItem
-                                                                     }
-                                                                     Separator={
-                                                                        DropdownMenuSeparator
-                                                                     }
-                                                                     Label={
-                                                                        DropdownMenuLabel
-                                                                     }
-                                                                  />
-                                                               </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                         </div>
-                                                      </ContextMenuTrigger>
-                                                      <ContextMenuContent className="min-w-dropdown-min">
-                                                         <TaskMenuItems
-                                                            isChallengeActive={
-                                                               hasChallengeContext
-                                                            }
-                                                            task={task}
-                                                            catIdx={catIdx}
-                                                            taskType="daily"
-                                                            effectiveTodayDate={
-                                                               effectiveTodayDate
-                                                            }
-                                                            dayOptions={
-                                                               dayOptions
-                                                            }
-                                                            selectedDateKey={
+                                                               ),
+                                                            dueDate:
+                                                               task.dueDate ??
+                                                               null,
+                                                            createdAt:
+                                                               task.createdAt,
+                                                            challengeId:
+                                                               task.challengeId ??
+                                                               null,
+                                                            catIdx,
+                                                            taskType: "daily",
+                                                         });
+                                                         setEditTaskInputChallengeId(
+                                                            task.challengeId ??
+                                                               null
+                                                         );
+                                                         setEditTaskInputText(
+                                                            task.text
+                                                         );
+                                                         setEditTaskInputStatus(
+                                                            getTaskStatus(task)
+                                                         );
+                                                         setEditTaskInputDueDate(
+                                                            task.dueDate ||
                                                                selectedDateKey
-                                                            }
-                                                            linkableChallengeId={
-                                                               linkableChallengeId
-                                                            }
-                                                            onToggleChallengeScope={(
-                                                               newScope
-                                                            ) =>
-                                                               toggleTaskChallengeScope(
-                                                                  task.id,
-                                                                  newScope
-                                                               )
-                                                            }
-                                                            onSetStatus={(
-                                                               status
-                                                            ) =>
-                                                               setTaskStatus(
-                                                                  catIdx,
-                                                                  task.id,
-                                                                  "daily",
-                                                                  status
-                                                               )
-                                                            }
-                                                            onMoveToDay={(
-                                                               targetDateKey
-                                                            ) =>
-                                                               moveTaskToDay(
-                                                                  task.id,
-                                                                  targetDateKey,
-                                                                  catIdx,
-                                                                  "daily"
-                                                               )
-                                                            }
-                                                            onEditTask={() => {
-                                                               setEditTaskModal(
-                                                                  {
-                                                                     id: task.id,
-                                                                     text: task.text,
-                                                                     completed:
-                                                                        task.completed,
-                                                                     status:
-                                                                        getTaskStatus(
-                                                                           task
-                                                                        ),
-                                                                     dueDate:
-                                                                        task.dueDate ??
-                                                                        null,
-                                                                     createdAt:
-                                                                        task.createdAt,
-                                                                     challengeId:
-                                                                        task.challengeId ??
-                                                                        null,
-                                                                     catIdx,
-                                                                     taskType:
-                                                                        "daily",
-                                                                  }
-                                                               );
-                                                               setEditTaskInputChallengeId(
-                                                                  task.challengeId ??
-                                                                     null
-                                                               );
-                                                               setEditTaskInputText(
-                                                                  task.text
-                                                               );
-                                                               setEditTaskInputStatus(
-                                                                  getTaskStatus(
-                                                                     task
-                                                                  )
-                                                               );
-                                                               setEditTaskInputDueDate(
-                                                                  task.dueDate ||
-                                                                     selectedDateKey
-                                                               );
-                                                            }}
-                                                            onDeleteTask={() =>
-                                                               handleDeleteTask(
-                                                                  catIdx,
-                                                                  task.id,
-                                                                  "daily"
-                                                               )
-                                                            }
-                                                            Item={
-                                                               ContextMenuItem
-                                                            }
-                                                            Separator={
-                                                               ContextMenuSeparator
-                                                            }
-                                                            Label={
-                                                               ContextMenuLabel
-                                                            }
-                                                         />
-                                                      </ContextMenuContent>
-                                                   </ContextMenu>
-                                                );
-                                             })
-                                          )}
-                                       </div>
+                                                         );
+                                                      }}
+                                                      onDeleteTask={() =>
+                                                         handleDeleteTask(
+                                                            catIdx,
+                                                            task.id,
+                                                            "daily"
+                                                         )
+                                                      }
+                                                      Item={DropdownMenuItem}
+                                                      Separator={
+                                                         DropdownMenuSeparator
+                                                      }
+                                                      Label={DropdownMenuLabel}
+                                                   />
+                                                }
+                                                contextMenuContent={
+                                                   <TaskMenuItems
+                                                      isChallengeActive={
+                                                         hasChallengeContext
+                                                      }
+                                                      task={task}
+                                                      catIdx={catIdx}
+                                                      taskType="daily"
+                                                      effectiveTodayDate={
+                                                         effectiveTodayDate
+                                                      }
+                                                      dayOptions={dayOptions}
+                                                      selectedDateKey={
+                                                         selectedDateKey
+                                                      }
+                                                      linkableChallengeId={
+                                                         linkableChallengeId
+                                                      }
+                                                      onToggleChallengeScope={(
+                                                         newScope
+                                                      ) =>
+                                                         toggleTaskChallengeScope(
+                                                            task.id,
+                                                            newScope
+                                                         )
+                                                      }
+                                                      onSetStatus={(status) =>
+                                                         setTaskStatus(
+                                                            catIdx,
+                                                            task.id,
+                                                            "daily",
+                                                            status
+                                                         )
+                                                      }
+                                                      onMoveToDay={(
+                                                         targetDateKey
+                                                      ) =>
+                                                         moveTaskToDay(
+                                                            task.id,
+                                                            targetDateKey,
+                                                            catIdx,
+                                                            "daily"
+                                                         )
+                                                      }
+                                                      onEditTask={() => {
+                                                         setEditTaskModal({
+                                                            id: task.id,
+                                                            text: task.text,
+                                                            completed:
+                                                               task.completed,
+                                                            status:
+                                                               getTaskStatus(
+                                                                  task
+                                                               ),
+                                                            dueDate:
+                                                               task.dueDate ??
+                                                               null,
+                                                            createdAt:
+                                                               task.createdAt,
+                                                            challengeId:
+                                                               task.challengeId ??
+                                                               null,
+                                                            catIdx,
+                                                            taskType: "daily",
+                                                         });
+                                                         setEditTaskInputChallengeId(
+                                                            task.challengeId ??
+                                                               null
+                                                         );
+                                                         setEditTaskInputText(
+                                                            task.text
+                                                         );
+                                                         setEditTaskInputStatus(
+                                                            getTaskStatus(task)
+                                                         );
+                                                         setEditTaskInputDueDate(
+                                                            task.dueDate ||
+                                                               selectedDateKey
+                                                         );
+                                                      }}
+                                                      onDeleteTask={() =>
+                                                         handleDeleteTask(
+                                                            catIdx,
+                                                            task.id,
+                                                            "daily"
+                                                         )
+                                                      }
+                                                      Item={ContextMenuItem}
+                                                      Separator={
+                                                         ContextMenuSeparator
+                                                      }
+                                                      Label={ContextMenuLabel}
+                                                   />
+                                                }
+                                             />
+                                          );
+                                       })
                                     )}
-                                 </div>
+                                 </TaskCategoryCard>
                               );
                            })}
                         </div>
@@ -2510,9 +1961,24 @@ export function CockpitTasksSection({
                                  dragOverInfo.targetCatIdx === catIdx;
 
                               return (
-                                 <div
+                                 <TaskCategoryCard
                                     key={cat.id || cat.name}
-                                    data-drag-card="category"
+                                    category={cat}
+                                    variant="weekly"
+                                    isCollapsed={isCollapsed}
+                                    isDragging={isCatDragging}
+                                    isOver={isCatOver}
+                                    dropPosition={dragOverInfo?.position}
+                                    onToggleCollapse={() =>
+                                       toggleWeeklyCollapse(catIdx)
+                                    }
+                                    onDragStart={(e) =>
+                                       handleCategoryDragStart(
+                                          e,
+                                          catIdx,
+                                          "weekly"
+                                       )
+                                    }
                                     onDragOver={(e) =>
                                        handleCategoryDragOver(
                                           e,
@@ -2523,770 +1989,389 @@ export function CockpitTasksSection({
                                     onDrop={(e) =>
                                        handleCategoryDrop(e, catIdx, "weekly")
                                     }
-                                    className={`rounded-xl bg-surface-nested overflow-hidden border transition-all ${
-                                       isCatDragging
-                                          ? "opacity-30 border-dashed border-brand-2 bg-surface-elevated scale-[0.99]"
-                                          : ""
-                                    } ${
-                                       isCatOver &&
-                                       dragOverInfo?.position === "above"
-                                          ? "border-t-2 border-t-[#e08a32] border-border-strong"
-                                          : isCatOver &&
-                                              dragOverInfo?.position === "below"
-                                            ? "border-b-2 border-b-[#e08a32] border-border-strong"
-                                            : isCatOver
-                                              ? "border-brand-2"
-                                              : "border-border-strong"
-                                    }`}
+                                    onDragEnd={handleDragEnd}
+                                    menuContent={
+                                       <CategoryMenuItems
+                                          isChallengeActive={
+                                             hasChallengeContext
+                                          }
+                                          cat={cat}
+                                          catType="weekly"
+                                          dailyCategories={dailyCategories}
+                                          weeklyCategories={weeklyCategories}
+                                          selectedDateKey={selectedDateKey}
+                                          effectiveTodayDate={
+                                             effectiveTodayDate
+                                          }
+                                          dayOptions={dayOptions}
+                                          onMoveCategoryToDay={(
+                                             targetDateKey
+                                          ) =>
+                                             moveCategoryToDayAction(
+                                                catIdx,
+                                                targetDateKey,
+                                                "weekly"
+                                             )
+                                          }
+                                          onRenameCategory={() => {
+                                             setEditCategoryModal({
+                                                id: cat.id,
+                                                name: cat.name,
+                                                taskType: "weekly",
+                                             });
+                                             setEditCategoryInputName(cat.name);
+                                          }}
+                                          onDeleteCategory={() => {
+                                             setDeleteCategoryModal({
+                                                id: cat.id,
+                                                name: cat.name,
+                                                taskType: "weekly",
+                                             });
+                                          }}
+                                          Item={DropdownMenuItem}
+                                          Separator={DropdownMenuSeparator}
+                                          Label={DropdownMenuLabel}
+                                       />
+                                    }
+                                    contextMenuContent={
+                                       <CategoryMenuItems
+                                          isChallengeActive={
+                                             hasChallengeContext
+                                          }
+                                          cat={cat}
+                                          catType="weekly"
+                                          dailyCategories={dailyCategories}
+                                          weeklyCategories={weeklyCategories}
+                                          selectedDateKey={selectedDateKey}
+                                          effectiveTodayDate={
+                                             effectiveTodayDate
+                                          }
+                                          dayOptions={dayOptions}
+                                          onMoveCategoryToDay={(
+                                             targetDateKey
+                                          ) =>
+                                             moveCategoryToDayAction(
+                                                catIdx,
+                                                targetDateKey,
+                                                "weekly"
+                                             )
+                                          }
+                                          onRenameCategory={() => {
+                                             setEditCategoryModal({
+                                                id: cat.id,
+                                                name: cat.name,
+                                                taskType: "weekly",
+                                             });
+                                             setEditCategoryInputName(cat.name);
+                                          }}
+                                          onDeleteCategory={() => {
+                                             setDeleteCategoryModal({
+                                                id: cat.id,
+                                                name: cat.name,
+                                                taskType: "weekly",
+                                             });
+                                          }}
+                                          Item={ContextMenuItem}
+                                          Separator={ContextMenuSeparator}
+                                          Label={ContextMenuLabel}
+                                       />
+                                    }
                                  >
-                                    <ContextMenu modal={false}>
-                                       <ContextMenuTrigger asChild>
-                                          <div
-                                             draggable
-                                             onDragStart={(e) =>
-                                                handleCategoryDragStart(
-                                                   e,
-                                                   catIdx,
-                                                   "weekly"
-                                                )
-                                             }
-                                             onDragEnd={handleDragEnd}
-                                             onClick={() =>
-                                                toggleWeeklyCollapse(catIdx)
-                                             }
-                                             className="w-full flex items-center justify-between px-3 py-3 text-left font-medium text-sm text-white hover:bg-surface-nested transition-colors cursor-grab active:cursor-grabbing select-none"
-                                          >
-                                             <div
-                                                className="p-1 -ml-1 mr-1 text-text-tertiary hover:text-brand-2 rounded transition-colors shrink-0"
-                                                title="Drag category to reorder, move to day or across boards"
-                                                aria-label={`Drag category ${cat.name}`}
-                                             >
-                                                <GripVertical className="h-4 w-4" />
-                                             </div>
-                                             <span className="truncate flex-1 pr-2">
-                                                {cat.name}
-                                             </span>
-                                             <div
-                                                className="flex items-center gap-1.5 shrink-0"
-                                                onDragStart={(e) =>
-                                                   e.stopPropagation()
-                                                }
-                                                onClick={(e) =>
-                                                   e.stopPropagation()
-                                                }
-                                             >
-                                                <DropdownMenu modal={false}>
-                                                   <DropdownMenuTrigger asChild>
-                                                      <button
-                                                         type="button"
-                                                         className="p-1 rounded-md text-text-tertiary hover:text-white hover:bg-input-bg data-[state=open]:text-white data-[state=open]:bg-input-bg transition-colors"
-                                                         title="Category options"
-                                                         aria-label={`Options for category ${cat.name}`}
-                                                      >
-                                                         <MoreVertical className="h-4 w-4" />
-                                                      </button>
-                                                   </DropdownMenuTrigger>
-                                                   <DropdownMenuContent
-                                                      align="end"
-                                                      className="min-w-dropdown-min"
-                                                   >
-                                                      <CategoryMenuItems
-                                                         isChallengeActive={
-                                                            hasChallengeContext
-                                                         }
-                                                         cat={cat}
-                                                         catType="weekly"
-                                                         dailyCategories={
-                                                            dailyCategories
-                                                         }
-                                                         weeklyCategories={
-                                                            weeklyCategories
-                                                         }
-                                                         selectedDateKey={
-                                                            selectedDateKey
-                                                         }
-                                                         effectiveTodayDate={
-                                                            effectiveTodayDate
-                                                         }
-                                                         dayOptions={dayOptions}
-                                                         onMoveCategoryToDay={(
-                                                            targetDateKey
-                                                         ) =>
-                                                            moveCategoryToDayAction(
-                                                               catIdx,
-                                                               targetDateKey,
-                                                               "weekly"
-                                                            )
-                                                         }
-                                                         onRenameCategory={() => {
-                                                            setEditCategoryModal(
-                                                               {
-                                                                  id: cat.id,
-                                                                  name: cat.name,
-                                                                  taskType:
-                                                                     "weekly",
-                                                               }
-                                                            );
-                                                            setEditCategoryInputName(
-                                                               cat.name
-                                                            );
-                                                         }}
-                                                         onDeleteCategory={() => {
-                                                            setDeleteCategoryModal(
-                                                               {
-                                                                  id: cat.id,
-                                                                  name: cat.name,
-                                                                  taskType:
-                                                                     "weekly",
-                                                               }
-                                                            );
-                                                         }}
-                                                         Item={DropdownMenuItem}
-                                                         Separator={
-                                                            DropdownMenuSeparator
-                                                         }
-                                                         Label={
-                                                            DropdownMenuLabel
-                                                         }
-                                                      />
-                                                   </DropdownMenuContent>
-                                                </DropdownMenu>
-                                                {isCollapsed ? (
-                                                   <ChevronDown className="h-4 w-4 text-text-tertiary" />
-                                                ) : (
-                                                   <ChevronUp className="h-4 w-4 text-text-tertiary" />
+                                    {weekTasks.length === 0 ? (
+                                       <p className="text-xs text-text-tertiary py-1">
+                                          No weekly tasks in this category.
+                                       </p>
+                                    ) : (
+                                       weekTasks.map((task) => {
+                                          const isTaskDragging =
+                                             draggedItem?.type === "task" &&
+                                             draggedItem.id === task.id;
+                                          const isTaskOver =
+                                             dragOverInfo?.type === "task" &&
+                                             dragOverInfo.targetId === task.id;
+
+                                          return (
+                                             <TaskRow
+                                                key={task.id}
+                                                task={task}
+                                                variant="weekly"
+                                                expanded={expandedTaskIds.has(
+                                                   task.id
                                                 )}
-                                             </div>
-                                          </div>
-                                       </ContextMenuTrigger>
-                                       <ContextMenuContent className="min-w-dropdown-min">
-                                          <CategoryMenuItems
-                                             isChallengeActive={
-                                                hasChallengeContext
-                                             }
-                                             cat={cat}
-                                             catType="weekly"
-                                             dailyCategories={dailyCategories}
-                                             weeklyCategories={weeklyCategories}
-                                             selectedDateKey={selectedDateKey}
-                                             effectiveTodayDate={
-                                                effectiveTodayDate
-                                             }
-                                             dayOptions={dayOptions}
-                                             onMoveCategoryToDay={(
-                                                targetDateKey
-                                             ) =>
-                                                moveCategoryToDayAction(
-                                                   catIdx,
-                                                   targetDateKey,
-                                                   "weekly"
-                                                )
-                                             }
-                                             onRenameCategory={() => {
-                                                setEditCategoryModal({
-                                                   id: cat.id,
-                                                   name: cat.name,
-                                                   taskType: "weekly",
-                                                });
-                                                setEditCategoryInputName(
-                                                   cat.name
-                                                );
-                                             }}
-                                             onDeleteCategory={() => {
-                                                setDeleteCategoryModal({
-                                                   id: cat.id,
-                                                   name: cat.name,
-                                                   taskType: "weekly",
-                                                });
-                                             }}
-                                             Item={ContextMenuItem}
-                                             Separator={ContextMenuSeparator}
-                                             Label={ContextMenuLabel}
-                                          />
-                                       </ContextMenuContent>
-                                    </ContextMenu>
-
-                                    {!isCollapsed && (
-                                       <div className="px-4 pb-3 pt-1 space-y-2.5 border-t border-border-strong">
-                                          {weekTasks.length === 0 ? (
-                                             <p className="text-xs text-text-tertiary py-1">
-                                                No weekly tasks in this
-                                                category.
-                                             </p>
-                                          ) : (
-                                             weekTasks.map((task) => {
-                                                const isTaskDragging =
-                                                   draggedItem?.type ===
-                                                      "task" &&
-                                                   draggedItem.id === task.id;
-                                                const isTaskOver =
-                                                   dragOverInfo?.type ===
-                                                      "task" &&
-                                                   dragOverInfo.targetId ===
-                                                      task.id;
-
-                                                return (
-                                                   <ContextMenu
-                                                      key={task.id}
-                                                      modal={false}
-                                                   >
-                                                      <ContextMenuTrigger
-                                                         asChild
+                                                isDragging={isTaskDragging}
+                                                isOver={isTaskOver}
+                                                dropPosition={
+                                                   dragOverInfo?.position
+                                                }
+                                                onToggleExpand={(e) =>
+                                                   toggleTaskExpand(task.id, e)
+                                                }
+                                                onToggleStatus={(e) =>
+                                                   toggleWeeklyTask(
+                                                      catIdx,
+                                                      task.id,
+                                                      e
+                                                   )
+                                                }
+                                                onStatusAction={(status, e) =>
+                                                   setTaskStatus(
+                                                      catIdx,
+                                                      task.id,
+                                                      "weekly",
+                                                      status,
+                                                      e
+                                                   )
+                                                }
+                                                onDragStart={(e) =>
+                                                   handleTaskDragStart(
+                                                      e,
+                                                      task.id,
+                                                      catIdx,
+                                                      "weekly"
+                                                   )
+                                                }
+                                                onDragOver={(e) =>
+                                                   handleTaskDragOver(
+                                                      e,
+                                                      task.id,
+                                                      catIdx,
+                                                      "weekly"
+                                                   )
+                                                }
+                                                onDrop={(e) =>
+                                                   handleTaskDrop(
+                                                      e,
+                                                      task.id,
+                                                      catIdx,
+                                                      "weekly"
+                                                   )
+                                                }
+                                                onDragEnd={handleDragEnd}
+                                                onDelete={(e) => {
+                                                   e.preventDefault();
+                                                   e.stopPropagation();
+                                                   handleDeleteTask(
+                                                      catIdx,
+                                                      task.id,
+                                                      "weekly"
+                                                   );
+                                                }}
+                                                trailingAction={
+                                                   Boolean(
+                                                      linkableChallengeId
+                                                   ) &&
+                                                   (task.challengeId ===
+                                                   linkableChallengeId ? (
+                                                      <span
+                                                         data-testid="task-scope-challenge-badge"
+                                                         className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-0.5"
+                                                         title="Challenge Goal (evaluated at challenge lock)"
+                                                         aria-label="Challenge Goal"
                                                       >
-                                                         <div
-                                                            data-drag-card="task"
-                                                            data-task-id={
-                                                               task.id
-                                                            }
-                                                            onDragOver={(e) =>
-                                                               handleTaskDragOver(
-                                                                  e,
-                                                                  task.id,
-                                                                  catIdx,
-                                                                  "weekly"
-                                                               )
-                                                            }
-                                                            onDrop={(e) =>
-                                                               handleTaskDrop(
-                                                                  e,
-                                                                  task.id,
-                                                                  catIdx,
-                                                                  "weekly"
-                                                               )
-                                                            }
-                                                            className={`flex items-start justify-between gap-2 p-1.5 rounded-lg hover:bg-surface-nested transition-all group ${
-                                                               isTaskDragging
-                                                                  ? "opacity-30 border border-dashed border-brand-2 bg-surface-elevated"
-                                                                  : ""
-                                                            } ${
-                                                               isTaskOver &&
-                                                               dragOverInfo?.position ===
-                                                                  "above"
-                                                                  ? "border-t-2 border-t-[#e08a32]"
-                                                                  : isTaskOver &&
-                                                                      dragOverInfo?.position ===
-                                                                         "below"
-                                                                    ? "border-b-2 border-b-[#e08a32]"
-                                                                    : ""
-                                                            }`}
-                                                         >
-                                                            <div
-                                                               draggable
-                                                               onDragStart={(
-                                                                  e
-                                                               ) =>
-                                                                  handleTaskDragStart(
-                                                                     e,
-                                                                     task.id,
-                                                                     catIdx,
-                                                                     "weekly"
-                                                                  )
-                                                               }
-                                                               onDragEnd={
-                                                                  handleDragEnd
-                                                               }
-                                                               onClick={(e) =>
-                                                                  e.stopPropagation()
-                                                               }
-                                                               className="p-1 -ml-1 text-text-tertiary hover:text-brand-2 cursor-grab active:cursor-grabbing rounded transition-colors shrink-0 mt-0.5"
-                                                               title="Drag task to reorder or move across categories"
-                                                               aria-label={`Drag task ${task.text}`}
-                                                            >
-                                                               <GripVertical className="h-3.5 w-3.5" />
-                                                            </div>
-                                                            {(() => {
-                                                               const status =
-                                                                  getTaskStatus(
-                                                                     task
-                                                                  );
-                                                               return (
-                                                                  <>
-                                                                     <div
-                                                                        role="checkbox"
-                                                                        aria-checked={
-                                                                           status ===
-                                                                           "COMPLETED"
-                                                                        }
-                                                                        onClick={(
-                                                                           e
-                                                                        ) =>
-                                                                           toggleWeeklyTask(
-                                                                              catIdx,
-                                                                              task.id,
-                                                                              e
-                                                                           )
-                                                                        }
-                                                                        className="flex items-start gap-3 cursor-pointer flex-1 min-w-0"
-                                                                        title={
-                                                                           status ===
-                                                                           "COMPLETED"
-                                                                              ? "Status: Completed. Click to reset to To-Do"
-                                                                              : status ===
-                                                                                  "IN_PROGRESS"
-                                                                                ? "Status: In Progress. Click to mark Completed"
-                                                                                : status ===
-                                                                                    "CROSSED_OUT"
-                                                                                  ? "Status: Crossed Out. Click to mark Completed"
-                                                                                  : "Status: To-Do. Click to mark Completed"
-                                                                        }
-                                                                     >
-                                                                        <div
-                                                                           className={`h-5 w-5 rounded flex items-center justify-center border transition-all shrink-0 mt-0.5 ${
-                                                                              status ===
-                                                                              "COMPLETED"
-                                                                                 ? "border-emerald-500 bg-emerald-500/15 text-emerald-400"
-                                                                                 : status ===
-                                                                                     "IN_PROGRESS"
-                                                                                   ? "border-amber-400/80 bg-amber-500/15 text-amber-400"
-                                                                                   : status ===
-                                                                                       "CROSSED_OUT"
-                                                                                     ? "border-rose-500/80 bg-rose-500/15 text-rose-400"
-                                                                                     : "border-white bg-transparent group-hover:border-gray-300"
-                                                                           }`}
-                                                                        >
-                                                                           {status ===
-                                                                              "COMPLETED" && (
-                                                                              <Check className="h-3.5 w-3.5 stroke-[3]" />
-                                                                           )}
-                                                                           {status ===
-                                                                              "IN_PROGRESS" && (
-                                                                              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                                                                           )}
-                                                                           {status ===
-                                                                              "CROSSED_OUT" && (
-                                                                              <X className="h-3.5 w-3.5 stroke-[2.5]" />
-                                                                           )}
-                                                                        </div>
-                                                                        <div className="flex-1 min-w-0">
-                                                                           <span
-                                                                              title={
-                                                                                 task.text
-                                                                              }
-                                                                              className={`text-sm break-words leading-snug ${
-                                                                                 expandedTaskIds.has(
-                                                                                    task.id
-                                                                                 )
-                                                                                    ? "line-clamp-none"
-                                                                                    : "line-clamp-2"
-                                                                              } ${
-                                                                                 status ===
-                                                                                 "COMPLETED"
-                                                                                    ? "text-text-tertiary line-through"
-                                                                                    : status ===
-                                                                                        "CROSSED_OUT"
-                                                                                      ? "text-text-tertiary line-through decoration-rose-500/60"
-                                                                                      : status ===
-                                                                                          "IN_PROGRESS"
-                                                                                        ? "text-white font-medium"
-                                                                                        : "text-white"
-                                                                              }`}
-                                                                           >
-                                                                              {
-                                                                                 task.text
-                                                                              }
-                                                                           </span>
-                                                                           {(task
-                                                                              .text
-                                                                              .length >
-                                                                              45 ||
-                                                                              task.text.includes(
-                                                                                 "\n"
-                                                                              )) && (
-                                                                              <button
-                                                                                 type="button"
-                                                                                 onClick={(
-                                                                                    e
-                                                                                 ) => {
-                                                                                    e.preventDefault();
-                                                                                    e.stopPropagation();
-                                                                                    toggleTaskExpand(
-                                                                                       task.id,
-                                                                                       e
-                                                                                    );
-                                                                                 }}
-                                                                                 title={
-                                                                                    expandedTaskIds.has(
-                                                                                       task.id
-                                                                                    )
-                                                                                       ? "Show less"
-                                                                                       : "Show full task description"
-                                                                                 }
-                                                                                 className="text-text-tertiary hover:text-white text-xs font-medium mt-0.5 inline-flex items-center gap-1 transition-colors select-none group/expand cursor-pointer"
-                                                                              >
-                                                                                 <span>
-                                                                                    {expandedTaskIds.has(
-                                                                                       task.id
-                                                                                    )
-                                                                                       ? "Show less"
-                                                                                       : "Show more"}
-                                                                                 </span>
-                                                                                 <ChevronDown
-                                                                                    className={`h-3 w-3 transition-transform duration-200 ${
-                                                                                       expandedTaskIds.has(
-                                                                                          task.id
-                                                                                       )
-                                                                                          ? "rotate-180"
-                                                                                          : ""
-                                                                                    }`}
-                                                                                 />
-                                                                              </button>
-                                                                           )}
-                                                                        </div>
-                                                                     </div>
-
-                                                                     {status ===
-                                                                        "IN_PROGRESS" && (
-                                                                        <button
-                                                                           type="button"
-                                                                           onClick={(
-                                                                              e
-                                                                           ) => {
-                                                                              e.stopPropagation();
-                                                                              setTaskStatus(
-                                                                                 catIdx,
-                                                                                 task.id,
-                                                                                 "weekly",
-                                                                                 "COMPLETED",
-                                                                                 e
-                                                                              );
-                                                                           }}
-                                                                           title="Status: In Progress. Click to mark Completed"
-                                                                           className="shrink-0 px-2 py-0.5 rounded-md text-label font-semibold tracking-wide uppercase transition-colors border mt-0.5 bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
-                                                                        >
-                                                                           In
-                                                                           Progress
-                                                                        </button>
-                                                                     )}
-                                                                     {status ===
-                                                                        "CROSSED_OUT" && (
-                                                                        <button
-                                                                           type="button"
-                                                                           onClick={(
-                                                                              e
-                                                                           ) => {
-                                                                              e.stopPropagation();
-                                                                              setTaskStatus(
-                                                                                 catIdx,
-                                                                                 task.id,
-                                                                                 "weekly",
-                                                                                 "TODO"
-                                                                              );
-                                                                           }}
-                                                                           title="Status: Crossed Out. Click to reset to To-Do"
-                                                                           className="shrink-0 px-2 py-0.5 rounded-md text-label font-semibold tracking-wide uppercase transition-colors border mt-0.5 bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20"
-                                                                        >
-                                                                           Crossed
-                                                                           Out
-                                                                        </button>
-                                                                     )}
-                                                                     {status ===
-                                                                        "TODO" && (
-                                                                        <button
-                                                                           type="button"
-                                                                           onClick={(
-                                                                              e
-                                                                           ) => {
-                                                                              e.stopPropagation();
-                                                                              setTaskStatus(
-                                                                                 catIdx,
-                                                                                 task.id,
-                                                                                 "weekly",
-                                                                                 "IN_PROGRESS"
-                                                                              );
-                                                                           }}
-                                                                           title="Status: To-Do. Click to set In Progress"
-                                                                           className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 shrink-0 px-2 py-0.5 rounded-md text-label font-semibold tracking-wide uppercase transition-all border mt-0.5 bg-surface-nested text-text-tertiary hover:text-amber-400 border-border-subtle hover:border-amber-500/30 hover:bg-amber-500/10"
-                                                                        >
-                                                                           To-Do
-                                                                        </button>
-                                                                     )}
-                                                                  </>
-                                                               );
-                                                            })()}
-                                                            {Boolean(
-                                                               linkableChallengeId
-                                                            ) &&
-                                                               (task.challengeId ===
-                                                               linkableChallengeId ? (
-                                                                  <span
-                                                                     data-testid="task-scope-challenge-badge"
-                                                                     className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-0.5"
-                                                                     title="Challenge Goal (evaluated at challenge lock)"
-                                                                     aria-label="Challenge Goal"
-                                                                  >
-                                                                     <Trophy className="h-3 w-3" />
-                                                                  </span>
-                                                               ) : !task.challengeId ? (
-                                                                  <span
-                                                                     data-testid="task-scope-personal-badge"
-                                                                     className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-surface-nested text-text-tertiary border border-border-subtle mt-0.5"
-                                                                     title="Personal Task (excluded from challenge lock)"
-                                                                     aria-label="Personal Task"
-                                                                  >
-                                                                     <User className="h-3 w-3" />
-                                                                  </span>
-                                                               ) : null)}
-                                                            <button
-                                                               type="button"
-                                                               onClick={(e) => {
-                                                                  e.preventDefault();
-                                                                  e.stopPropagation();
-                                                                  handleDeleteTask(
-                                                                     catIdx,
-                                                                     task.id,
-                                                                     "weekly"
-                                                                  );
-                                                               }}
-                                                               className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
-                                                               title="Delete task"
-                                                               aria-label={`Delete task ${task.text}`}
-                                                            >
-                                                               <Trash2 className="h-3.5 w-3.5" />
-                                                            </button>
-                                                            <DropdownMenu
-                                                               modal={false}
-                                                            >
-                                                               <DropdownMenuTrigger
-                                                                  asChild
-                                                               >
-                                                                  <button
-                                                                     type="button"
-                                                                     className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 data-[state=open]:opacity-100 p-1 text-text-tertiary hover:text-white rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
-                                                                     title="Task options"
-                                                                     aria-label={`Options for task ${task.text}`}
-                                                                  >
-                                                                     <MoreVertical className="h-3.5 w-3.5" />
-                                                                  </button>
-                                                               </DropdownMenuTrigger>
-                                                               <DropdownMenuContent
-                                                                  align="end"
-                                                                  className="min-w-dropdown-min"
-                                                               >
-                                                                  <TaskMenuItems
-                                                                     isChallengeActive={
-                                                                        hasChallengeContext
-                                                                     }
-                                                                     task={task}
-                                                                     catIdx={
-                                                                        catIdx
-                                                                     }
-                                                                     taskType="weekly"
-                                                                     effectiveTodayDate={
-                                                                        effectiveTodayDate
-                                                                     }
-                                                                     dayOptions={
-                                                                        dayOptions
-                                                                     }
-                                                                     linkableChallengeId={
-                                                                        linkableChallengeId
-                                                                     }
-                                                                     onToggleChallengeScope={(
-                                                                        newScope
-                                                                     ) =>
-                                                                        toggleTaskChallengeScope(
-                                                                           task.id,
-                                                                           newScope
-                                                                        )
-                                                                     }
-                                                                     selectedDateKey={
-                                                                        selectedDateKey
-                                                                     }
-                                                                     onSetStatus={(
-                                                                        status
-                                                                     ) =>
-                                                                        setTaskStatus(
-                                                                           catIdx,
-                                                                           task.id,
-                                                                           "weekly",
-                                                                           status
-                                                                        )
-                                                                     }
-                                                                     onMoveToDay={(
-                                                                        targetDateKey
-                                                                     ) =>
-                                                                        moveTaskToDay(
-                                                                           task.id,
-                                                                           targetDateKey,
-                                                                           catIdx,
-                                                                           "weekly"
-                                                                        )
-                                                                     }
-                                                                     onEditTask={() => {
-                                                                        setEditTaskModal(
-                                                                           {
-                                                                              id: task.id,
-                                                                              text: task.text,
-                                                                              completed:
-                                                                                 task.completed,
-                                                                              status:
-                                                                                 getTaskStatus(
-                                                                                    task
-                                                                                 ),
-                                                                              dueDate:
-                                                                                 task.dueDate ??
-                                                                                 null,
-                                                                              createdAt:
-                                                                                 task.createdAt,
-                                                                              challengeId:
-                                                                                 task.challengeId ??
-                                                                                 null,
-                                                                              catIdx,
-                                                                              taskType:
-                                                                                 "weekly",
-                                                                           }
-                                                                        );
-                                                                        setEditTaskInputChallengeId(
-                                                                           task.challengeId ??
-                                                                              null
-                                                                        );
-                                                                        setEditTaskInputText(
-                                                                           task.text
-                                                                        );
-                                                                        setEditTaskInputStatus(
-                                                                           getTaskStatus(
-                                                                              task
-                                                                           )
-                                                                        );
-                                                                        setEditTaskInputDueDate(
-                                                                           task.dueDate ??
-                                                                              ""
-                                                                        );
-                                                                     }}
-                                                                     onDeleteTask={() =>
-                                                                        handleDeleteTask(
-                                                                           catIdx,
-                                                                           task.id,
-                                                                           "weekly"
-                                                                        )
-                                                                     }
-                                                                     Item={
-                                                                        DropdownMenuItem
-                                                                     }
-                                                                     Separator={
-                                                                        DropdownMenuSeparator
-                                                                     }
-                                                                     Label={
-                                                                        DropdownMenuLabel
-                                                                     }
-                                                                  />
-                                                               </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                         </div>
-                                                      </ContextMenuTrigger>
-                                                      <ContextMenuContent className="min-w-dropdown-min">
-                                                         <TaskMenuItems
-                                                            isChallengeActive={
-                                                               hasChallengeContext
-                                                            }
-                                                            task={task}
-                                                            catIdx={catIdx}
-                                                            taskType="weekly"
-                                                            effectiveTodayDate={
-                                                               effectiveTodayDate
-                                                            }
-                                                            dayOptions={
-                                                               dayOptions
-                                                            }
-                                                            linkableChallengeId={
-                                                               linkableChallengeId
-                                                            }
-                                                            onToggleChallengeScope={(
-                                                               newScope
-                                                            ) =>
-                                                               toggleTaskChallengeScope(
-                                                                  task.id,
-                                                                  newScope
-                                                               )
-                                                            }
-                                                            selectedDateKey={
-                                                               selectedDateKey
-                                                            }
-                                                            onSetStatus={(
-                                                               status
-                                                            ) =>
-                                                               setTaskStatus(
-                                                                  catIdx,
-                                                                  task.id,
-                                                                  "weekly",
-                                                                  status
-                                                               )
-                                                            }
-                                                            onMoveToDay={(
-                                                               targetDateKey
-                                                            ) =>
-                                                               moveTaskToDay(
-                                                                  task.id,
-                                                                  targetDateKey,
-                                                                  catIdx,
-                                                                  "weekly"
-                                                               )
-                                                            }
-                                                            onEditTask={() => {
-                                                               setEditTaskModal(
-                                                                  {
-                                                                     id: task.id,
-                                                                     text: task.text,
-                                                                     completed:
-                                                                        task.completed,
-                                                                     status:
-                                                                        getTaskStatus(
-                                                                           task
-                                                                        ),
-                                                                     dueDate:
-                                                                        task.dueDate ??
-                                                                        null,
-                                                                     createdAt:
-                                                                        task.createdAt,
-                                                                     challengeId:
-                                                                        task.challengeId ??
-                                                                        null,
-                                                                     catIdx,
-                                                                     taskType:
-                                                                        "weekly",
-                                                                  }
-                                                               );
-                                                               setEditTaskInputChallengeId(
-                                                                  task.challengeId ??
-                                                                     null
-                                                               );
-                                                               setEditTaskInputText(
-                                                                  task.text
-                                                               );
-                                                               setEditTaskInputStatus(
-                                                                  getTaskStatus(
-                                                                     task
-                                                                  )
-                                                               );
-                                                               setEditTaskInputDueDate(
-                                                                  task.dueDate ??
-                                                                     ""
-                                                               );
-                                                            }}
-                                                            onDeleteTask={() =>
-                                                               handleDeleteTask(
-                                                                  catIdx,
-                                                                  task.id,
-                                                                  "weekly"
-                                                               )
-                                                            }
-                                                            Item={
-                                                               ContextMenuItem
-                                                            }
-                                                            Separator={
-                                                               ContextMenuSeparator
-                                                            }
-                                                            Label={
-                                                               ContextMenuLabel
-                                                            }
-                                                         />
-                                                      </ContextMenuContent>
-                                                   </ContextMenu>
-                                                );
-                                             })
-                                          )}
-                                       </div>
+                                                         <Trophy className="h-3 w-3" />
+                                                      </span>
+                                                   ) : !task.challengeId ? (
+                                                      <span
+                                                         data-testid="task-scope-personal-badge"
+                                                         className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-surface-nested text-text-tertiary border border-border-subtle mt-0.5"
+                                                         title="Personal Task (excluded from challenge lock)"
+                                                         aria-label="Personal Task"
+                                                      >
+                                                         <User className="h-3 w-3" />
+                                                      </span>
+                                                   ) : null)
+                                                }
+                                                menuContent={
+                                                   <TaskMenuItems
+                                                      isChallengeActive={
+                                                         hasChallengeContext
+                                                      }
+                                                      task={task}
+                                                      catIdx={catIdx}
+                                                      taskType="weekly"
+                                                      effectiveTodayDate={
+                                                         effectiveTodayDate
+                                                      }
+                                                      dayOptions={dayOptions}
+                                                      selectedDateKey={
+                                                         selectedDateKey
+                                                      }
+                                                      linkableChallengeId={
+                                                         linkableChallengeId
+                                                      }
+                                                      onToggleChallengeScope={(
+                                                         newScope
+                                                      ) =>
+                                                         toggleTaskChallengeScope(
+                                                            task.id,
+                                                            newScope
+                                                         )
+                                                      }
+                                                      onSetStatus={(status) =>
+                                                         setTaskStatus(
+                                                            catIdx,
+                                                            task.id,
+                                                            "weekly",
+                                                            status
+                                                         )
+                                                      }
+                                                      onMoveToDay={(
+                                                         targetDateKey
+                                                      ) =>
+                                                         moveTaskToDay(
+                                                            task.id,
+                                                            targetDateKey,
+                                                            catIdx,
+                                                            "weekly"
+                                                         )
+                                                      }
+                                                      onEditTask={() => {
+                                                         setEditTaskModal({
+                                                            id: task.id,
+                                                            text: task.text,
+                                                            completed:
+                                                               task.completed,
+                                                            status:
+                                                               getTaskStatus(
+                                                                  task
+                                                               ),
+                                                            dueDate:
+                                                               task.dueDate ??
+                                                               null,
+                                                            createdAt:
+                                                               task.createdAt,
+                                                            challengeId:
+                                                               task.challengeId ??
+                                                               null,
+                                                            catIdx,
+                                                            taskType: "weekly",
+                                                         });
+                                                         setEditTaskInputChallengeId(
+                                                            task.challengeId ??
+                                                               null
+                                                         );
+                                                         setEditTaskInputText(
+                                                            task.text
+                                                         );
+                                                         setEditTaskInputStatus(
+                                                            getTaskStatus(task)
+                                                         );
+                                                         setEditTaskInputDueDate(
+                                                            task.dueDate ?? ""
+                                                         );
+                                                      }}
+                                                      onDeleteTask={() =>
+                                                         handleDeleteTask(
+                                                            catIdx,
+                                                            task.id,
+                                                            "weekly"
+                                                         )
+                                                      }
+                                                      Item={DropdownMenuItem}
+                                                      Separator={
+                                                         DropdownMenuSeparator
+                                                      }
+                                                      Label={DropdownMenuLabel}
+                                                   />
+                                                }
+                                                contextMenuContent={
+                                                   <TaskMenuItems
+                                                      isChallengeActive={
+                                                         hasChallengeContext
+                                                      }
+                                                      task={task}
+                                                      catIdx={catIdx}
+                                                      taskType="weekly"
+                                                      effectiveTodayDate={
+                                                         effectiveTodayDate
+                                                      }
+                                                      dayOptions={dayOptions}
+                                                      selectedDateKey={
+                                                         selectedDateKey
+                                                      }
+                                                      linkableChallengeId={
+                                                         linkableChallengeId
+                                                      }
+                                                      onToggleChallengeScope={(
+                                                         newScope
+                                                      ) =>
+                                                         toggleTaskChallengeScope(
+                                                            task.id,
+                                                            newScope
+                                                         )
+                                                      }
+                                                      onSetStatus={(status) =>
+                                                         setTaskStatus(
+                                                            catIdx,
+                                                            task.id,
+                                                            "weekly",
+                                                            status
+                                                         )
+                                                      }
+                                                      onMoveToDay={(
+                                                         targetDateKey
+                                                      ) =>
+                                                         moveTaskToDay(
+                                                            task.id,
+                                                            targetDateKey,
+                                                            catIdx,
+                                                            "weekly"
+                                                         )
+                                                      }
+                                                      onEditTask={() => {
+                                                         setEditTaskModal({
+                                                            id: task.id,
+                                                            text: task.text,
+                                                            completed:
+                                                               task.completed,
+                                                            status:
+                                                               getTaskStatus(
+                                                                  task
+                                                               ),
+                                                            dueDate:
+                                                               task.dueDate ??
+                                                               null,
+                                                            createdAt:
+                                                               task.createdAt,
+                                                            challengeId:
+                                                               task.challengeId ??
+                                                               null,
+                                                            catIdx,
+                                                            taskType: "weekly",
+                                                         });
+                                                         setEditTaskInputChallengeId(
+                                                            task.challengeId ??
+                                                               null
+                                                         );
+                                                         setEditTaskInputText(
+                                                            task.text
+                                                         );
+                                                         setEditTaskInputStatus(
+                                                            getTaskStatus(task)
+                                                         );
+                                                         setEditTaskInputDueDate(
+                                                            task.dueDate ?? ""
+                                                         );
+                                                      }}
+                                                      onDeleteTask={() =>
+                                                         handleDeleteTask(
+                                                            catIdx,
+                                                            task.id,
+                                                            "weekly"
+                                                         )
+                                                      }
+                                                      Item={ContextMenuItem}
+                                                      Separator={
+                                                         ContextMenuSeparator
+                                                      }
+                                                      Label={ContextMenuLabel}
+                                                   />
+                                                }
+                                             />
+                                          );
+                                       })
                                     )}
-                                 </div>
+                                 </TaskCategoryCard>
                               );
                            })}
                         </div>
