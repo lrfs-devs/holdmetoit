@@ -45,8 +45,9 @@ describe("CockpitTasksSection - Task Expansion & Collapse", () => {
                   isComplete: false,
                   taskType: "DAILY",
                   isDeleted: false,
-                  createdAt: new Date("2026-10-01T10:00:00Z"),
-                  updatedAt: new Date("2026-10-01T10:00:00Z"),
+                  dueDate: "2026-10-04",
+                  createdAt: new Date("2026-10-04T10:00:00Z"),
+                  updatedAt: new Date("2026-10-04T10:00:00Z"),
                   completedAt: null,
                },
             ],
@@ -67,8 +68,9 @@ describe("CockpitTasksSection - Task Expansion & Collapse", () => {
                   isComplete: false,
                   taskType: "WEEKLY",
                   isDeleted: false,
-                  createdAt: new Date("2026-10-01T10:00:00Z"),
-                  updatedAt: new Date("2026-10-01T10:00:00Z"),
+                  dueDate: "2026-10-04",
+                  createdAt: new Date("2026-10-04T10:00:00Z"),
+                  updatedAt: new Date("2026-10-04T10:00:00Z"),
                   completedAt: null,
                },
             ],
@@ -142,5 +144,97 @@ describe("CockpitTasksSection - Task Expansion & Collapse", () => {
 
       // Still not completed (expansion did not trigger checkbox toggle)
       expect(dailySpan.className).not.toContain("line-through");
+   });
+
+   it("expanding a daily task does not expand a weekly task even if they share the same task id", () => {
+      const sharedIdTasks: UserCategorizedTasks = {
+         ...testTasks,
+         dailyCategories: [
+            {
+               id: "cat_daily_1",
+               name: "Daily Work",
+               taskType: "DAILY",
+               isCollapsed: false,
+               tasks: [
+                  {
+                     id: "shared_task_id",
+                     userId: "user_1",
+                     categoryId: "cat_daily_1",
+                     title: longText,
+                     isComplete: false,
+                     taskType: "DAILY",
+                     isDeleted: false,
+                     dueDate: "2026-10-04",
+                     createdAt: new Date("2026-10-04T10:00:00Z"),
+                     updatedAt: new Date("2026-10-04T10:00:00Z"),
+                     completedAt: null,
+                  },
+               ],
+            },
+         ],
+         weeklyCategories: [
+            {
+               id: "cat_weekly_1",
+               name: "Weekly Goals",
+               taskType: "WEEKLY",
+               isCollapsed: false,
+               tasks: [
+                  {
+                     id: "shared_task_id",
+                     userId: "user_1",
+                     categoryId: "cat_weekly_1",
+                     title: longText,
+                     isComplete: false,
+                     taskType: "WEEKLY",
+                     isDeleted: false,
+                     dueDate: "2026-10-04",
+                     createdAt: new Date("2026-10-04T10:00:00Z"),
+                     updatedAt: new Date("2026-10-04T10:00:00Z"),
+                     completedAt: null,
+                  },
+               ],
+            },
+         ],
+      };
+
+      render(
+         createElement(CockpitTasksSection, {
+            isLoggedIn: true,
+            userTasks: sharedIdTasks,
+            todayDate: "2026-10-04",
+         })
+      );
+
+      const showMoreButtons = screen.getAllByRole("button", {
+         name: /show more/i,
+      });
+      expect(showMoreButtons.length).toBe(2);
+
+      const dailyBtn = showMoreButtons[0];
+      const weeklyBtn = showMoreButtons[1];
+      const allSpans = screen.getAllByText(longText);
+      const dailySpan = allSpans[0];
+      const weeklySpan = allSpans[1];
+
+      // Initially both collapsed
+      expect(dailySpan.className).toContain("line-clamp-2");
+      expect(weeklySpan.className).toContain("line-clamp-2");
+
+      // Click Show more on Daily task
+      fireEvent.click(dailyBtn);
+
+      // Daily is expanded, Weekly remains collapsed
+      expect(dailySpan.className).toContain("line-clamp-none");
+      expect(weeklySpan.className).toContain("line-clamp-2");
+      expect(dailyBtn.textContent).toContain("Show less");
+      expect(weeklyBtn.textContent).toContain("Show more");
+
+      // Click Show more on Weekly task
+      fireEvent.click(weeklyBtn);
+
+      // Both are now expanded
+      expect(dailySpan.className).toContain("line-clamp-none");
+      expect(weeklySpan.className).toContain("line-clamp-none");
+      expect(weeklyBtn.textContent).toContain("Show less");
    });
 });

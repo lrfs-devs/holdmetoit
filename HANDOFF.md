@@ -4,7 +4,7 @@
 > **Repository:** `github.com/Afnanpathan2004/holdmetoit`  
 > **Integration/Deploy Branch:** `dev` (latest `8de6b8d`; Vercel deploys `dev`; `main` trails) · Personal branches: `krish`, `afnan`, `afnan-jr`, `dev`  
 > **Document Status:** Active Operational Relay (Living Document)  
-> **Last Updated:** 2026-11-10 (Session 209 — feat(wrapped): persistent mandatory feedback modal gated behind mandatory_feedback_v1 feature flag)
+> **Last Updated:** 2026-11-17 (Session 211 — fix(tasks): eliminate cross-column task duplication, suppress empty daily categories, decouple card expansion)
 > **Governance:** Subject to strict **Handoff Pruning & Obsolescence Rule (§9.3 in `AGENTS.md`)**
 
 ---
@@ -184,6 +184,31 @@ Legend: ✅ Done end-to-end · ⚠️ Partial / backend-only / deviates from spe
 ---
 
 ## 7. Session Changelog (Last 3–5 Sessions)
+
+### Session 211 — 2026-11-17 (Fix: Eliminate Cross-Column Task Duplication, Suppress Empty Daily Categories, Decouple Card Expansion on `krish` · PR #285)
+
+- **Scope & Objectives:**
+   1. **Cross-Column Task Duplication:** Fix issue where moving a weekly task to a daily day caused it to duplicate across both the Daily and Weekly task boards simultaneously.
+   2. **Empty "Study Commitments" Category:** Fix issue where an empty container for "Study Commitments" ("No daily tasks in this category for Day X") was rendered above the moved task on days with no tasks in that category.
+   3. **Synced Task Card Expansion:** Fix issue where clicking "Show more" on a Daily task card unexpectedly expanded the corresponding Weekly task card (and vice versa) when sharing the same task ID.
+   4. **Challenge Goal Nature Preservation:** Ensure daily tasks correctly retain `challengeId` links when scheduled from weekly challenge goals without being wiped by client-side hydration healing.
+- **Root Cause Analysis:**
+   1. **Duplication:** In `hydrateFromIndexedDB`, `weeklyCats` category mapping previously used `if (c.taskType === "WEEKLY") return true;` inside `cat.tasks.filter`. If category "HoldMeToIt" was created with `taskType === "WEEKLY"`, any task belonging to that category was forced into `weeklyCats` regardless of `t.taskType === "DAILY"`. Because `dailyCats` simultaneously mapped the task under `DAILY`, the task appeared concurrently in both boards.
+   2. **Empty Daily Category Display:** In `cockpit-tasks-section.tsx`, line 5110 previously checked `if (dayTasks.length === 0 && cat.tasks.length > 0) return null;`. For an empty category like "Study Commitments" with `cat.tasks.length === 0`, it failed this guard and rendered an empty category card ("No daily tasks in this category for Day X"). Once another category gained a task on that day, `totalDailyTasksForDay > 0` and the empty category card was shown, confusing users into thinking an additional task had been created.
+   3. **Shared Card Expansion State:** `expandedTaskIds` stored raw `task.id`. When daily and weekly cards shared identical IDs, toggling one card toggled the state for both.
+   4. **Challenge ID Nullification:** Legacy healing code in `hydrateFromIndexedDB` was resetting `challengeId = null` on daily tasks, stripping challenge goal badges.
+- **Implementation Details:**
+   - `apps/web/features/study-logs/presentation/cockpit/cockpit-tasks-section.tsx`:
+      - **Strict Task Segregation:** In `hydrateFromIndexedDB`, tasks in `dailyCats` are filtered strictly by `t.categoryId === c.id && t.taskType === "DAILY"`. Tasks in `weeklyCats` are filtered strictly by `t.categoryId === c.id && t.taskType === "WEEKLY"`.
+      - **Preserve Challenge Nature:** Retained `challengeId: t.challengeId ?? null` in both maps; removed aggressive healing blocks that nulled `challengeId`, overwrote `taskType`, or wiped `dueDate`.
+      - **Suppress Empty Categories:** Updated line 5110 to `if (dayTasks.length === 0) return null;` so categories with no tasks for the active day return `null` (matching Weekly Todos behavior).
+      - **Decoupled Expansion State:** Updated `toggleTaskExpand` to key `expandedTaskIds` by `${column}:${taskId}` (e.g. `daily:task_123` vs `weekly:task_123`), completely isolating card expansion between boards.
+   - `apps/web/features/study-logs/presentation/cockpit/cockpit-tasks-expansion.test.tsx`:
+      - Added unit test asserting that expanding a daily task does not expand a weekly task sharing the same ID.
+- **Quality Gates:**
+   - `npm run typecheck:web`: ✅ 0 TypeScript compiler errors.
+   - `npm run test:web -- cockpit-tasks`: ✅ 10 test files passed (109 tests green).
+- **PR:** Pushed to branch `krish` for PR #285 (`krish` → `dev`).
 
 ### Session 210 — 2026-11-16 (Fix: Weekly Challenge Goal Drag-and-Drop to Daily Section on `krish` · PR #285)
 

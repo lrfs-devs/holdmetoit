@@ -317,15 +317,20 @@ export function CockpitTasksSection({
       "daily"
    );
 
-   const toggleTaskExpand = (taskId: string, e?: React.MouseEvent) => {
+   const toggleTaskExpand = (
+      taskId: string,
+      column: "daily" | "weekly" = "daily",
+      e?: React.MouseEvent
+   ) => {
       e?.preventDefault();
       e?.stopPropagation();
+      const key = `${column}:${taskId}`;
       setExpandedTaskIds((prev) => {
          const next = new Set(prev);
-         if (next.has(taskId)) {
-            next.delete(taskId);
+         if (next.has(key)) {
+            next.delete(key);
          } else {
-            next.add(taskId);
+            next.add(key);
          }
          return next;
       });
@@ -1207,11 +1212,10 @@ export function CockpitTasksSection({
                         activeCollapsed
                      ),
                      tasks: sortedTasks
-                        .filter((t) => {
-                           if (t.categoryId !== c.id) return false;
-                           if (c.taskType === "DAILY") return true;
-                           return t.taskType === "DAILY";
-                        })
+                        .filter(
+                           (t) =>
+                              t.categoryId === c.id && t.taskType === "DAILY"
+                        )
                         .map((t) => {
                            const effectiveDueDate = t.dueDate
                               ? typeof t.dueDate === "string"
@@ -1224,17 +1228,9 @@ export function CockpitTasksSection({
                               (t.status as TaskStatus) ||
                               (t.isComplete ? "COMPLETED" : "TODO");
 
-                           const needsDailyHeal =
-                              !t.status ||
-                              t.taskType !== "DAILY" ||
-                              t.challengeId !== null;
-
-                           if (needsDailyHeal) {
+                           if (!t.status) {
                               tasksToHeal.push({
                                  ...t,
-                                 taskType: "DAILY",
-                                 challengeId: null,
-                                 dueDate: effectiveDueDate || selectedDateKey,
                                  status: effectiveStatus,
                               });
                            }
@@ -1246,13 +1242,20 @@ export function CockpitTasksSection({
                               status: effectiveStatus,
                               dueDate: effectiveDueDate || selectedDateKey,
                               createdAt: t.createdAt,
-                              challengeId: null,
+                              challengeId: t.challengeId ?? null,
                            };
                         }),
                   }));
 
                const weeklyCats = sortedCats
-                  .filter((c) => c.taskType === "WEEKLY")
+                  .filter(
+                     (c) =>
+                        c.taskType === "WEEKLY" ||
+                        sortedTasks.some(
+                           (t) =>
+                              t.categoryId === c.id && t.taskType === "WEEKLY"
+                        )
+                  )
                   .map((c) => ({
                      id: c.id,
                      name: c.name,
@@ -1265,11 +1268,10 @@ export function CockpitTasksSection({
                         activeCollapsed
                      ),
                      tasks: sortedTasks
-                        .filter((t) => {
-                           if (t.categoryId !== c.id) return false;
-                           if (c.taskType === "WEEKLY") return true;
-                           return t.taskType === "WEEKLY";
-                        })
+                        .filter(
+                           (t) =>
+                              t.categoryId === c.id && t.taskType === "WEEKLY"
+                        )
                         .map((t) => {
                            const effectiveDueDate = t.dueDate
                               ? typeof t.dueDate === "string"
@@ -1282,16 +1284,9 @@ export function CockpitTasksSection({
                               (t.status as TaskStatus) ||
                               (t.isComplete ? "COMPLETED" : "TODO");
 
-                           const needsWeeklyHeal =
-                              !t.status ||
-                              t.taskType !== "WEEKLY" ||
-                              t.dueDate !== null;
-
-                           if (needsWeeklyHeal) {
+                           if (!t.status) {
                               tasksToHeal.push({
                                  ...t,
-                                 taskType: "WEEKLY",
-                                 dueDate: null,
                                  status: effectiveStatus,
                               });
                            }
@@ -5112,8 +5107,7 @@ export function CockpitTasksSection({
                                  (task) =>
                                     getTaskDateKey(task) === selectedDateKey
                               );
-                              if (dayTasks.length === 0 && cat.tasks.length > 0)
-                                 return null;
+                              if (dayTasks.length === 0) return null;
 
                               const isCollapsed = isCategoryCollapsed(
                                  "daily",
@@ -5493,7 +5487,7 @@ export function CockpitTasksSection({
                                                                               }
                                                                               className={`text-sm break-words leading-snug cursor-pointer ${
                                                                                  expandedTaskIds.has(
-                                                                                    task.id
+                                                                                    `daily:${task.id}`
                                                                                  )
                                                                                     ? "line-clamp-none"
                                                                                     : "line-clamp-2"
@@ -5530,12 +5524,13 @@ export function CockpitTasksSection({
                                                                                     e.stopPropagation();
                                                                                     toggleTaskExpand(
                                                                                        task.id,
+                                                                                       "daily",
                                                                                        e
                                                                                     );
                                                                                  }}
                                                                                  title={
                                                                                     expandedTaskIds.has(
-                                                                                       task.id
+                                                                                       `daily:${task.id}`
                                                                                     )
                                                                                        ? "Show less"
                                                                                        : "Show full task description"
@@ -5544,7 +5539,7 @@ export function CockpitTasksSection({
                                                                               >
                                                                                  <span>
                                                                                     {expandedTaskIds.has(
-                                                                                       task.id
+                                                                                       `daily:${task.id}`
                                                                                     )
                                                                                        ? "Show less"
                                                                                        : "Show more"}
@@ -5552,7 +5547,7 @@ export function CockpitTasksSection({
                                                                                  <ChevronDown
                                                                                     className={`h-3 w-3 transition-transform duration-200 ${
                                                                                        expandedTaskIds.has(
-                                                                                          task.id
+                                                                                          `daily:${task.id}`
                                                                                        )
                                                                                           ? "rotate-180"
                                                                                           : ""
@@ -6488,7 +6483,7 @@ export function CockpitTasksSection({
                                                                               }
                                                                               className={`text-sm break-words leading-snug cursor-pointer ${
                                                                                  expandedTaskIds.has(
-                                                                                    task.id
+                                                                                    `weekly:${task.id}`
                                                                                  )
                                                                                     ? "line-clamp-none"
                                                                                     : "line-clamp-2"
@@ -6525,12 +6520,13 @@ export function CockpitTasksSection({
                                                                                     e.stopPropagation();
                                                                                     toggleTaskExpand(
                                                                                        task.id,
+                                                                                       "weekly",
                                                                                        e
                                                                                     );
                                                                                  }}
                                                                                  title={
                                                                                     expandedTaskIds.has(
-                                                                                       task.id
+                                                                                       `weekly:${task.id}`
                                                                                     )
                                                                                        ? "Show less"
                                                                                        : "Show full task description"
@@ -6539,7 +6535,7 @@ export function CockpitTasksSection({
                                                                               >
                                                                                  <span>
                                                                                     {expandedTaskIds.has(
-                                                                                       task.id
+                                                                                       `weekly:${task.id}`
                                                                                     )
                                                                                        ? "Show less"
                                                                                        : "Show more"}
@@ -6547,7 +6543,7 @@ export function CockpitTasksSection({
                                                                                  <ChevronDown
                                                                                     className={`h-3 w-3 transition-transform duration-200 ${
                                                                                        expandedTaskIds.has(
-                                                                                          task.id
+                                                                                          `weekly:${task.id}`
                                                                                        )
                                                                                           ? "rotate-180"
                                                                                           : ""
