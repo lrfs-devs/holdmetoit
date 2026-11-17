@@ -18,10 +18,13 @@ import {
 } from "@/features/study-logs/domain/challenge-day";
 import { isWeeklyTaskGraceExpired } from "@/features/tasks/domain/task-lock";
 import type { TaskStatus } from "@/features/tasks/domain/task.types";
-import type { TaskItem, CategoryGroup } from "./cockpit-tasks-section";
+import type {
+   BoardCategory,
+   BoardTask,
+} from "@/features/tasks/presentation/task-board/task-board.types";
 
 interface TaskMenuItemsProps {
-   task: TaskItem;
+   task: BoardTask;
    catIdx: number;
    taskType: "daily" | "weekly";
    effectiveTodayDate: string;
@@ -339,10 +342,10 @@ export function TaskMenuItems({
 }
 
 interface CategoryMenuItemsProps {
-   cat: CategoryGroup;
+   cat: BoardCategory;
    catType: "daily" | "weekly";
-   dailyCategories: CategoryGroup[];
-   weeklyCategories: CategoryGroup[];
+   dailyCategories: BoardCategory[];
+   weeklyCategories: BoardCategory[];
    selectedDateKey: string;
    effectiveTodayDate: string;
    dayOptions: ChallengeDayOption[];
