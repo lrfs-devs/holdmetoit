@@ -26,7 +26,6 @@ import {
 import {
    calculateReorderIndex,
    moveCategoryBetweenColumns,
-   moveCategoryToDay,
    moveTaskBetweenCategories,
 } from "@/features/tasks/domain/task-reorder";
 import {
@@ -112,8 +111,11 @@ import {
    putLocalTasks,
 } from "@/features/tasks/data/local/task-idb";
 import { scheduleSync } from "@/features/tasks/data/local/task-sync.service";
+import { useCategoryMutations } from "./hooks/use-category-mutations";
 import { useTaskBoardHydration } from "./hooks/use-task-board-hydration";
 import { useTaskBoardState } from "./hooks/use-task-board-state";
+import { useTaskMoves } from "./hooks/use-task-moves";
+import { useTaskMutations } from "./hooks/use-task-mutations";
 import { useWeekNavigation } from "./hooks/use-week-navigation";
 import { TaskSyncIssueBanner } from "@/features/tasks/presentation/task-sync-issue-banner";
 import type {
@@ -132,6 +134,7 @@ import type {
    EditTaskModalState,
 } from "./task-board.types";
 import {
+   buildBoardTaskRecord,
    getTaskStatus,
    LOAD_SAMPLE_TASK_EVENT,
    SAMPLE_STUDY_TASKS,
@@ -370,6 +373,24 @@ export function CockpitTasksSection({
       linkableChallengeId,
    });
 
+   const { moveTaskToDay, moveCategoryToDayAction, commitTaskMove } =
+      useTaskMoves({
+         userId,
+         isLoggedIn,
+         selectedDateKey,
+         effectiveTodayDate,
+         hasChallengeContext,
+         dayOptions,
+         dailyCategories,
+         weeklyCategories,
+         setDailyCategories,
+         setWeeklyCategories,
+         persistTask,
+         persistCategory,
+         checkIsDayLocked,
+         getTaskDateKey,
+      });
+
    const openAddDailyModal = (targetDateKey?: string) => {
       const rawDateKey = targetDateKey || selectedDateKey;
       const isTargetLocked = checkIsDayLocked(rawDateKey);
@@ -447,817 +468,48 @@ export function CockpitTasksSection({
       setWeeklyCategories,
    });
 
-   const setTaskStatus = (
-      catIndex: number,
-      taskId: string,
-      taskType: "daily" | "weekly",
-      nextStatusOrCompleted: TaskStatus | boolean,
-      clickOrigin?:
-         | React.MouseEvent
-         | MouseEvent
-         | { clientX: number; clientY: number }
-         | Element
-         | null
-   ) => {
-      const nextStatus: TaskStatus =
-         typeof nextStatusOrCompleted === "boolean"
-            ? nextStatusOrCompleted
-               ? "COMPLETED"
-               : "TODO"
-            : nextStatusOrCompleted;
-      const nextCompleted = nextStatus === "COMPLETED";
+   const {
+      setTaskStatus,
+      toggleDailyTask,
+      toggleWeeklyTask,
+      handleDeleteTask,
+      handleSaveEditTask,
+      toggleTaskChallengeScope,
+      handleRolloverIncompleteTasks,
+   } = useTaskMutations({
+      userId,
+      isLoggedIn,
+      dailyCategories,
+      weeklyCategories,
+      setDailyCategories,
+      setWeeklyCategories,
+      persistTask,
+      persistTasks,
+      deleteTaskWithMutation,
+      effectiveTodayDate,
+      selectedDateKey,
+      hasChallengeContext,
+      isPastDayLocked,
+      getTaskDateKey,
+      checkIsDayLocked,
+      editTaskModal,
+      setEditTaskModal,
+      editTaskInputText,
+      editTaskInputStatus,
+      editTaskInputDueDate,
+      editTaskInputChallengeId,
+      isEditTaskGraceLocked,
+   });
 
-      if (taskType === "daily") {
-         let resolvedCatIdx = catIndex;
-         let targetTask = dailyCategories[catIndex]?.tasks.find(
-            (t) => t.id === taskId
-         );
-         if (!targetTask) {
-            resolvedCatIdx = dailyCategories.findIndex((c) =>
-               c.tasks.some((t) => t.id === taskId)
-            );
-            if (resolvedCatIdx !== -1) {
-               targetTask = dailyCategories[resolvedCatIdx]?.tasks.find(
-                  (t) => t.id === taskId
-               );
-            }
-         }
-         if (!targetTask) return;
-         const currentStatus = getTaskStatus(targetTask);
-         if (currentStatus === nextStatus) return;
-
-         if (nextStatus === "COMPLETED") {
-            const targetEl =
-               typeof document !== "undefined"
-                  ? document.querySelector(`[data-task-id="${taskId}"]`)
-                  : null;
-            triggerTaskConfetti(clickOrigin ?? targetEl);
-            void playCompletionAudio();
-         }
-
-         setDailyCategories((prev) =>
-            prev.map((cat, i) =>
-               i === resolvedCatIdx || cat.tasks.some((t) => t.id === taskId)
-                  ? {
-                       ...cat,
-                       tasks: cat.tasks.map((t) =>
-                          t.id === taskId
-                             ? {
-                                  ...t,
-                                  completed: nextCompleted,
-                                  status: nextStatus,
-                               }
-                             : t
-                       ),
-                    }
-                  : cat
-            )
-         );
-
-         const nowIso = new Date().toISOString();
-         const cat =
-            dailyCategories[resolvedCatIdx] ||
-            dailyCategories.find((c) => c.tasks.some((t) => t.id === taskId));
-         if (cat?.id) {
-            const localTask: LocalTaskRecord = {
-               id: taskId,
-               userId: userId ?? null,
-               categoryId: cat.id,
-               challengeId: targetTask.challengeId ?? null,
-               title: targetTask.text,
-               taskType: "DAILY",
-               isComplete: nextCompleted,
-               status: nextStatus,
-               dueDate: targetTask.dueDate ?? null,
-               createdAt: targetTask.createdAt || nowIso,
-               updatedAt: nowIso,
-               completedAt: nextCompleted ? nowIso : null,
-               syncState: "pending",
-            };
-
-            persistTask(localTask, {
-               id: crypto.randomUUID(),
-               entityType: "TASK",
-               action: "TOGGLE",
-               payload: {
-                  taskId,
-                  isComplete: nextCompleted,
-                  status: nextStatus,
-               },
-               createdAt: Date.now(),
-               retryCount: 0,
-            })
-               .then(() => scheduleSync(userId, 400))
-               .catch(() => {});
-         }
-
-         if (isLoggedIn && userId) {
-            trackLogRocketEvent("TaskStatusChanged", {
-               taskId,
-               taskType: "daily",
-               status: nextStatus,
-               isComplete: nextCompleted,
-            });
-         }
-
-         logTaskSync("Task status updated", {
-            taskId,
-            status: nextStatus,
-            isComplete: nextCompleted,
-         });
-      } else {
-         let resolvedCatIdx = catIndex;
-         let targetTask = weeklyCategories[catIndex]?.tasks.find(
-            (t) => t.id === taskId
-         );
-         if (!targetTask) {
-            resolvedCatIdx = weeklyCategories.findIndex((c) =>
-               c.tasks.some((t) => t.id === taskId)
-            );
-            if (resolvedCatIdx !== -1) {
-               targetTask = weeklyCategories[resolvedCatIdx]?.tasks.find(
-                  (t) => t.id === taskId
-               );
-            }
-         }
-         if (!targetTask) return;
-         const currentStatus = getTaskStatus(targetTask);
-         if (currentStatus === nextStatus) return;
-
-         if (nextStatus === "COMPLETED") {
-            const targetEl =
-               typeof document !== "undefined"
-                  ? document.querySelector(`[data-task-id="${taskId}"]`)
-                  : null;
-            triggerTaskConfetti(clickOrigin ?? targetEl);
-            void playCompletionAudio();
-         }
-
-         setWeeklyCategories((prev) =>
-            prev.map((cat, i) =>
-               i === resolvedCatIdx || cat.tasks.some((t) => t.id === taskId)
-                  ? {
-                       ...cat,
-                       tasks: cat.tasks.map((t) =>
-                          t.id === taskId
-                             ? {
-                                  ...t,
-                                  completed: nextCompleted,
-                                  status: nextStatus,
-                               }
-                             : t
-                       ),
-                    }
-                  : cat
-            )
-         );
-
-         const nowIso = new Date().toISOString();
-         const cat =
-            weeklyCategories[resolvedCatIdx] ||
-            weeklyCategories.find((c) => c.tasks.some((t) => t.id === taskId));
-         if (cat?.id) {
-            const localTask: LocalTaskRecord = {
-               id: taskId,
-               userId: userId ?? null,
-               categoryId: cat.id,
-               challengeId: targetTask.challengeId ?? null,
-               title: targetTask.text,
-               taskType: "WEEKLY",
-               isComplete: nextCompleted,
-               status: nextStatus,
-               dueDate: targetTask.dueDate ?? null,
-               createdAt: targetTask.createdAt || nowIso,
-               updatedAt: nowIso,
-               completedAt: nextCompleted ? nowIso : null,
-               syncState: "pending",
-            };
-
-            persistTask(localTask, {
-               id: crypto.randomUUID(),
-               entityType: "TASK",
-               action: "TOGGLE",
-               payload: {
-                  taskId,
-                  isComplete: nextCompleted,
-                  status: nextStatus,
-               },
-               createdAt: Date.now(),
-               retryCount: 0,
-            })
-               .then(() => scheduleSync(userId, 400))
-               .catch(() => {});
-         }
-
-         if (isLoggedIn && userId) {
-            trackLogRocketEvent("TaskStatusChanged", {
-               taskId,
-               taskType: "weekly",
-               status: nextStatus,
-               isComplete: nextCompleted,
-            });
-         }
-
-         logTaskSync("Task status updated", {
-            taskId,
-            status: nextStatus,
-            isComplete: nextCompleted,
-         });
-      }
-   };
-
-   const toggleDailyTask = (
-      catIndex: number,
-      taskId: string,
-      clickOrigin?:
-         | React.MouseEvent
-         | MouseEvent
-         | { clientX: number; clientY: number }
-         | Element
-         | null
-   ) => {
-      let targetTask = dailyCategories[catIndex]?.tasks.find(
-         (t) => t.id === taskId
-      );
-      if (!targetTask) {
-         targetTask = dailyCategories
-            .flatMap((c) => c.tasks)
-            .find((t) => t.id === taskId);
-      }
-      if (!targetTask) return;
-      const currentStatus = getTaskStatus(targetTask);
-      const nextStatus: TaskStatus =
-         currentStatus === "COMPLETED" ? "TODO" : "COMPLETED";
-      setTaskStatus(catIndex, taskId, "daily", nextStatus, clickOrigin);
-   };
-
-   const toggleWeeklyTask = (
-      catIndex: number,
-      taskId: string,
-      clickOrigin?:
-         | React.MouseEvent
-         | MouseEvent
-         | { clientX: number; clientY: number }
-         | Element
-         | null
-   ) => {
-      let targetTask = weeklyCategories[catIndex]?.tasks.find(
-         (t) => t.id === taskId
-      );
-      if (!targetTask) {
-         targetTask = weeklyCategories
-            .flatMap((c) => c.tasks)
-            .find((t) => t.id === taskId);
-      }
-      if (!targetTask) return;
-      const currentStatus = getTaskStatus(targetTask);
-      const nextStatus: TaskStatus =
-         currentStatus === "COMPLETED" ? "TODO" : "COMPLETED";
-      setTaskStatus(catIndex, taskId, "weekly", nextStatus, clickOrigin);
-   };
-
-   const handleDeleteTask = (
-      catIndex: number,
-      taskId: string,
-      taskType: "daily" | "weekly"
-   ) => {
-      if (taskType === "daily") {
-         const taskToDelete = dailyCategories[catIndex]?.tasks.find(
-            (t) => t.id === taskId
-         );
-         if (taskToDelete) {
-            const dateKey = getTaskDateKey(taskToDelete);
-            if (checkIsDayLocked(dateKey)) {
-               return;
-            }
-         }
-         setDailyCategories((prev) =>
-            prev.map((cat, i) =>
-               i === catIndex
-                  ? {
-                       ...cat,
-                       tasks: cat.tasks.filter((t) => t.id !== taskId),
-                    }
-                  : cat
-            )
-         );
-      } else {
-         const weeklyTaskToDelete = weeklyCategories[catIndex]?.tasks.find(
-            (t) => t.id === taskId
-         );
-         if (
-            weeklyTaskToDelete &&
-            isWeeklyTaskGraceExpired({
-               taskType: "WEEKLY",
-               challengeId: weeklyTaskToDelete.challengeId,
-               createdAt: weeklyTaskToDelete.createdAt ?? new Date(),
-            })
-         ) {
-            return;
-         }
-         setWeeklyCategories((prev) =>
-            prev.map((cat, i) =>
-               i === catIndex
-                  ? {
-                       ...cat,
-                       tasks: cat.tasks.filter((t) => t.id !== taskId),
-                    }
-                  : cat
-            )
-         );
-      }
-
-      deleteTaskWithMutation(taskId, {
-         id: crypto.randomUUID(),
-         entityType: "TASK",
-         action: "DELETE",
-         payload: { taskId },
-         createdAt: Date.now(),
-         retryCount: 0,
-      })
-         .then(() => scheduleSync(userId))
-         .catch(() => {});
-
-      logTaskSync("Task deleted", { taskId });
-   };
-
-   const handleSaveEditTask = (
-      newText: string,
-      newStatus: TaskStatus,
-      newDueDate?: string | null
-   ) => {
-      if (!editTaskModal || !newText.trim()) return;
-      const { id, catIdx, taskType } = editTaskModal;
-      const trimmed = newText.trim();
-      const nextCompleted = newStatus === "COMPLETED";
-      const nowIso = new Date().toISOString();
-      const resolvedDueDate =
-         taskType === "daily"
-            ? newDueDate !== undefined && newDueDate !== ""
-               ? newDueDate
-               : (editTaskModal.dueDate ?? selectedDateKey)
-            : newDueDate !== undefined && newDueDate !== ""
-              ? newDueDate
-              : (editTaskModal.dueDate ?? null);
-
-      if (taskType === "daily" && resolvedDueDate) {
-         const originalDateKey = editTaskModal.dueDate
-            ? typeof editTaskModal.dueDate === "string"
-               ? editTaskModal.dueDate.slice(0, 10)
-               : new Date(editTaskModal.dueDate).toISOString().slice(0, 10)
-            : editTaskModal.createdAt
-              ? new Date(editTaskModal.createdAt).toISOString().slice(0, 10)
-              : effectiveTodayDate;
-
-         if (checkIsDayLocked(resolvedDueDate)) {
-            return;
-         }
-
-         const check = validateMoveTaskChallengeDay(
-            originalDateKey,
-            resolvedDueDate,
+   const rolloverSummary = useMemo(
+      () =>
+         getRolloverSummary(
+            dailyCategories,
             effectiveTodayDate,
-            {
-               isChallengeActive: hasChallengeContext,
-               isTargetDayLocked: checkIsDayLocked(resolvedDueDate),
-            }
-         );
-         if (!check.ok) {
-            return;
-         }
-      }
-
-      const patch = buildTaskEditPatch(
-         {
-            title: editTaskModal.text,
-            status: editTaskModal.status,
-            isComplete: editTaskModal.completed,
-            dueDate: editTaskModal.dueDate ?? null,
-            challengeId: editTaskModal.challengeId ?? null,
-         },
-         {
-            title: trimmed,
-            status: newStatus,
-            isComplete: nextCompleted,
-            dueDate: resolvedDueDate,
-            challengeId:
-               taskType === "weekly" ? editTaskInputChallengeId : undefined,
-         },
-         taskType === "daily" ? "DAILY" : "WEEKLY"
-      );
-
-      if (
-         isEditTaskGraceLocked &&
-         (patch.title !== undefined || patch.challengeId !== undefined)
-      ) {
-         return;
-      }
-
-      if (Object.keys(patch).length === 0) {
-         setEditTaskModal(null);
-         return;
-      }
-
-      if (nextCompleted) {
-         const prevTask =
-            taskType === "daily"
-               ? dailyCategories[catIdx]?.tasks.find((t) => t.id === id)
-               : weeklyCategories[catIdx]?.tasks.find((t) => t.id === id);
-         if (prevTask && getTaskStatus(prevTask) !== "COMPLETED") {
-            const targetEl =
-               typeof document !== "undefined"
-                  ? document.querySelector(`[data-task-id="${id}"]`)
-                  : null;
-            triggerTaskConfetti(targetEl);
-            void playCompletionAudio();
-         }
-      }
-
-      if (taskType === "daily") {
-         setDailyCategories((prev) =>
-            prev.map((cat, i) =>
-               i === catIdx
-                  ? {
-                       ...cat,
-                       tasks: cat.tasks.map((t) =>
-                          t.id === id
-                             ? {
-                                  ...t,
-                                  text: trimmed,
-                                  completed: nextCompleted,
-                                  status: newStatus,
-                                  dueDate: resolvedDueDate,
-                               }
-                             : t
-                       ),
-                    }
-                  : cat
-            )
-         );
-      } else {
-         setWeeklyCategories((prev) =>
-            prev.map((cat, i) =>
-               i === catIdx
-                  ? {
-                       ...cat,
-                       tasks: cat.tasks.map((t) =>
-                          t.id === id
-                             ? {
-                                  ...t,
-                                  text: trimmed,
-                                  completed: nextCompleted,
-                                  status: newStatus,
-                                  dueDate: resolvedDueDate,
-                                  challengeId: editTaskInputChallengeId,
-                               }
-                             : t
-                       ),
-                    }
-                  : cat
-            )
-         );
-      }
-
-      const cat =
-         taskType === "daily"
-            ? dailyCategories[catIdx]
-            : weeklyCategories[catIdx];
-      if (cat?.id) {
-         const localTask: LocalTaskRecord = {
-            id,
-            userId: userId ?? null,
-            categoryId: cat.id,
-            challengeId:
-               taskType === "weekly"
-                  ? editTaskInputChallengeId
-                  : (editTaskModal.challengeId ?? null),
-            title: trimmed,
-            taskType: taskType === "daily" ? "DAILY" : "WEEKLY",
-            isComplete: nextCompleted,
-            status: newStatus,
-            dueDate: resolvedDueDate,
-            createdAt: editTaskModal.createdAt || nowIso,
-            updatedAt: nowIso,
-            completedAt: nextCompleted ? nowIso : null,
-            syncState: "pending",
-         };
-
-         persistTask(localTask, {
-            id: crypto.randomUUID(),
-            entityType: "TASK",
-            action: "UPDATE",
-            payload: { taskId: id, ...patch },
-            createdAt: Date.now(),
-            retryCount: 0,
-         })
-            .then(() => scheduleSync(userId, 400))
-            .catch(() => {});
-      }
-
-      logTaskSync("Task updated", {
-         taskId: id,
-         title: trimmed,
-         status: newStatus,
-         isComplete: nextCompleted,
-         dueDate: resolvedDueDate,
-      });
-      setEditTaskModal(null);
-   };
-
-   const moveTaskToDay = (
-      taskId: string,
-      targetDateKey: string,
-      sourceCatIdx?: number,
-      sourceColumn: "daily" | "weekly" = "daily"
-   ) => {
-      const targetOpt = dayOptions.find((d) => d.dateKey === targetDateKey);
-      const isTargetPast =
-         targetOpt?.isPast ?? targetDateKey < effectiveTodayDate;
-
-      // If source is weekly
-      if (sourceColumn === "weekly") {
-         if (checkIsDayLocked(targetDateKey)) return;
-         const foundWeeklyCatIdx =
-            sourceCatIdx !== undefined
-               ? sourceCatIdx
-               : weeklyCategories.findIndex((c) =>
-                    c.tasks.some((t) => t.id === taskId)
-                 );
-         if (foundWeeklyCatIdx === -1) return;
-         const sourceCat = weeklyCategories[foundWeeklyCatIdx];
-         let targetDailyIdx = dailyCategories.findIndex(
-            (c) =>
-               (sourceCat.id && c.id === sourceCat.id) ||
-               c.name === sourceCat.name
-         );
-         let currentDailyCats = dailyCategories;
-         if (targetDailyIdx === -1) {
-            const newCatId = crypto.randomUUID();
-            const newDailyCat: BoardCategory = {
-               id: newCatId,
-               name: sourceCat.name,
-               isCollapsed: false,
-               tasks: [],
-            };
-            currentDailyCats = [...dailyCategories, newDailyCat];
-            targetDailyIdx = currentDailyCats.length - 1;
-            persistCategory(
-               {
-                  id: newCatId,
-                  userId: userId ?? null,
-                  name: sourceCat.name,
-                  taskType: "DAILY",
-                  sortOrder: targetDailyIdx,
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                  syncState: "pending",
-               },
-               {
-                  id: crypto.randomUUID(),
-                  entityType: "CATEGORY",
-                  action: "CREATE",
-                  payload: {
-                     id: newCatId,
-                     name: sourceCat.name,
-                     taskType: "DAILY",
-                     sortOrder: targetDailyIdx,
-                  },
-                  createdAt: Date.now(),
-                  retryCount: 0,
-               }
-            ).catch(() => {});
-         }
-
-         const res = moveTaskBetweenCategories({
-            taskId,
-            sourceCategoryIndex: foundWeeklyCatIdx,
-            sourceColumn: "weekly",
-            targetCategoryIndex: targetDailyIdx,
-            targetColumn: "daily",
-            targetTaskIndex: currentDailyCats[targetDailyIdx].tasks.length,
-            targetDueDate: targetDateKey,
-            dailyCategories: currentDailyCats,
-            weeklyCategories,
-         });
-
-         setDailyCategories(res.dailyCategories);
-         setWeeklyCategories(res.weeklyCategories);
-
-         if (res.movedTask && res.targetCategoryId) {
-            const nowIso = new Date().toISOString();
-            const isMovedComplete = Boolean(
-               res.movedTask.completed ?? res.movedTask.isComplete
-            );
-            const movedStatus =
-               (res.movedTask.status as TaskStatus) ||
-               (isMovedComplete ? "COMPLETED" : "TODO");
-            const movedLocalTask: LocalTaskRecord = {
-               id: res.movedTask.id,
-               userId: userId ?? null,
-               categoryId: res.targetCategoryId,
-               title: res.movedTask.text ?? res.movedTask.title ?? "",
-               taskType: "DAILY",
-               sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
-               isComplete: isMovedComplete,
-               status: movedStatus,
-               dueDate: targetDateKey,
-               createdAt: res.movedTask.createdAt
-                  ? new Date(res.movedTask.createdAt).toISOString()
-                  : nowIso,
-               updatedAt: nowIso,
-               completedAt: isMovedComplete ? nowIso : null,
-               syncState: "pending",
-            };
-
-            persistTask(movedLocalTask, {
-               id: crypto.randomUUID(),
-               entityType: "TASK",
-               action: "MOVE",
-               payload: {
-                  taskId: res.movedTask.id,
-                  categoryId: res.targetCategoryId,
-                  taskType: "DAILY",
-                  sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
-                  dueDate: targetDateKey,
-               },
-               createdAt: Date.now(),
-               retryCount: 0,
-            })
-               .then(() => scheduleSync(userId))
-               .catch(() => {});
-         }
-         return;
-      }
-
-      // Source is daily
-      let foundCatIdx = sourceCatIdx;
-      let foundTask: BoardTask | undefined;
-      if (foundCatIdx !== undefined && dailyCategories[foundCatIdx]) {
-         foundTask = dailyCategories[foundCatIdx].tasks.find(
-            (t) => t.id === taskId
-         );
-      }
-      if (!foundTask) {
-         for (let ci = 0; ci < dailyCategories.length; ci++) {
-            const t = dailyCategories[ci].tasks.find(
-               (item) => item.id === taskId
-            );
-            if (t) {
-               foundCatIdx = ci;
-               foundTask = t;
-               break;
-            }
-         }
-      }
-      if (!foundTask || foundCatIdx === undefined) return;
-
-      const sourceDateKey = getTaskDateKey(foundTask);
-      if (checkIsDayLocked(sourceDateKey)) return;
-      const validation = validateMoveTaskChallengeDay(
-         sourceDateKey,
-         targetDateKey,
-         effectiveTodayDate,
-         {
-            isChallengeActive: hasChallengeContext,
-            isTargetDayLocked: checkIsDayLocked(targetDateKey),
-         }
-      );
-      if (!validation.ok) return;
-
-      const nowIso = new Date().toISOString();
-      const targetCat = dailyCategories[foundCatIdx];
-
-      setDailyCategories((prev) =>
-         prev.map((cat, ci) =>
-            ci === foundCatIdx
-               ? {
-                    ...cat,
-                    tasks: cat.tasks.map((t) =>
-                       t.id === taskId ? { ...t, dueDate: targetDateKey } : t
-                    ),
-                 }
-               : cat
-         )
-      );
-
-      if (targetCat?.id) {
-         const isComplete = Boolean(foundTask.completed);
-         const localTask: LocalTaskRecord = {
-            id: foundTask.id,
-            userId: userId ?? null,
-            categoryId: targetCat.id,
-            title: foundTask.text,
-            taskType: "DAILY",
-            isComplete,
-            status: getTaskStatus(foundTask),
-            dueDate: targetDateKey,
-            createdAt: foundTask.createdAt
-               ? new Date(foundTask.createdAt).toISOString()
-               : nowIso,
-            updatedAt: nowIso,
-            completedAt: isComplete ? nowIso : null,
-            syncState: "pending",
-         };
-
-         persistTask(localTask, {
-            id: crypto.randomUUID(),
-            entityType: "TASK",
-            action: "UPDATE",
-            payload: {
-               taskId: foundTask.id,
-               dueDate: targetDateKey,
-            },
-            createdAt: Date.now(),
-            retryCount: 0,
-         })
-            .then(() => scheduleSync(userId, 400))
-            .catch(() => {});
-      }
-
-      logTaskSync("Task moved to day", {
-         taskId,
-         sourceDateKey,
-         targetDateKey,
-      });
-   };
-
-   const toggleTaskChallengeScope = useCallback(
-      (taskId: string, newChallengeId: string | null) => {
-         let foundCat: BoardCategory | undefined;
-         let foundTask: BoardTask | undefined;
-
-         for (const cat of weeklyCategories) {
-            const t = cat.tasks.find((item) => item.id === taskId);
-            if (t) {
-               foundCat = cat;
-               foundTask = t;
-               break;
-            }
-         }
-         if (!foundTask || !foundCat) return;
-
-         if (
-            isWeeklyTaskGraceExpired({
-               taskType: "WEEKLY",
-               challengeId: foundTask.challengeId,
-               createdAt: foundTask.createdAt ?? new Date(),
-            })
-         ) {
-            return;
-         }
-
-         setWeeklyCategories((prev) =>
-            prev.map((cat) => ({
-               ...cat,
-               tasks: cat.tasks.map((t) =>
-                  t.id === taskId ? { ...t, challengeId: newChallengeId } : t
-               ),
-            }))
-         );
-
-         const nowIso = new Date().toISOString();
-         if (foundCat.id) {
-            const localTask: LocalTaskRecord = {
-               id: taskId,
-               userId: userId ?? null,
-               categoryId: foundCat.id,
-               challengeId: newChallengeId,
-               title: foundTask.text,
-               taskType: "WEEKLY",
-               isComplete: Boolean(foundTask.completed),
-               status: getTaskStatus(foundTask),
-               dueDate: foundTask.dueDate ?? null,
-               createdAt: foundTask.createdAt || nowIso,
-               updatedAt: nowIso,
-               completedAt: foundTask.completed ? nowIso : null,
-               syncState: "pending",
-            };
-
-            persistTask(localTask, {
-               id: crypto.randomUUID(),
-               entityType: "TASK",
-               action: "UPDATE",
-               payload: {
-                  taskId,
-                  challengeId: newChallengeId,
-               },
-               createdAt: Date.now(),
-               retryCount: 0,
-            })
-               .then(() => scheduleSync(userId, 400))
-               .catch(() => {});
-         }
-      },
-      [weeklyCategories, userId, persistTask]
+            selectedDateKey
+         ),
+      [dailyCategories, effectiveTodayDate, selectedDateKey]
    );
-
-   const rolloverSummary = useMemo(() => {
-      return getRolloverSummary(
-         dailyCategories,
-         effectiveTodayDate,
-         selectedDateKey
-      );
-   }, [dailyCategories, effectiveTodayDate, selectedDateKey]);
 
    const weeklyScopedCounts = useMemo(() => {
       if (!linkableChallengeId) {
@@ -1279,473 +531,26 @@ export function CockpitTasksSection({
       return countScopedTasks(scopedTasks);
    }, [weeklyCategories, linkableChallengeId]);
 
-   const handleRolloverIncompleteTasks = useCallback(
-      (options?: { sourceDateKey?: string; taskId?: string }) => {
-         const candidates = findRolloverCandidates(
-            dailyCategories,
-            effectiveTodayDate,
-            options
-         );
-         if (candidates.length === 0) return;
-
-         const candidateIds = candidates.map((c) => c.taskId);
-         const { updatedCategories, rolledOverCount } =
-            applyRolloverToCategories(
-               dailyCategories,
-               candidateIds,
-               effectiveTodayDate
-            );
-
-         setDailyCategories(updatedCategories);
-
-         const nowIso = new Date().toISOString();
-         const localTasks: LocalTaskRecord[] = [];
-         candidates.forEach((candidate) => {
-            if (candidate.categoryId) {
-               localTasks.push({
-                  id: candidate.taskId,
-                  userId: userId ?? null,
-                  categoryId: candidate.categoryId,
-                  challengeId: candidate.task.challengeId ?? null,
-                  title: candidate.title,
-                  taskType: "DAILY",
-                  isComplete: false,
-                  status: (candidate.task.status as TaskStatus) || "TODO",
-                  dueDate: effectiveTodayDate,
-                  createdAt: candidate.task.createdAt || nowIso,
-                  updatedAt: nowIso,
-                  completedAt: null,
-                  syncState: "pending",
-               });
-            }
-         });
-
-         if (isLoggedIn && userId && candidateIds.length > 0) {
-            persistTasks(localTasks, {
-               id: crypto.randomUUID(),
-               entityType: "TASK",
-               action: "ROLLOVER",
-               payload: {
-                  taskIds: candidateIds,
-                  targetDateKey: effectiveTodayDate,
-               },
-               createdAt: Date.now(),
-               retryCount: 0,
-            })
-               .then(() => scheduleSync(userId, 400))
-               .catch(() => {});
-         } else if (localTasks.length > 0) {
-            putLocalTasks(localTasks).catch(() => {});
-         }
-
-         logTaskSync("Incomplete tasks rolled over to Today", {
-            count: rolledOverCount,
-            targetDateKey: effectiveTodayDate,
-         });
-      },
-      [dailyCategories, effectiveTodayDate, userId, isLoggedIn, persistTasks]
-   );
-
-   const moveCategoryToDayAction = (
-      catIdx: number,
-      targetDateKey: string,
-      sourceColumn: "daily" | "weekly" = "daily"
-   ) => {
-      const targetOpt = dayOptions.find((d) => d.dateKey === targetDateKey);
-      const isTargetPast =
-         targetOpt?.isPast ?? targetDateKey < effectiveTodayDate;
-
-      if (sourceColumn === "weekly") {
-         if (checkIsDayLocked(targetDateKey)) return;
-         if (catIdx < 0 || catIdx >= weeklyCategories.length) return;
-         const sourceCat = weeklyCategories[catIdx];
-         if (!sourceCat) return;
-
-         if (
-            sourceCat.tasks.some((t) =>
-               isWeeklyTaskGraceExpired({
-                  taskType: "WEEKLY",
-                  challengeId: t.challengeId,
-                  createdAt: t.createdAt ?? new Date(),
-               })
-            )
-         ) {
-            return;
-         }
-
-         const res = moveCategoryToDay<BoardTask, BoardCategory>({
-            categoryIndex: catIdx,
-            sourceColumn: "weekly",
-            targetDateKey,
-            dailyCategories,
-            weeklyCategories,
-         });
-
-         setDailyCategories(res.dailyCategories);
-         setWeeklyCategories(res.weeklyCategories);
-
-         if (res.movedCategory?.id) {
-            const nowIso = new Date().toISOString();
-            const catId = res.movedCategory.id;
-
-            const localCategory: LocalCategoryRecord = {
-               id: catId,
-               userId: userId ?? null,
-               name: res.movedCategory.name,
-               taskType: "DAILY",
-               sortOrder: dailyCategories.length,
-               createdAt: nowIso,
-               updatedAt: nowIso,
-               syncState: "pending",
-            };
-
-            const tasksToUpdate: LocalTaskRecord[] = res.movedTasks.map(
-               (t, idx) => ({
-                  id: t.id,
-                  userId: userId ?? null,
-                  categoryId: catId,
-                  title: t.text || "",
-                  taskType: "DAILY",
-                  sortOrder: idx,
-                  isComplete: Boolean(t.completed),
-                  status: getTaskStatus(t),
-                  dueDate: targetDateKey,
-                  createdAt: t.createdAt || nowIso,
-                  updatedAt: nowIso,
-                  completedAt: t.completed ? nowIso : null,
-                  syncState: "pending",
-               })
-            );
-
-            const allCatsToUpdate: LocalCategoryRecord[] = [
-               ...res.dailyCategories
-                  .filter((c): c is typeof c & { id: string } => Boolean(c.id))
-                  .map((c, idx) => ({
-                     id: c.id,
-                     userId: userId ?? null,
-                     name: c.name,
-                     taskType: "DAILY" as const,
-                     sortOrder: idx,
-                     createdAt: nowIso,
-                     updatedAt: nowIso,
-                     syncState: "pending" as const,
-                  })),
-               ...res.weeklyCategories
-                  .filter((c): c is typeof c & { id: string } => Boolean(c.id))
-                  .map((c, idx) => ({
-                     id: c.id,
-                     userId: userId ?? null,
-                     name: c.name,
-                     taskType: "WEEKLY" as const,
-                     sortOrder: idx,
-                     createdAt: nowIso,
-                     updatedAt: nowIso,
-                     syncState: "pending" as const,
-                  })),
-            ];
-
-            const mutations: Array<Omit<QueuedMutation, "userId">> = [
-               {
-                  id: crypto.randomUUID(),
-                  entityType: "CATEGORY",
-                  action: "MOVE",
-                  payload: {
-                     categoryId: res.movedCategory.id,
-                     taskType: "DAILY",
-                     sortOrder: dailyCategories.length,
-                  },
-                  createdAt: Date.now(),
-                  retryCount: 0,
-               },
-               ...res.movedTasks.map((t) => ({
-                  id: crypto.randomUUID(),
-                  entityType: "TASK" as const,
-                  action: "MOVE" as const,
-                  payload: {
-                     taskId: t.id,
-                     categoryId: catId,
-                     taskType: "DAILY",
-                     dueDate: targetDateKey,
-                  },
-                  createdAt: Date.now(),
-                  retryCount: 0,
-               })),
-            ];
-
-            commitLocalBatch({
-               categories: [localCategory, ...allCatsToUpdate],
-               tasks: tasksToUpdate,
-               mutations:
-                  isLoggedIn && userId
-                     ? mutations.map((mutation) => ({ ...mutation, userId }))
-                     : [],
-            })
-               .then(() => scheduleSync(userId))
-               .catch(() => {});
-
-            if (isLoggedIn && userId) {
-               trackLogRocketEvent("WeeklyCategoryMovedToDay", {
-                  categoryId: res.movedCategory.id,
-                  targetDateKey,
-               });
-            }
-
-            logTaskSync("Weekly category moved to day via drag and drop", {
-               categoryId: res.movedCategory.id,
-               targetDateKey,
-            });
-         }
-         return;
-      }
-
-      // sourceColumn === "daily"
-      if (catIdx < 0 || catIdx >= dailyCategories.length) return;
-      const sourceCat = dailyCategories[catIdx];
-      if (!sourceCat) return;
-
-      const sourceDateKey = selectedDateKey;
-      if (checkIsDayLocked(sourceDateKey)) return;
-      const validation = validateMoveTaskChallengeDay(
-         sourceDateKey,
-         targetDateKey,
-         effectiveTodayDate,
-         {
-            isChallengeActive: hasChallengeContext,
-            isTargetDayLocked: checkIsDayLocked(targetDateKey),
-         }
-      );
-      if (!validation.ok) return;
-
-      if (sourceDateKey === targetDateKey) return;
-
-      const res = moveCategoryToDay<BoardTask, BoardCategory>({
-         categoryIndex: catIdx,
-         sourceColumn: "daily",
-         sourceDateKey,
-         targetDateKey,
+   const { handleSaveEditCategory, handleConfirmDeleteCategory } =
+      useCategoryMutations({
+         userId,
          dailyCategories,
          weeklyCategories,
+         setDailyCategories,
+         setWeeklyCategories,
+         dailyCategoryNameToId,
+         weeklyCategoryNameToId,
+         persistCategory,
+         deleteCategoryWithMutation,
+         editCategoryModal,
+         setEditCategoryModal,
+         deleteCategoryModal,
+         setDeleteCategoryModal,
+         setCollapsedCategoryIds,
+         collapsedCategoryIdsRef,
+         getTaskDateKey,
+         checkIsDayLocked,
       });
-
-      setDailyCategories(res.dailyCategories);
-
-      if (res.movedTasks.length > 0 && sourceCat.id) {
-         const nowIso = new Date().toISOString();
-         const catId = sourceCat.id;
-
-         const tasksToUpdate: LocalTaskRecord[] = res.movedTasks.map(
-            (t, idx) => ({
-               id: t.id,
-               userId: userId ?? null,
-               categoryId: catId,
-               title: t.text || "",
-               taskType: "DAILY",
-               sortOrder: idx,
-               isComplete: Boolean(t.completed),
-               status: getTaskStatus(t),
-               dueDate: targetDateKey,
-               createdAt: t.createdAt || nowIso,
-               updatedAt: nowIso,
-               completedAt: t.completed ? nowIso : null,
-               syncState: "pending",
-            })
-         );
-
-         const mutations: Array<Omit<QueuedMutation, "userId">> =
-            res.movedTasks.map((t) => ({
-               id: crypto.randomUUID(),
-               entityType: "TASK" as const,
-               action: "MOVE" as const,
-               payload: {
-                  taskId: t.id,
-                  categoryId: catId,
-                  taskType: "DAILY",
-                  dueDate: targetDateKey,
-               },
-               createdAt: Date.now(),
-               retryCount: 0,
-            }));
-
-         commitLocalBatch({
-            tasks: tasksToUpdate,
-            mutations:
-               isLoggedIn && userId
-                  ? mutations.map((mutation) => ({ ...mutation, userId }))
-                  : [],
-         })
-            .then(() => scheduleSync(userId))
-            .catch(() => {});
-
-         if (isLoggedIn && userId) {
-            trackLogRocketEvent("DailyCategoryMovedToDay", {
-               categoryId: catId,
-               targetDateKey,
-               tasksCount: res.movedTasks.length,
-            });
-         }
-
-         logTaskSync("Daily category moved to day via drag and drop", {
-            categoryId: catId,
-            tasksCount: res.movedTasks.length,
-            targetDateKey,
-         });
-      }
-   };
-
-   const handleSaveEditCategory = (newName: string) => {
-      if (!editCategoryModal || !newName.trim()) return;
-      const oldName = editCategoryModal.name;
-      const trimmed = newName.trim();
-      const catType = editCategoryModal.taskType;
-      const catId =
-         editCategoryModal.id ||
-         (catType === "daily"
-            ? dailyCategoryNameToId.get(oldName) ||
-              dailyCategories.find((c) => c.name === oldName)?.id
-            : weeklyCategoryNameToId.get(oldName) ||
-              weeklyCategories.find((c) => c.name === oldName)?.id);
-
-      if (oldName === trimmed) {
-         setEditCategoryModal(null);
-         return;
-      }
-
-      setDailyCategories((prev) =>
-         prev.map((cat) =>
-            (catId && cat.id === catId) || cat.name === oldName
-               ? { ...cat, name: trimmed }
-               : cat
-         )
-      );
-      setWeeklyCategories((prev) =>
-         prev.map((cat) =>
-            (catId && cat.id === catId) || cat.name === oldName
-               ? { ...cat, name: trimmed }
-               : cat
-         )
-      );
-
-      if (catId) {
-         persistCategory(
-            {
-               id: catId,
-               userId: userId ?? null,
-               name: trimmed,
-               taskType: catType === "daily" ? "DAILY" : "WEEKLY",
-               createdAt: new Date().toISOString(),
-               updatedAt: new Date().toISOString(),
-               syncState: "pending",
-            },
-            {
-               id: crypto.randomUUID(),
-               entityType: "CATEGORY",
-               action: "UPDATE",
-               payload: { categoryId: catId, name: trimmed },
-               createdAt: Date.now(),
-               retryCount: 0,
-            }
-         )
-            .then(() => scheduleSync(userId))
-            .catch(() => {});
-      }
-
-      logTaskSync("Category updated", { categoryId: catId, name: trimmed });
-      setEditCategoryModal(null);
-   };
-
-   const handleConfirmDeleteCategory = () => {
-      if (!deleteCategoryModal) return;
-      const targetName = deleteCategoryModal.name;
-      const catType = deleteCategoryModal.taskType;
-      const catId =
-         deleteCategoryModal.id ||
-         dailyCategoryNameToId.get(targetName) ||
-         weeklyCategoryNameToId.get(targetName) ||
-         dailyCategories.find((c) => c.name === targetName)?.id ||
-         weeklyCategories.find((c) => c.name === targetName)?.id;
-
-      const dailyTargetCat = dailyCategories.find((c) =>
-         catId ? c.id === catId : catType === "daily" && c.name === targetName
-      );
-      const hasLockedTasks = Boolean(
-         dailyTargetCat?.tasks.some((t) => {
-            const dateKey = getTaskDateKey(t);
-            return checkIsDayLocked(dateKey);
-         })
-      );
-
-      const weeklyTargetCat = weeklyCategories.find((c) =>
-         catId ? c.id === catId : catType === "weekly" && c.name === targetName
-      );
-      const hasGraceLockedTasks = Boolean(
-         weeklyTargetCat?.tasks.some((t) =>
-            isWeeklyTaskGraceExpired({
-               taskType: "WEEKLY",
-               challengeId: t.challengeId,
-               createdAt: t.createdAt ?? new Date(),
-            })
-         )
-      );
-
-      if (hasLockedTasks || hasGraceLockedTasks) {
-         setDeleteCategoryModal(null);
-         return;
-      }
-
-      if (catType === "weekly") {
-         setWeeklyCategories((prev) =>
-            prev.filter((cat) =>
-               catId ? cat.id !== catId : cat.name !== targetName
-            )
-         );
-         setDailyCategories((prev) =>
-            prev.filter((cat) =>
-               catId ? cat.id !== catId : cat.name !== targetName
-            )
-         );
-      } else {
-         setDailyCategories((prev) =>
-            prev.filter((cat) =>
-               catId ? cat.id !== catId : cat.name !== targetName
-            )
-         );
-      }
-
-      if (catId) {
-         deleteCategoryWithMutation(catId, {
-            id: crypto.randomUUID(),
-            entityType: "CATEGORY",
-            action: "DELETE",
-            payload: { categoryId: catId },
-            createdAt: Date.now(),
-            retryCount: 0,
-         })
-            .then(() => scheduleSync(userId))
-            .catch(() => {});
-      }
-
-      if (catId || targetName) {
-         setCollapsedCategoryIds((prev) => {
-            const next = new Set(prev);
-            if (catId) {
-               next.delete(catId);
-               next.delete(`daily:${catId}`);
-               next.delete(`weekly:${catId}`);
-            }
-            if (targetName) {
-               next.delete(targetName);
-               next.delete(`daily:name:${targetName}`);
-               next.delete(`weekly:name:${targetName}`);
-            }
-            writeCollapsedCategoryIds(userId, next);
-            collapsedCategoryIdsRef.current = next;
-            return next;
-         });
-      }
-
-      logTaskSync("Category deleted", { categoryId: catId, name: targetName });
-      setDeleteCategoryModal(null);
-   };
 
    const { total: totalDailyTasks, completed: completedDailyTasks } =
       selectCategoryTotals(dailyCategories);
@@ -2037,23 +842,28 @@ export function CockpitTasksSection({
               ]
             : [];
 
+      const targetBoardCategories =
+         addModalType === "daily" ? dailyCategories : weeklyCategories;
+      const targetCategoryForOrder = targetBoardCategories.find(
+         (c) => c.id === targetCatId || c.name === targetCategoryName
+      );
+      const newTaskSortOrder = targetCategoryForOrder?.tasks.length ?? 0;
+
       const localTasks: LocalTaskRecord[] = targetCatId
          ? [
-              {
-                 id: newTaskId,
+              buildBoardTaskRecord({
+                 task: newTask,
                  userId: userId ?? null,
                  categoryId: targetCatId,
-                 challengeId: targetChallengeId,
-                 title: newTodoText.trim(),
                  taskType,
+                 sortOrder: newTaskSortOrder,
                  isComplete: nextCompleted,
                  status: newTodoStatus,
                  dueDate: resolvedDueDate,
-                 createdAt: nowIso,
-                 updatedAt: nowIso,
-                 completedAt: nextCompleted ? nowIso : null,
-                 syncState: "pending",
-              },
+                 title: newTodoText.trim(),
+                 challengeId: targetChallengeId,
+                 nowIso,
+              }),
            ]
          : [];
 
@@ -2084,6 +894,7 @@ export function CockpitTasksSection({
             challengeId: targetChallengeId,
             title: newTodoText.trim(),
             taskType,
+            sortOrder: newTaskSortOrder,
             isComplete: nextCompleted,
             status: newTodoStatus,
             dueDate: resolvedDueDate,
@@ -2185,21 +996,19 @@ export function CockpitTasksSection({
             }).catch(() => {});
          }
 
-         putLocalTask({
-            id: newTaskId,
-            userId: userId ?? null,
-            categoryId: targetCatId,
-            challengeId: null,
-            title: trimmed,
-            taskType: "DAILY",
-            isComplete: false,
-            status: "TODO",
-            dueDate: targetDateKey,
-            createdAt: nowIso,
-            updatedAt: nowIso,
-            completedAt: null,
-            syncState: "pending",
-         }).catch(() => {});
+         putLocalTask(
+            buildBoardTaskRecord({
+               task: newTask,
+               userId: userId ?? null,
+               categoryId: targetCatId,
+               taskType: "DAILY",
+               sortOrder: existingCat?.tasks.length ?? 0,
+               dueDate: targetDateKey,
+               title: trimmed,
+               challengeId: null,
+               nowIso,
+            })
+         ).catch(() => {});
       },
       [selectedDateKey, effectiveTodayDate, dailyCategories, userId]
    );
@@ -2646,21 +1455,19 @@ export function CockpitTasksSection({
 
          if (targetCatGroup && targetCatGroup.tasks.length > 0) {
             const tasksToUpdate: LocalTaskRecord[] = targetCatGroup.tasks.map(
-               (t, idx) => ({
-                  id: t.id,
-                  userId: userId ?? null,
-                  categoryId: res.targetCategoryId!,
-                  title: t.text,
-                  taskType: res.targetTaskType,
-                  sortOrder: idx,
-                  isComplete: t.completed,
-                  status: getTaskStatus(t),
-                  dueDate: t.dueDate ?? null,
-                  createdAt: t.createdAt || nowIso,
-                  updatedAt: nowIso,
-                  completedAt: t.completed ? nowIso : null,
-                  syncState: "pending",
-               })
+               (t, idx) =>
+                  buildBoardTaskRecord({
+                     task: t,
+                     userId: userId ?? null,
+                     categoryId: res.targetCategoryId!,
+                     taskType: res.targetTaskType,
+                     sortOrder: idx,
+                     challengeId:
+                        res.targetTaskType === "WEEKLY"
+                           ? (t.challengeId ?? null)
+                           : null,
+                     nowIso,
+                  })
             );
 
             const taskIds = targetCatGroup.tasks
@@ -2827,21 +1634,18 @@ export function CockpitTasksSection({
             // Cascade taskType and dueDate to all tasks inside this category.
             const tasksToUpdate: LocalTaskRecord[] = (
                res.movedCategory.tasks ?? []
-            ).map((t, idx) => ({
-               id: t.id,
-               userId: userId ?? null,
-               categoryId: catId,
-               title: t.text,
-               taskType: targetType,
-               sortOrder: idx,
-               isComplete: t.completed,
-               status: getTaskStatus(t),
-               dueDate: t.dueDate ?? null,
-               createdAt: t.createdAt || nowIso,
-               updatedAt: nowIso,
-               completedAt: t.completed ? nowIso : null,
-               syncState: "pending",
-            }));
+            ).map((t, idx) =>
+               buildBoardTaskRecord({
+                  task: t,
+                  userId: userId ?? null,
+                  categoryId: catId,
+                  taskType: targetType,
+                  sortOrder: idx,
+                  challengeId:
+                     targetType === "WEEKLY" ? (t.challengeId ?? null) : null,
+                  nowIso,
+               })
+            );
 
             // Persist updated sortOrder for all categories in both columns.
             const allCatsToUpdate: LocalCategoryRecord[] = [
@@ -2993,34 +1797,19 @@ export function CockpitTasksSection({
          setWeeklyCategories(res.weeklyCategories);
 
          if (res.movedTask && res.targetCategoryId) {
-            const nowIso = new Date().toISOString();
             const isMovedComplete = Boolean(
                res.movedTask.completed ?? res.movedTask.isComplete
             );
             const movedStatus =
                (res.movedTask.status as TaskStatus) ||
                (isMovedComplete ? "COMPLETED" : "TODO");
-            const movedLocalTask: LocalTaskRecord = {
-               id: res.movedTask.id,
-               userId: userId ?? null,
-               categoryId: res.targetCategoryId,
-               title: res.movedTask.text ?? res.movedTask.title ?? "",
-               taskType: res.targetTaskType,
-               sortOrder: 0,
-               isComplete: isMovedComplete,
-               status: movedStatus,
-               dueDate: res.movedTask.dueDate ?? null,
-               createdAt: res.movedTask.createdAt
-                  ? new Date(res.movedTask.createdAt).toISOString()
-                  : nowIso,
-               updatedAt: nowIso,
-               completedAt: isMovedComplete ? nowIso : null,
-               syncState: "pending",
-            };
 
-            persistTask(movedLocalTask, {
-               id: crypto.randomUUID(),
-               entityType: "TASK",
+            commitTaskMove({
+               task: res.movedTask,
+               targetCategoryId: res.targetCategoryId,
+               targetTaskType: res.targetTaskType,
+               targetDueDate: res.movedTask.dueDate ?? null,
+               sortOrder: 0,
                action: "MOVE",
                payload: {
                   taskId: res.movedTask.id,
@@ -3029,11 +1818,9 @@ export function CockpitTasksSection({
                   sortOrder: 0,
                   dueDate: res.movedTask.dueDate ?? null,
                },
-               createdAt: Date.now(),
-               retryCount: 0,
-            })
-               .then(() => scheduleSync(userId))
-               .catch(() => {});
+               isComplete: isMovedComplete,
+               status: movedStatus,
+            });
          }
       }
 
@@ -3106,21 +1893,18 @@ export function CockpitTasksSection({
 
             const tasksToUpdate: LocalTaskRecord[] = (
                res.movedCategory.tasks ?? []
-            ).map((t, idx) => ({
-               id: t.id,
-               userId: userId ?? null,
-               categoryId: catId,
-               title: t.text,
-               taskType: targetType,
-               sortOrder: idx,
-               isComplete: t.completed,
-               status: getTaskStatus(t),
-               dueDate: t.dueDate ?? null,
-               createdAt: t.createdAt || nowIso,
-               updatedAt: nowIso,
-               completedAt: t.completed ? nowIso : null,
-               syncState: "pending",
-            }));
+            ).map((t, idx) =>
+               buildBoardTaskRecord({
+                  task: t,
+                  userId: userId ?? null,
+                  categoryId: catId,
+                  taskType: targetType,
+                  sortOrder: idx,
+                  challengeId:
+                     targetType === "WEEKLY" ? (t.challengeId ?? null) : null,
+                  nowIso,
+               })
+            );
 
             const allCatsToUpdate: LocalCategoryRecord[] = [
                ...res.dailyCategories
@@ -3281,48 +2065,33 @@ export function CockpitTasksSection({
                setWeeklyCategories(res.weeklyCategories);
 
                if (res.movedTask && res.targetCategoryId) {
-                  const nowIso = new Date().toISOString();
                   const isMovedComplete = Boolean(
                      res.movedTask.completed ?? res.movedTask.isComplete
                   );
                   const movedStatus =
                      (res.movedTask.status as TaskStatus) ||
                      (isMovedComplete ? "COMPLETED" : "TODO");
-                  const movedLocalTask: LocalTaskRecord = {
-                     id: res.movedTask.id,
-                     userId: userId ?? null,
-                     categoryId: res.targetCategoryId,
-                     title: res.movedTask.text ?? res.movedTask.title ?? "",
-                     taskType: res.targetTaskType,
-                     sortOrder: currentDailyCats[targetDailyIdx].tasks.length,
-                     isComplete: isMovedComplete,
-                     status: movedStatus,
-                     dueDate: res.movedTask.dueDate ?? selectedDateKey,
-                     createdAt: res.movedTask.createdAt
-                        ? new Date(res.movedTask.createdAt).toISOString()
-                        : nowIso,
-                     updatedAt: nowIso,
-                     completedAt: isMovedComplete ? nowIso : null,
-                     syncState: "pending",
-                  };
+                  const sortOrder =
+                     currentDailyCats[targetDailyIdx].tasks.length;
 
-                  persistTask(movedLocalTask, {
-                     id: crypto.randomUUID(),
-                     entityType: "TASK",
+                  commitTaskMove({
+                     task: res.movedTask,
+                     targetCategoryId: res.targetCategoryId,
+                     targetTaskType: res.targetTaskType,
+                     targetDueDate: selectedDateKey,
+                     sortOrder,
                      action: "MOVE",
                      payload: {
                         taskId: res.movedTask.id,
                         categoryId: res.targetCategoryId,
                         taskType: res.targetTaskType,
-                        sortOrder:
-                           currentDailyCats[targetDailyIdx].tasks.length,
+                        sortOrder,
                         dueDate: selectedDateKey,
                      },
-                     createdAt: Date.now(),
-                     retryCount: 0,
-                  })
-                     .then(() => scheduleSync(userId))
-                     .catch(() => {});
+                     isComplete: isMovedComplete,
+                     status: movedStatus,
+                     challengeId: null,
+                  });
                }
             }
          } else if (targetCategories.length > 0) {
@@ -3355,47 +2124,31 @@ export function CockpitTasksSection({
             setWeeklyCategories(res.weeklyCategories);
 
             if (res.movedTask && res.targetCategoryId) {
-               const nowIso = new Date().toISOString();
                const isMovedComplete = Boolean(
                   res.movedTask.completed ?? res.movedTask.isComplete
                );
                const movedStatus =
                   (res.movedTask.status as TaskStatus) ||
                   (isMovedComplete ? "COMPLETED" : "TODO");
-               const movedLocalTask: LocalTaskRecord = {
-                  id: res.movedTask.id,
-                  userId: userId ?? null,
-                  categoryId: res.targetCategoryId,
-                  title: res.movedTask.text ?? res.movedTask.title ?? "",
-                  taskType: res.targetTaskType,
-                  sortOrder: targetCategories[lastCatIdx].tasks.length,
-                  isComplete: isMovedComplete,
-                  status: movedStatus,
-                  dueDate: res.movedTask.dueDate ?? null,
-                  createdAt: res.movedTask.createdAt
-                     ? new Date(res.movedTask.createdAt).toISOString()
-                     : nowIso,
-                  updatedAt: nowIso,
-                  completedAt: isMovedComplete ? nowIso : null,
-                  syncState: "pending",
-               };
+               const sortOrder = targetCategories[lastCatIdx].tasks.length;
 
-               persistTask(movedLocalTask, {
-                  id: crypto.randomUUID(),
-                  entityType: "TASK",
+               commitTaskMove({
+                  task: res.movedTask,
+                  targetCategoryId: res.targetCategoryId,
+                  targetTaskType: res.targetTaskType,
+                  targetDueDate: res.movedTask.dueDate ?? null,
+                  sortOrder,
                   action: "MOVE",
                   payload: {
                      taskId: res.movedTask.id,
                      categoryId: res.targetCategoryId,
                      taskType: res.targetTaskType,
-                     sortOrder: targetCategories[lastCatIdx].tasks.length,
+                     sortOrder,
                      dueDate: res.movedTask.dueDate ?? null,
                   },
-                  createdAt: Date.now(),
-                  retryCount: 0,
-               })
-                  .then(() => scheduleSync(userId))
-                  .catch(() => {});
+                  isComplete: isMovedComplete,
+                  status: movedStatus,
+               });
             }
          }
       }
