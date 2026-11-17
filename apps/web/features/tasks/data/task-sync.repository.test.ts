@@ -140,8 +140,14 @@ describe("processBatchSync (task-sync.repository)", () => {
          },
       });
 
-      // Category type changes do not rewrite child task types.
-      expect(prisma.task.updateMany).not.toHaveBeenCalled();
+      // A category type change cascades to its child tasks.
+      expect(prisma.task.updateMany).toHaveBeenCalledWith({
+         where: { categoryId: catId, userId, isDeleted: false },
+         data: {
+            taskType: "WEEKLY",
+            revision: { increment: 1 },
+         },
+      });
    });
 
    it("disambiguates category name when moving across columns with an existing name collision", async () => {
@@ -1296,7 +1302,7 @@ describe("processBatchSync (task-sync.repository)", () => {
       );
    });
 
-   it("does not change a task's type when moving it to another category", async () => {
+   it("adopts the target category's type when moving a task to another category", async () => {
       vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
          challengeId: null,
          taskType: "DAILY",
@@ -1323,14 +1329,51 @@ describe("processBatchSync (task-sync.repository)", () => {
       ]);
 
       expect(res.mutationResults?.[0]).toMatchObject({ status: "applied" });
-      expect(prisma.task.updateMany).toHaveBeenCalled();
       const call = vi.mocked(prisma.task.updateMany).mock.calls[0]?.[0] as
          { data: Record<string, unknown> } | undefined;
-      expect(call?.data).toMatchObject({ categoryId: "cat_weekly" });
-      expect(call?.data).not.toHaveProperty("taskType");
+      // The category wins over the client's stale payload type.
+      expect(call?.data).toMatchObject({
+         categoryId: "cat_weekly",
+         taskType: "WEEKLY",
+      });
    });
 
-   it("does not cascade a category type change to child tasks", async () => {
+   it("clears a weekly task's challenge link when it moves to the daily board", async () => {
+      vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
+         challengeId: "chal_1",
+         taskType: "WEEKLY",
+      } as never);
+      vi.mocked(prisma.category.findFirst).mockResolvedValueOnce({
+         id: "cat_daily",
+         userId,
+         taskType: "DAILY",
+      } as never);
+
+      await processBatchSync(userId, [
+         {
+            id: "mut-unlink",
+            entityType: "TASK",
+            action: "MOVE",
+            payload: {
+               taskId: "t_move",
+               categoryId: "cat_daily",
+               taskType: "DAILY",
+               dueDate: "2026-11-18",
+            },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      const call = vi.mocked(prisma.task.updateMany).mock.calls[0]?.[0] as
+         { data: Record<string, unknown> } | undefined;
+      expect(call?.data).toMatchObject({
+         taskType: "DAILY",
+         challengeId: null,
+      });
+   });
+
+   it("cascades a category type change to child tasks", async () => {
       vi.mocked(prisma.category.findUnique).mockResolvedValueOnce({
          id: "cat_goal",
          userId,
@@ -1361,6 +1404,12 @@ describe("processBatchSync (task-sync.repository)", () => {
             data: expect.objectContaining({ taskType: "WEEKLY" }),
          })
       );
-      expect(prisma.task.updateMany).not.toHaveBeenCalled();
+      expect(prisma.task.updateMany).toHaveBeenCalledWith({
+         where: { categoryId: "cat_goal", userId, isDeleted: false },
+         data: {
+            taskType: "WEEKLY",
+            revision: { increment: 1 },
+         },
+      });
    });
 });

@@ -551,6 +551,67 @@ export function useTaskDragAndDrop({
                : res.weeklyCategories;
          const targetCatGroup = targetCats[targetCatIdx];
 
+         const categoryChanged =
+            draggedItem.sourceCatIdx !== targetCatIdx ||
+            draggedItem.sourceColumn !== targetColumn;
+
+         // The moved task's index in the destination list *after* the splice.
+         const insertedIndex = Math.max(
+            0,
+            targetCatGroup?.tasks.findIndex(
+               (t) => t.id === res.movedTask!.id
+            ) ?? 0
+         );
+
+         if (categoryChanged) {
+            const isMovedComplete = Boolean(
+               res.movedTask.completed ?? res.movedTask.isComplete
+            );
+            const movedTask = res.movedTask as BoardTask;
+            const movedLocalTask = buildBoardTaskRecord({
+               task: {
+                  ...movedTask,
+                  text: movedTask.text ?? movedTask.id,
+               },
+               userId: userId ?? null,
+               categoryId: res.targetCategoryId,
+               taskType: res.targetTaskType,
+               sortOrder: insertedIndex,
+               dueDate: movedTask.dueDate ?? null,
+               isComplete: isMovedComplete,
+               status:
+                  (movedTask.status as TaskStatus) ||
+                  (isMovedComplete ? "COMPLETED" : "TODO"),
+               challengeId:
+                  res.targetTaskType === "WEEKLY"
+                     ? (movedTask.challengeId ?? null)
+                     : null,
+               nowIso,
+            });
+
+            if (isLoggedIn && userId) {
+               // Identity first: categoryId + taskType + dueDate must persist
+               // even when the destination already had tasks.
+               persistTask(movedLocalTask, {
+                  id: crypto.randomUUID(),
+                  entityType: "TASK",
+                  action: "MOVE",
+                  payload: {
+                     taskId: res.movedTask.id,
+                     categoryId: res.targetCategoryId,
+                     taskType: res.targetTaskType,
+                     sortOrder: insertedIndex,
+                     dueDate: res.movedTask.dueDate ?? null,
+                  },
+                  createdAt: Date.now(),
+                  retryCount: 0,
+               }).catch(() => {});
+            } else {
+               putLocalTask(movedLocalTask).catch(() => {});
+            }
+         }
+
+         // Ordering for the destination category is always rewritten.
          if (targetCatGroup && targetCatGroup.tasks.length > 0) {
             const tasksToUpdate: LocalTaskRecord[] = targetCatGroup.tasks.map(
                (t, idx) =>
@@ -585,51 +646,6 @@ export function useTaskDragAndDrop({
                   .catch(() => {});
             } else {
                putLocalTasks(tasksToUpdate).catch(() => {});
-            }
-         } else {
-            const isMovedComplete = Boolean(
-               res.movedTask.completed ?? res.movedTask.isComplete
-            );
-            const movedStatus =
-               (res.movedTask.status as TaskStatus) ||
-               (isMovedComplete ? "COMPLETED" : "TODO");
-            const movedLocalTask: LocalTaskRecord = {
-               id: res.movedTask.id,
-               userId: userId ?? null,
-               categoryId: res.targetCategoryId,
-               title: res.movedTask.text ?? res.movedTask.title ?? "",
-               taskType: res.targetTaskType,
-               sortOrder: destIdx,
-               isComplete: isMovedComplete,
-               status: movedStatus,
-               dueDate: res.movedTask.dueDate ?? null,
-               createdAt: res.movedTask.createdAt
-                  ? new Date(res.movedTask.createdAt).toISOString()
-                  : nowIso,
-               updatedAt: nowIso,
-               completedAt: isMovedComplete ? nowIso : null,
-               syncState: "pending",
-            };
-
-            if (isLoggedIn && userId) {
-               persistTask(movedLocalTask, {
-                  id: crypto.randomUUID(),
-                  entityType: "TASK",
-                  action: "MOVE",
-                  payload: {
-                     taskId: res.movedTask.id,
-                     categoryId: res.targetCategoryId,
-                     taskType: res.targetTaskType,
-                     sortOrder: destIdx,
-                     dueDate: res.movedTask.dueDate ?? null,
-                  },
-                  createdAt: Date.now(),
-                  retryCount: 0,
-               })
-                  .then(() => scheduleSync(userId))
-                  .catch(() => {});
-            } else {
-               putLocalTask(movedLocalTask).catch(() => {});
             }
          }
 
@@ -826,7 +842,9 @@ export function useTaskDragAndDrop({
                });
             }
 
-            if (isMovingWeeklyToDaily) {
+            // Every member task follows its category's column, in both
+            // directions, so the server never keeps a task in the old column.
+            if (draggedItem.sourceColumn !== targetColumn) {
                for (const t of res.movedCategory.tasks ?? []) {
                   mutations.push({
                      id: crypto.randomUUID(),
@@ -835,8 +853,9 @@ export function useTaskDragAndDrop({
                      payload: {
                         taskId: t.id,
                         categoryId: catId,
-                        taskType: "DAILY",
-                        dueDate: selectedDateKey,
+                        taskType: targetType,
+                        dueDate:
+                           targetType === "DAILY" ? selectedDateKey : null,
                      },
                      createdAt: Date.now(),
                      retryCount: 0,

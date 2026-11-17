@@ -354,6 +354,21 @@ async function applyCategoryMutation(
                   currentCategory: current ? toCategoryItem(current) : null,
                };
             }
+
+            // A category's column change cascades to its member tasks so the
+            // board never shows a task in the opposite column to its category.
+            if (dataToUpdate.taskType) {
+               const nextType = dataToUpdate.taskType as TaskType;
+               await tx.task.updateMany({
+                  where: { categoryId: catId, userId, isDeleted: false },
+                  data: {
+                     taskType: nextType,
+                     // Challenge links are only valid on weekly tasks.
+                     ...(nextType === "DAILY" ? { challengeId: null } : {}),
+                     revision: { increment: 1 },
+                  },
+               });
+            }
          }
       }
 
@@ -626,6 +641,9 @@ async function applyTaskMutation(
 
       const dataToUpdate: Record<string, unknown> = {};
       let categoryMissing = false;
+      // The type the task will have after this mutation. Falls back to the
+      // stored type when no category is supplied.
+      let effectiveTaskType = currentTaskGuard?.taskType ?? taskType;
 
       if (title) dataToUpdate.title = title;
       if (categoryId) {
@@ -634,9 +652,24 @@ async function applyTaskMutation(
          });
          if (targetCat) {
             dataToUpdate.categoryId = categoryId;
+            // A task's board column follows the category it belongs to.
+            effectiveTaskType = targetCat.taskType;
+            dataToUpdate.taskType = targetCat.taskType;
          } else {
             categoryMissing = true;
          }
+      } else if (payload.taskType) {
+         effectiveTaskType = taskType;
+         dataToUpdate.taskType = taskType;
+      }
+
+      // Dropping a weekly task to the daily board must clear its challenge
+      // link; daily tasks cannot be challenge-scoped.
+      if (
+         effectiveTaskType !== "WEEKLY" &&
+         currentTaskGuard?.taskType === "WEEKLY"
+      ) {
+         dataToUpdate.challengeId = null;
       }
       if (typeof payload.sortOrder === "number")
          dataToUpdate.sortOrder = payload.sortOrder;
@@ -646,7 +679,7 @@ async function applyTaskMutation(
             : null;
       }
       if (payload.challengeId !== undefined) {
-         if (currentTaskGuard?.taskType === "WEEKLY") {
+         if (effectiveTaskType === "WEEKLY") {
             const rawChalId = payload.challengeId;
             const linked = await resolveWritableChallengeLink(
                tx,
