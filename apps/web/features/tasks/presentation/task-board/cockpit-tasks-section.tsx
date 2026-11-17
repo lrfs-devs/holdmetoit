@@ -114,6 +114,7 @@ import { scheduleSync } from "@/features/tasks/data/local/task-sync.service";
 import { useCategoryMutations } from "./hooks/use-category-mutations";
 import { useTaskBoardHydration } from "./hooks/use-task-board-hydration";
 import { useTaskDragAndDrop } from "./hooks/use-task-drag-and-drop";
+import { useTaskModals } from "./hooks/use-task-modals";
 import { useTaskBoardState } from "./hooks/use-task-board-state";
 import { useTaskMoves } from "./hooks/use-task-moves";
 import { useTaskMutations } from "./hooks/use-task-mutations";
@@ -126,6 +127,8 @@ import { MobileBoardSwitcher } from "./components/mobile-board-switcher";
 import { TaskRow } from "./components/task-row";
 import { TaskCategoryCard } from "./components/task-category-card";
 import { RolloverBanner } from "./components/rollover-banner";
+import { BoardHeader } from "./components/board-header";
+import { DayPillSwitcher } from "./components/day-pill-switcher";
 import { TaskSyncIssueBanner } from "@/features/tasks/presentation/task-sync-issue-banner";
 import type {
    LocalCategoryRecord,
@@ -264,48 +267,6 @@ export function CockpitTasksSection({
       initialIsRolloverSnoozed,
       effectiveTodayDate,
    });
-   const [addModalType, setAddModalType] = useState<"daily" | "weekly" | null>(
-      null
-   );
-   const [newTodoText, setNewTodoText] = useState("");
-   const [selectedCategory, setSelectedCategory] = useState("");
-   const [customCategory, setCustomCategory] = useState("");
-   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
-   const [newTodoStatus, setNewTodoStatus] = useState<TaskStatus>("TODO");
-   const [addTodoDateKey, setAddTodoDateKey] = useState<string>("");
-   const categoryInputRef = useRef<HTMLInputElement>(null);
-   const categorySelectRef = useRef<HTMLButtonElement>(null);
-
-   useEffect(() => {
-      if (isCreatingCategory && addModalType) {
-         const timer = setTimeout(() => {
-            categoryInputRef.current?.focus();
-            categoryInputRef.current?.select();
-         }, 50);
-         return () => clearTimeout(timer);
-      }
-   }, [isCreatingCategory, addModalType]);
-
-   // Edit Task Modal State
-   const [editTaskModal, setEditTaskModal] =
-      useState<EditTaskModalState | null>(null);
-   const [editTaskInputText, setEditTaskInputText] = useState("");
-   const [editTaskInputStatus, setEditTaskInputStatus] =
-      useState<TaskStatus>("TODO");
-   const [editTaskInputDueDate, setEditTaskInputDueDate] = useState<string>("");
-   const [editTaskInputChallengeId, setEditTaskInputChallengeId] = useState<
-      string | null
-   >(null);
-   const isEditTaskGraceLocked = Boolean(
-      editTaskModal &&
-      isWeeklyTaskGraceExpired({
-         taskType: editTaskModal.taskType === "weekly" ? "WEEKLY" : "DAILY",
-         challengeId: editTaskModal.challengeId,
-         createdAt: editTaskModal.createdAt ?? new Date(),
-      })
-   );
-   const [addTodoChallengeScope, setAddTodoChallengeScope] =
-      useState<TaskScope>("CHALLENGE");
 
    // Edit Category Modal State
    const [editCategoryModal, setEditCategoryModal] =
@@ -315,6 +276,23 @@ export function CockpitTasksSection({
    // Delete Category Confirmation Modal State
    const [deleteCategoryModal, setDeleteCategoryModal] =
       useState<DeleteCategoryModalState | null>(null);
+
+   const weeklyCategoryOptions = selectWeeklyCategoryOptions(
+      userTasks?.categories,
+      weeklyCategories
+   );
+
+   const independentDailyCategoryOptions =
+      selectIndependentDailyCategoryOptions(
+         userTasks?.categories,
+         dailyCategories,
+         weeklyCategoryOptions
+      );
+
+   const dailyCategoryOptions = selectDailyCategoryOptions(
+      weeklyCategoryOptions,
+      independentDailyCategoryOptions
+   );
 
    const completedChallengeIdSet = useMemo(
       () =>
@@ -375,6 +353,56 @@ export function CockpitTasksSection({
       linkableChallengeId,
    });
 
+   const taskModals = useTaskModals({
+      selectedDateKey,
+      effectiveTodayDate,
+      todayDayOption,
+      dayOptions,
+      checkIsDayLocked,
+      dailyCategoryOptions,
+      weeklyCategoryOptions,
+      linkableChallengeId,
+   });
+
+   const {
+      add: {
+         type: addModalType,
+         text: newTodoText,
+         selectedCategory,
+         customCategory,
+         isCreatingCategory,
+         status: newTodoStatus,
+         dateKey: addTodoDateKey,
+         challengeScope: addTodoChallengeScope,
+         categoryInputRef,
+         categorySelectRef,
+         setText: setNewTodoText,
+         setSelectedCategory,
+         setCustomCategory,
+         setIsCreatingCategory,
+         setStatus: setNewTodoStatus,
+         setDateKey: setAddTodoDateKey,
+         setChallengeScope: setAddTodoChallengeScope,
+         openDaily: openAddDailyModal,
+         openWeekly: openAddWeeklyModal,
+         close: closeAddModal,
+      },
+      editTask: {
+         modal: editTaskModal,
+         text: editTaskInputText,
+         status: editTaskInputStatus,
+         dueDate: editTaskInputDueDate,
+         challengeId: editTaskInputChallengeId,
+         isGraceLocked: isEditTaskGraceLocked,
+         setModal: setEditTaskModal,
+         setText: setEditTaskInputText,
+         setStatus: setEditTaskInputStatus,
+         setDueDate: setEditTaskInputDueDate,
+         setChallengeId: setEditTaskInputChallengeId,
+         close: closeEditTaskModal,
+      },
+   } = taskModals;
+
    const { moveTaskToDay, moveCategoryToDayAction, commitTaskMove } =
       useTaskMoves({
          userId,
@@ -429,65 +457,6 @@ export function CockpitTasksSection({
       persistTasks,
       persistCategory,
    });
-   const openAddDailyModal = (targetDateKey?: string) => {
-      const rawDateKey = targetDateKey || selectedDateKey;
-      const isTargetLocked = checkIsDayLocked(rawDateKey);
-
-      // If target day is in a locked past challenge day, clamp to today or the first available non-past day
-      const initialDateKey = isTargetLocked
-         ? todayDayOption?.dateKey ||
-           dayOptions.find((d) => !checkIsDayLocked(d.dateKey))?.dateKey ||
-           effectiveTodayDate
-         : rawDateKey;
-
-      setAddTodoDateKey(initialDateKey);
-      setNewTodoText("");
-      if (dailyCategoryOptions.length > 0) {
-         setSelectedCategory(dailyCategoryOptions[0]);
-         setIsCreatingCategory(false);
-      } else {
-         setSelectedCategory("");
-         setIsCreatingCategory(true);
-      }
-      setCustomCategory("");
-      setNewTodoStatus("TODO");
-      setAddModalType("daily");
-   };
-
-   const weeklyCategoryOptions = selectWeeklyCategoryOptions(
-      userTasks?.categories,
-      weeklyCategories
-   );
-
-   const openAddWeeklyModal = () => {
-      setAddTodoChallengeScope(linkableChallengeId ? "CHALLENGE" : "PERSONAL");
-      setNewTodoText("");
-      setNewTodoStatus("TODO");
-      setCustomCategory("");
-      if (weeklyCategoryOptions.length > 0) {
-         setSelectedCategory(weeklyCategoryOptions[0]);
-         setIsCreatingCategory(false);
-      } else {
-         setSelectedCategory("");
-         setIsCreatingCategory(true);
-      }
-      setAddModalType("weekly");
-   };
-
-   // Independent categories created specifically for daily tasks (unplanned/independent)
-   const independentDailyCategoryOptions =
-      selectIndependentDailyCategoryOptions(
-         userTasks?.categories,
-         dailyCategories,
-         weeklyCategoryOptions
-      );
-
-   // Daily inherits all weekly categories (parent categories) + independent daily categories
-   const dailyCategoryOptions = selectDailyCategoryOptions(
-      weeklyCategoryOptions,
-      independentDailyCategoryOptions
-   );
-
    const weeklyCategoryNameToId = selectWeeklyCategoryNameToId(
       userTasks?.categories
    );
@@ -969,7 +938,7 @@ export function CockpitTasksSection({
       setNewTodoStatus("TODO");
       setCustomCategory("");
       setIsCreatingCategory(false);
-      setAddModalType(null);
+      closeAddModal();
    };
 
    const handleAddSampleTask = useCallback(
@@ -1100,35 +1069,14 @@ export function CockpitTasksSection({
                }`}
             >
                <div className="space-y-3">
-                  {/* Row 1: Section Title, Day Badge, and Completed Counter (Mirrors Weekly Todos card) */}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                     <div className="flex items-center gap-2 shrink-0">
-                        <h3 className="text-lg font-bold text-white shrink-0">
-                           Daily Todos
-                        </h3>
-                        <span className="px-2 py-0.5 rounded-full text-meta font-semibold bg-surface-nested text-text-secondary border border-border-strong inline-flex items-center gap-1.5 shrink-0">
-                           {activeDayOption.shortLabel}
-                           {isActiveDayToday && (
-                              <span
-                                 className="h-1.5 w-1.5 rounded-full bg-emerald-400"
-                                 title="Today"
-                              />
-                           )}
-                           {isPastDayLocked && (
-                              <span className="text-label text-text-tertiary flex items-center gap-1 font-normal">
-                                 <Lock className="h-3 w-3 text-text-tertiary" />
-                                 Locked
-                              </span>
-                           )}
-                        </span>
-                     </div>
-                     <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-semibold text-text-secondary whitespace-nowrap">
-                           {completedDailyTasksForDay}/{totalDailyTasksForDay}{" "}
-                           Completed
-                        </span>
-                     </div>
-                  </div>
+                  <BoardHeader
+                     title="Daily Todos"
+                     badgeLabel={activeDayOption.shortLabel}
+                     showTodayDot={isActiveDayToday}
+                     isLocked={isPastDayLocked}
+                     completed={completedDailyTasksForDay}
+                     total={totalDailyTasksForDay}
+                  />
 
                   {/* Row 2: Calendar Week Navigator & Export */}
                   <div className="flex items-center justify-between gap-2 pt-0.5">
@@ -1150,151 +1098,27 @@ export function CockpitTasksSection({
                      />
                   </div>
 
-                  {/* 7-Day Pill Switcher (Fits all 7 days without horizontal scrolling) */}
-                  <div
-                     role="tablist"
-                     aria-label={
-                        hasChallengeContext
-                           ? "Challenge Day Tabs"
-                           : "Calendar Week Day Tabs"
-                     }
-                     className="grid grid-cols-7 gap-1 sm:gap-1.5 w-full pt-0.5 pb-1"
-                  >
-                     {dayOptions.map((opt) => {
-                        const isSelected = opt.dateKey === selectedDateKey;
-                        const stats = dayTaskCounts.get(opt.dateKey) || {
-                           total: 0,
-                           completed: 0,
-                        };
-                        const allDone =
-                           stats.total > 0 && stats.completed === stats.total;
-
-                        const isDayDropTarget =
-                           dragOverInfo?.type === "day" &&
-                           dragOverInfo.targetDateKey === opt.dateKey;
-                        let isDropAllowedOnOpt = true;
+                  <DayPillSwitcher
+                     dayOptions={dayOptions}
+                     selectedDateKey={selectedDateKey}
+                     dayTaskCounts={dayTaskCounts}
+                     draggedItem={draggedItem}
+                     dragOverInfo={dragOverInfo}
+                     hasChallengeContext={hasChallengeContext}
+                     effectiveTodayDate={effectiveTodayDate}
+                     checkIsDayLocked={checkIsDayLocked}
+                     onSelectDay={handleSelectDay}
+                     onDayPillDragOver={handleDayPillDragOver}
+                     onDayPillDrop={handleDayPillDrop}
+                     onDragLeave={(opt) => {
                         if (
-                           draggedItem?.type === "task" ||
-                           draggedItem?.type === "category"
+                           dragOverInfo?.type === "day" &&
+                           dragOverInfo.targetDateKey === opt.dateKey
                         ) {
-                           if (draggedItem.sourceColumn === "daily") {
-                              const sourceKey =
-                                 draggedItem.sourceDateKey || selectedDateKey;
-                              isDropAllowedOnOpt =
-                                 !checkIsDayLocked(sourceKey) &&
-                                 validateMoveTaskChallengeDay(
-                                    sourceKey,
-                                    opt.dateKey,
-                                    effectiveTodayDate,
-                                    {
-                                       isChallengeActive: hasChallengeContext,
-                                       isTargetDayLocked: checkIsDayLocked(
-                                          opt.dateKey
-                                       ),
-                                    }
-                                 ).ok;
-                           } else if (draggedItem.sourceColumn === "weekly") {
-                              isDropAllowedOnOpt =
-                                 !checkIsDayLocked(opt.dateKey) &&
-                                 (hasChallengeContext ? !opt.isPast : true);
-                           }
+                           setDragOverInfo(null);
                         }
-
-                        return (
-                           <button
-                              key={opt.dateKey}
-                              type="button"
-                              role="tab"
-                              aria-selected={isSelected}
-                              onClick={() => handleSelectDay(opt)}
-                              onDragOver={(e) => handleDayPillDragOver(e, opt)}
-                              onDragLeave={(e) => {
-                                 e.preventDefault();
-                                 if (
-                                    dragOverInfo?.type === "day" &&
-                                    dragOverInfo.targetDateKey === opt.dateKey
-                                 ) {
-                                    setDragOverInfo(null);
-                                 }
-                              }}
-                              onDrop={(e) => handleDayPillDrop(e, opt)}
-                              title={
-                                 draggedItem?.type === "task"
-                                    ? !isDropAllowedOnOpt
-                                       ? `${opt.label} (Cannot move to past day)`
-                                       : `Move task to ${opt.label}`
-                                    : draggedItem?.type === "category"
-                                      ? !isDropAllowedOnOpt
-                                         ? `${opt.label} (Cannot move to past day)`
-                                         : `Move category to ${opt.label}`
-                                      : opt.isToday
-                                        ? "Today"
-                                        : opt.isYesterday
-                                          ? `Yesterday (${opt.label})`
-                                          : opt.label
-                              }
-                              className={`w-full min-w-0 py-1.5 px-0.5 sm:px-1 rounded-xl text-center border transition-all flex flex-col items-center justify-between min-h-[54px] sm:min-h-[58px] overflow-hidden ${
-                                 (draggedItem?.type === "task" ||
-                                    draggedItem?.type === "category") &&
-                                 isDayDropTarget
-                                    ? isDropAllowedOnOpt
-                                       ? "bg-emerald-950/40 border-emerald-500 text-white shadow-md ring-2 ring-emerald-500 scale-[1.02]"
-                                       : "bg-red-950/30 border-red-500/50 text-red-300 ring-2 ring-red-500/60 cursor-not-allowed opacity-60"
-                                    : (draggedItem?.type === "task" ||
-                                           draggedItem?.type === "category") &&
-                                        !isDropAllowedOnOpt
-                                      ? "bg-surface-primary border-border-default text-text-tertiary opacity-40 cursor-not-allowed border-dashed"
-                                      : isSelected
-                                        ? "bg-brand-1/15 border-brand-2 text-white shadow-sm ring-1 ring-brand-2/60"
-                                        : "bg-surface-elevated border-border-strong text-text-tertiary hover:bg-surface-nested hover:text-white"
-                              }`}
-                           >
-                              <span className="text-label sm:text-meta font-bold uppercase tracking-tight leading-none truncate max-w-full">
-                                 {opt.isToday
-                                    ? "Today"
-                                    : opt.shortLabel.startsWith("Day ")
-                                      ? `D${opt.dayNumber}`
-                                      : opt.shortLabel.slice(0, 3)}
-                              </span>
-                              <span className="text-micro sm:text-caption opacity-75 mt-0.5 leading-none truncate max-w-full">
-                                 {formatDayDate(opt.dateKey)}
-                              </span>
-                              <div className="mt-1 flex items-center justify-center gap-0.5 sm:gap-1 min-h-[14px] w-full">
-                                 {draggedItem?.type === "task" &&
-                                 !isDropAllowedOnOpt ? (
-                                    <Lock className="h-2.5 w-2.5 text-red-400/70" />
-                                 ) : (
-                                    <>
-                                       {opt.isToday && (
-                                          <span
-                                             className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                                                isSelected
-                                                   ? "bg-brand-2"
-                                                   : "bg-emerald-400"
-                                             }`}
-                                             title="Today"
-                                          />
-                                       )}
-                                       {stats.total > 0 && (
-                                          <span
-                                             className={`text-micro sm:text-caption font-semibold px-0.5 sm:px-1 rounded leading-tight truncate ${
-                                                allDone
-                                                   ? "bg-emerald-500/20 text-emerald-400"
-                                                   : isSelected
-                                                     ? "bg-brand-2/20 text-brand-2"
-                                                     : "bg-surface-nested text-text-tertiary"
-                                             }`}
-                                          >
-                                             {stats.completed}/{stats.total}
-                                          </span>
-                                       )}
-                                    </>
-                                 )}
-                              </div>
-                           </button>
-                        );
-                     })}
-                  </div>
+                     }}
+                  />
 
                   <div className="space-y-3">
                      {/* Rollover Helper Banners */}
@@ -1865,12 +1689,12 @@ export function CockpitTasksSection({
                }`}
             >
                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                     <div className="flex items-center gap-2 shrink-0">
-                        <h3 className="text-lg font-bold text-white shrink-0">
-                           Weekly Todos
-                        </h3>
-                        {Boolean(
+                  <BoardHeader
+                     title="Weekly Todos"
+                     completed={completedWeeklyTasksForWeek}
+                     total={totalWeeklyTasksForWeek}
+                     extraBadge={
+                        Boolean(
                            linkableChallengeId &&
                            weeklyScopedCounts.totalChallengeGoals > 0
                         ) && (
@@ -1885,15 +1709,9 @@ export function CockpitTasksSection({
                                  {weeklyScopedCounts.totalChallengeGoals} Goals
                               </span>
                            </span>
-                        )}
-                     </div>
-                     <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-semibold text-text-secondary whitespace-nowrap">
-                           {completedWeeklyTasksForWeek}/
-                           {totalWeeklyTasksForWeek} Completed
-                        </span>
-                     </div>
-                  </div>
+                        )
+                     }
+                  />
 
                   {/* Row 2: Calendar Week Navigator & Export for Weekly Todos */}
                   <div className="flex items-center justify-between gap-2 pt-0.5">
@@ -2421,7 +2239,7 @@ export function CockpitTasksSection({
             onDateKeyChange={setAddTodoDateKey}
             onChallengeScopeChange={setAddTodoChallengeScope}
             onSubmit={handleAddTodoSubmit}
-            onClose={() => setAddModalType(null)}
+            onClose={() => closeAddModal()}
          />
 
          <EditTaskDialog
@@ -2447,7 +2265,7 @@ export function CockpitTasksSection({
                   editTaskInputDueDate
                )
             }
-            onClose={() => setEditTaskModal(null)}
+            onClose={() => closeEditTaskModal()}
          />
 
          <RenameCategoryDialog
