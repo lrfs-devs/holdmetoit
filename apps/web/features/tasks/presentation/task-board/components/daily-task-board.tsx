@@ -45,6 +45,7 @@ import { RolloverBanner } from "./rollover-banner";
 import { TaskCategoryCard } from "./task-category-card";
 import { TaskRow } from "./task-row";
 import type { TaskBoardModel } from "./task-board";
+import { useTaskRowActions } from "../hooks/use-task-row-actions";
 
 type Column = "daily" | "weekly";
 type ClickOrigin =
@@ -148,6 +149,24 @@ function DailyTaskBoardComponent({ model }: DailyTaskBoardProps) {
       setDeleteCategoryModal,
       weeklyScopedCounts,
    } = model;
+
+   const rowActions = useTaskRowActions({
+      toggleTaskExpand,
+      toggleDailyTask,
+      toggleWeeklyTask,
+      setTaskStatus,
+      handleTaskDragStart,
+      handleTaskDragOver,
+      handleTaskDrop,
+      handleDragEnd,
+      handleDeleteTask,
+      handleRolloverIncompleteTasks,
+      moveTaskToDay,
+      toggleTaskChallengeScope,
+      openEditTask: model.openEditTask,
+   });
+
+   const showRollover = rolloverSummary.isViewingPastDay;
 
    return (
       <div
@@ -428,6 +447,7 @@ function DailyTaskBoardComponent({ model }: DailyTaskBoardProps) {
                                        <TaskRow
                                           key={task.id}
                                           task={task}
+                                          catIdx={catIdx}
                                           variant="daily"
                                           expanded={expandedTaskIds.has(
                                              task.id
@@ -435,252 +455,19 @@ function DailyTaskBoardComponent({ model }: DailyTaskBoardProps) {
                                           isDragging={isTaskDragging}
                                           isOver={isTaskOver}
                                           dropPosition={dragOverInfo?.position}
-                                          onToggleExpand={(e) =>
-                                             toggleTaskExpand(task.id, e)
+                                          actions={rowActions}
+                                          hasChallengeContext={
+                                             hasChallengeContext
                                           }
-                                          onToggleStatus={(e) =>
-                                             toggleDailyTask(catIdx, task.id, e)
+                                          linkableChallengeId={
+                                             linkableChallengeId
                                           }
-                                          onStatusAction={(status, e) =>
-                                             setTaskStatus(
-                                                catIdx,
-                                                task.id,
-                                                "daily",
-                                                status,
-                                                e
-                                             )
+                                          effectiveTodayDate={
+                                             effectiveTodayDate
                                           }
-                                          onDragStart={(e) =>
-                                             handleTaskDragStart(
-                                                e,
-                                                task.id,
-                                                catIdx,
-                                                "daily"
-                                             )
-                                          }
-                                          onDragOver={(e) =>
-                                             handleTaskDragOver(
-                                                e,
-                                                task.id,
-                                                catIdx,
-                                                "daily"
-                                             )
-                                          }
-                                          onDrop={(e) =>
-                                             handleTaskDrop(
-                                                e,
-                                                task.id,
-                                                catIdx,
-                                                "daily"
-                                             )
-                                          }
-                                          onDragEnd={handleDragEnd}
-                                          onDelete={(e) => {
-                                             e.preventDefault();
-                                             e.stopPropagation();
-                                             handleDeleteTask(
-                                                catIdx,
-                                                task.id,
-                                                "daily"
-                                             );
-                                          }}
-                                          trailingAction={
-                                             rolloverSummary.isViewingPastDay &&
-                                             !task.completed &&
-                                             getTaskStatus(task) !==
-                                                "COMPLETED" &&
-                                             getTaskStatus(task) !==
-                                                "CROSSED_OUT" && (
-                                                <button
-                                                   type="button"
-                                                   onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      handleRolloverIncompleteTasks(
-                                                         {
-                                                            sourceDateKey:
-                                                               selectedDateKey,
-                                                            taskId: task.id,
-                                                         }
-                                                      );
-                                                   }}
-                                                   className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-emerald-400 rounded hover:bg-surface-elevated transition-all shrink-0 mt-0.5"
-                                                   title="Roll over to Today"
-                                                   aria-label={`Roll over ${task.text} to Today`}
-                                                >
-                                                   <RotateCcw className="h-3.5 w-3.5" />
-                                                </button>
-                                             )
-                                          }
-                                          menuContent={
-                                             <TaskMenuItems
-                                                isChallengeActive={
-                                                   hasChallengeContext
-                                                }
-                                                task={task}
-                                                catIdx={catIdx}
-                                                taskType="daily"
-                                                effectiveTodayDate={
-                                                   effectiveTodayDate
-                                                }
-                                                dayOptions={dayOptions}
-                                                selectedDateKey={
-                                                   selectedDateKey
-                                                }
-                                                linkableChallengeId={
-                                                   linkableChallengeId
-                                                }
-                                                onToggleChallengeScope={(
-                                                   newScope
-                                                ) =>
-                                                   toggleTaskChallengeScope(
-                                                      task.id,
-                                                      newScope
-                                                   )
-                                                }
-                                                onSetStatus={(status) =>
-                                                   setTaskStatus(
-                                                      catIdx,
-                                                      task.id,
-                                                      "daily",
-                                                      status
-                                                   )
-                                                }
-                                                onMoveToDay={(targetDateKey) =>
-                                                   moveTaskToDay(
-                                                      task.id,
-                                                      targetDateKey,
-                                                      catIdx,
-                                                      "daily"
-                                                   )
-                                                }
-                                                onEditTask={() => {
-                                                   setEditTaskModal({
-                                                      id: task.id,
-                                                      text: task.text,
-                                                      completed: task.completed,
-                                                      status:
-                                                         getTaskStatus(task),
-                                                      dueDate:
-                                                         task.dueDate ?? null,
-                                                      createdAt: task.createdAt,
-                                                      challengeId:
-                                                         task.challengeId ??
-                                                         null,
-                                                      catIdx,
-                                                      taskType: "daily",
-                                                   });
-                                                   setEditTaskInputChallengeId(
-                                                      task.challengeId ?? null
-                                                   );
-                                                   setEditTaskInputText(
-                                                      task.text
-                                                   );
-                                                   setEditTaskInputStatus(
-                                                      getTaskStatus(task)
-                                                   );
-                                                   setEditTaskInputDueDate(
-                                                      task.dueDate ||
-                                                         selectedDateKey
-                                                   );
-                                                }}
-                                                onDeleteTask={() =>
-                                                   handleDeleteTask(
-                                                      catIdx,
-                                                      task.id,
-                                                      "daily"
-                                                   )
-                                                }
-                                                Item={DropdownMenuItem}
-                                                Separator={
-                                                   DropdownMenuSeparator
-                                                }
-                                                Label={DropdownMenuLabel}
-                                             />
-                                          }
-                                          contextMenuContent={
-                                             <TaskMenuItems
-                                                isChallengeActive={
-                                                   hasChallengeContext
-                                                }
-                                                task={task}
-                                                catIdx={catIdx}
-                                                taskType="daily"
-                                                effectiveTodayDate={
-                                                   effectiveTodayDate
-                                                }
-                                                dayOptions={dayOptions}
-                                                selectedDateKey={
-                                                   selectedDateKey
-                                                }
-                                                linkableChallengeId={
-                                                   linkableChallengeId
-                                                }
-                                                onToggleChallengeScope={(
-                                                   newScope
-                                                ) =>
-                                                   toggleTaskChallengeScope(
-                                                      task.id,
-                                                      newScope
-                                                   )
-                                                }
-                                                onSetStatus={(status) =>
-                                                   setTaskStatus(
-                                                      catIdx,
-                                                      task.id,
-                                                      "daily",
-                                                      status
-                                                   )
-                                                }
-                                                onMoveToDay={(targetDateKey) =>
-                                                   moveTaskToDay(
-                                                      task.id,
-                                                      targetDateKey,
-                                                      catIdx,
-                                                      "daily"
-                                                   )
-                                                }
-                                                onEditTask={() => {
-                                                   setEditTaskModal({
-                                                      id: task.id,
-                                                      text: task.text,
-                                                      completed: task.completed,
-                                                      status:
-                                                         getTaskStatus(task),
-                                                      dueDate:
-                                                         task.dueDate ?? null,
-                                                      createdAt: task.createdAt,
-                                                      challengeId:
-                                                         task.challengeId ??
-                                                         null,
-                                                      catIdx,
-                                                      taskType: "daily",
-                                                   });
-                                                   setEditTaskInputChallengeId(
-                                                      task.challengeId ?? null
-                                                   );
-                                                   setEditTaskInputText(
-                                                      task.text
-                                                   );
-                                                   setEditTaskInputStatus(
-                                                      getTaskStatus(task)
-                                                   );
-                                                   setEditTaskInputDueDate(
-                                                      task.dueDate ||
-                                                         selectedDateKey
-                                                   );
-                                                }}
-                                                onDeleteTask={() =>
-                                                   handleDeleteTask(
-                                                      catIdx,
-                                                      task.id,
-                                                      "daily"
-                                                   )
-                                                }
-                                                Item={ContextMenuItem}
-                                                Separator={ContextMenuSeparator}
-                                                Label={ContextMenuLabel}
-                                             />
-                                          }
+                                          selectedDateKey={selectedDateKey}
+                                          dayOptions={dayOptions}
+                                          showRollover={showRollover}
                                        />
                                     );
                                  })

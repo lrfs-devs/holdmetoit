@@ -236,6 +236,7 @@ export interface TaskBoardModel {
    >;
 
    weeklyScopedCounts: WeeklyScopedCountsView;
+   openEditTask: (task: BoardTask, catIdx: number, variant: Column) => void;
 }
 
 export interface TaskBoardProps {

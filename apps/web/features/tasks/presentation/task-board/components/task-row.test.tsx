@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TaskRow } from "./task-row";
+import type { TaskRowActions } from "../hooks/use-task-row-actions";
 import type { BoardTask } from "../task-board.types";
 
 function task(overrides: Partial<BoardTask> = {}): BoardTask {
@@ -16,6 +17,22 @@ function task(overrides: Partial<BoardTask> = {}): BoardTask {
 
 const noop = vi.fn();
 
+const actions: TaskRowActions = {
+   onToggleExpand: noop,
+   onToggleStatus: noop,
+   onStatusAction: noop,
+   onDragStart: noop,
+   onDragOver: noop,
+   onDrop: noop,
+   onDragEnd: noop,
+   onDelete: noop,
+   onRollover: noop,
+   onSetStatus: noop,
+   onMoveToDay: noop,
+   onEditTask: noop,
+   onToggleChallengeScope: noop,
+};
+
 function renderRow(
    overrides: Partial<BoardTask> = {},
    variant: "daily" | "weekly" = "daily"
@@ -23,20 +40,18 @@ function renderRow(
    return renderToStaticMarkup(
       createElement(TaskRow, {
          task: task(overrides),
+         catIdx: 0,
          variant,
          expanded: false,
          isDragging: false,
          isOver: false,
-         onToggleExpand: noop,
-         onToggleStatus: noop,
-         onStatusAction: noop,
-         onDragStart: noop,
-         onDragOver: noop,
-         onDrop: noop,
-         onDragEnd: noop,
-         onDelete: noop,
-         menuContent: null,
-         contextMenuContent: null,
+         actions,
+         hasChallengeContext: false,
+         linkableChallengeId: null,
+         effectiveTodayDate: "2026-11-17",
+         selectedDateKey: "2026-11-17",
+         dayOptions: [],
+         showRollover: false,
       })
    );
 }
@@ -50,16 +65,18 @@ describe("TaskRow", () => {
       expect(html).toContain('aria-label="Drag task Study Chemistry"');
    });
 
-   it("renders the completed treatment and hides the weekly completed badge", () => {
+   it("renders the completed treatment", () => {
       const html = renderRow({ status: "COMPLETED", completed: true });
       expect(html).toContain("Completed");
       expect(html).toContain("line-through");
+   });
 
+   it("omits the weekly completed badge", () => {
       const weekly = renderRow(
          { status: "COMPLETED", completed: true },
          "weekly"
       );
-      expect(weekly).not.toContain("line-through decoration-rose-500/60");
+      expect(weekly).not.toContain(">Completed<");
    });
 
    it("shows a Show more control for long descriptions", () => {

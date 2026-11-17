@@ -45,6 +45,7 @@ import { RolloverBanner } from "./rollover-banner";
 import { TaskCategoryCard } from "./task-category-card";
 import { TaskRow } from "./task-row";
 import type { TaskBoardModel } from "./task-board";
+import { useTaskRowActions } from "../hooks/use-task-row-actions";
 
 type Column = "daily" | "weekly";
 type ClickOrigin =
@@ -148,6 +149,24 @@ function WeeklyTaskBoardComponent({ model }: WeeklyTaskBoardProps) {
       setDeleteCategoryModal,
       weeklyScopedCounts,
    } = model;
+
+   const rowActions = useTaskRowActions({
+      toggleTaskExpand,
+      toggleDailyTask,
+      toggleWeeklyTask,
+      setTaskStatus,
+      handleTaskDragStart,
+      handleTaskDragOver,
+      handleTaskDrop,
+      handleDragEnd,
+      handleDeleteTask,
+      handleRolloverIncompleteTasks,
+      moveTaskToDay,
+      toggleTaskChallengeScope,
+      openEditTask: model.openEditTask,
+   });
+
+   const showRollover = false;
 
    return (
       <div
@@ -364,6 +383,7 @@ function WeeklyTaskBoardComponent({ model }: WeeklyTaskBoardProps) {
                                        <TaskRow
                                           key={task.id}
                                           task={task}
+                                          catIdx={catIdx}
                                           variant="weekly"
                                           expanded={expandedTaskIds.has(
                                              task.id
@@ -371,250 +391,19 @@ function WeeklyTaskBoardComponent({ model }: WeeklyTaskBoardProps) {
                                           isDragging={isTaskDragging}
                                           isOver={isTaskOver}
                                           dropPosition={dragOverInfo?.position}
-                                          onToggleExpand={(e) =>
-                                             toggleTaskExpand(task.id, e)
+                                          actions={rowActions}
+                                          hasChallengeContext={
+                                             hasChallengeContext
                                           }
-                                          onToggleStatus={(e) =>
-                                             toggleWeeklyTask(
-                                                catIdx,
-                                                task.id,
-                                                e
-                                             )
+                                          linkableChallengeId={
+                                             linkableChallengeId
                                           }
-                                          onStatusAction={(status, e) =>
-                                             setTaskStatus(
-                                                catIdx,
-                                                task.id,
-                                                "weekly",
-                                                status,
-                                                e
-                                             )
+                                          effectiveTodayDate={
+                                             effectiveTodayDate
                                           }
-                                          onDragStart={(e) =>
-                                             handleTaskDragStart(
-                                                e,
-                                                task.id,
-                                                catIdx,
-                                                "weekly"
-                                             )
-                                          }
-                                          onDragOver={(e) =>
-                                             handleTaskDragOver(
-                                                e,
-                                                task.id,
-                                                catIdx,
-                                                "weekly"
-                                             )
-                                          }
-                                          onDrop={(e) =>
-                                             handleTaskDrop(
-                                                e,
-                                                task.id,
-                                                catIdx,
-                                                "weekly"
-                                             )
-                                          }
-                                          onDragEnd={handleDragEnd}
-                                          onDelete={(e) => {
-                                             e.preventDefault();
-                                             e.stopPropagation();
-                                             handleDeleteTask(
-                                                catIdx,
-                                                task.id,
-                                                "weekly"
-                                             );
-                                          }}
-                                          trailingAction={
-                                             Boolean(linkableChallengeId) &&
-                                             (task.challengeId ===
-                                             linkableChallengeId ? (
-                                                <span
-                                                   data-testid="task-scope-challenge-badge"
-                                                   className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-0.5"
-                                                   title="Challenge Goal (evaluated at challenge lock)"
-                                                   aria-label="Challenge Goal"
-                                                >
-                                                   <Trophy className="h-3 w-3" />
-                                                </span>
-                                             ) : !task.challengeId ? (
-                                                <span
-                                                   data-testid="task-scope-personal-badge"
-                                                   className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-surface-nested text-text-tertiary border border-border-subtle mt-0.5"
-                                                   title="Personal Task (excluded from challenge lock)"
-                                                   aria-label="Personal Task"
-                                                >
-                                                   <User className="h-3 w-3" />
-                                                </span>
-                                             ) : null)
-                                          }
-                                          menuContent={
-                                             <TaskMenuItems
-                                                isChallengeActive={
-                                                   hasChallengeContext
-                                                }
-                                                task={task}
-                                                catIdx={catIdx}
-                                                taskType="weekly"
-                                                effectiveTodayDate={
-                                                   effectiveTodayDate
-                                                }
-                                                dayOptions={dayOptions}
-                                                selectedDateKey={
-                                                   selectedDateKey
-                                                }
-                                                linkableChallengeId={
-                                                   linkableChallengeId
-                                                }
-                                                onToggleChallengeScope={(
-                                                   newScope
-                                                ) =>
-                                                   toggleTaskChallengeScope(
-                                                      task.id,
-                                                      newScope
-                                                   )
-                                                }
-                                                onSetStatus={(status) =>
-                                                   setTaskStatus(
-                                                      catIdx,
-                                                      task.id,
-                                                      "weekly",
-                                                      status
-                                                   )
-                                                }
-                                                onMoveToDay={(targetDateKey) =>
-                                                   moveTaskToDay(
-                                                      task.id,
-                                                      targetDateKey,
-                                                      catIdx,
-                                                      "weekly"
-                                                   )
-                                                }
-                                                onEditTask={() => {
-                                                   setEditTaskModal({
-                                                      id: task.id,
-                                                      text: task.text,
-                                                      completed: task.completed,
-                                                      status:
-                                                         getTaskStatus(task),
-                                                      dueDate:
-                                                         task.dueDate ?? null,
-                                                      createdAt: task.createdAt,
-                                                      challengeId:
-                                                         task.challengeId ??
-                                                         null,
-                                                      catIdx,
-                                                      taskType: "weekly",
-                                                   });
-                                                   setEditTaskInputChallengeId(
-                                                      task.challengeId ?? null
-                                                   );
-                                                   setEditTaskInputText(
-                                                      task.text
-                                                   );
-                                                   setEditTaskInputStatus(
-                                                      getTaskStatus(task)
-                                                   );
-                                                   setEditTaskInputDueDate(
-                                                      task.dueDate ?? ""
-                                                   );
-                                                }}
-                                                onDeleteTask={() =>
-                                                   handleDeleteTask(
-                                                      catIdx,
-                                                      task.id,
-                                                      "weekly"
-                                                   )
-                                                }
-                                                Item={DropdownMenuItem}
-                                                Separator={
-                                                   DropdownMenuSeparator
-                                                }
-                                                Label={DropdownMenuLabel}
-                                             />
-                                          }
-                                          contextMenuContent={
-                                             <TaskMenuItems
-                                                isChallengeActive={
-                                                   hasChallengeContext
-                                                }
-                                                task={task}
-                                                catIdx={catIdx}
-                                                taskType="weekly"
-                                                effectiveTodayDate={
-                                                   effectiveTodayDate
-                                                }
-                                                dayOptions={dayOptions}
-                                                selectedDateKey={
-                                                   selectedDateKey
-                                                }
-                                                linkableChallengeId={
-                                                   linkableChallengeId
-                                                }
-                                                onToggleChallengeScope={(
-                                                   newScope
-                                                ) =>
-                                                   toggleTaskChallengeScope(
-                                                      task.id,
-                                                      newScope
-                                                   )
-                                                }
-                                                onSetStatus={(status) =>
-                                                   setTaskStatus(
-                                                      catIdx,
-                                                      task.id,
-                                                      "weekly",
-                                                      status
-                                                   )
-                                                }
-                                                onMoveToDay={(targetDateKey) =>
-                                                   moveTaskToDay(
-                                                      task.id,
-                                                      targetDateKey,
-                                                      catIdx,
-                                                      "weekly"
-                                                   )
-                                                }
-                                                onEditTask={() => {
-                                                   setEditTaskModal({
-                                                      id: task.id,
-                                                      text: task.text,
-                                                      completed: task.completed,
-                                                      status:
-                                                         getTaskStatus(task),
-                                                      dueDate:
-                                                         task.dueDate ?? null,
-                                                      createdAt: task.createdAt,
-                                                      challengeId:
-                                                         task.challengeId ??
-                                                         null,
-                                                      catIdx,
-                                                      taskType: "weekly",
-                                                   });
-                                                   setEditTaskInputChallengeId(
-                                                      task.challengeId ?? null
-                                                   );
-                                                   setEditTaskInputText(
-                                                      task.text
-                                                   );
-                                                   setEditTaskInputStatus(
-                                                      getTaskStatus(task)
-                                                   );
-                                                   setEditTaskInputDueDate(
-                                                      task.dueDate ?? ""
-                                                   );
-                                                }}
-                                                onDeleteTask={() =>
-                                                   handleDeleteTask(
-                                                      catIdx,
-                                                      task.id,
-                                                      "weekly"
-                                                   )
-                                                }
-                                                Item={ContextMenuItem}
-                                                Separator={ContextMenuSeparator}
-                                                Label={ContextMenuLabel}
-                                             />
-                                          }
+                                          selectedDateKey={selectedDateKey}
+                                          dayOptions={dayOptions}
+                                          showRollover={showRollover}
                                        />
                                     );
                                  })

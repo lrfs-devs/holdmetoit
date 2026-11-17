@@ -1053,6 +1053,38 @@ export function useTaskBoardModel({
    // Drag and Drop Event Handlers
    // ---------------------------------------------------------------------------
 
+   const openEditTask = useCallback(
+      (task: BoardTask, catIdx: number, variant: "daily" | "weekly") => {
+         setEditTaskModal({
+            id: task.id,
+            text: task.text,
+            completed: task.completed,
+            status: getTaskStatus(task),
+            dueDate: task.dueDate ?? null,
+            createdAt: task.createdAt,
+            challengeId: task.challengeId ?? null,
+            catIdx,
+            taskType: variant,
+         });
+         setEditTaskInputChallengeId(task.challengeId ?? null);
+         setEditTaskInputText(task.text);
+         setEditTaskInputStatus(getTaskStatus(task));
+         setEditTaskInputDueDate(
+            variant === "daily"
+               ? task.dueDate || selectedDateKey
+               : (task.dueDate ?? "")
+         );
+      },
+      [
+         selectedDateKey,
+         setEditTaskInputChallengeId,
+         setEditTaskInputDueDate,
+         setEditTaskInputStatus,
+         setEditTaskInputText,
+         setEditTaskModal,
+      ]
+   );
+
    const board: TaskBoardModel = {
       isLoggedIn,
       userId,
@@ -1140,6 +1172,7 @@ export function useTaskBoardModel({
       setEditCategoryInputName,
       setDeleteCategoryModal,
       weeklyScopedCounts,
+      openEditTask,
    };
 
    return {
