@@ -33,7 +33,7 @@ export interface TaskCategoryCardProps {
    onDragEnd: () => void;
    menuContent: ReactNode;
    contextMenuContent: ReactNode;
-   children: ReactNode;
+   children?: ReactNode;
 }
 
 /** Category header + task list container shared by both boards. */

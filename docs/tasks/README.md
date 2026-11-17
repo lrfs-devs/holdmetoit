@@ -361,26 +361,31 @@ The former `study-logs/.../cockpit-tasks-section.tsx` mega-component now lives i
 
 ```
 apps/web/features/tasks/presentation/task-board/
-├── cockpit-tasks-section.tsx      # composition shell: props -> hooks -> <TaskBoard/> + dialogs
-├── task-board.tsx                 # two-column layout + mobile switcher
+├── cockpit-tasks-section.tsx      # ~120-line shell: model hook -> <TaskBoard/> + dialogs
 ├── task-board.types.ts            # BoardTask / BoardCategory / props / drag types
 ├── task-board.utils.ts            # getTaskStatus + buildBoardTaskRecord + buildMoveIntent
 ├── task-board.selectors.ts        # pure week bucketing, counts, visibility, board mapping
 ├── components/
+│   ├── task-board.tsx             # two-column board view (accepts TaskBoardModel)
+│   ├── board-header.tsx           # title, badge, lock, counter
+│   ├── day-pill-switcher.tsx      # seven day pills + drag/drop
 │   ├── task-row.tsx               # memoized task card (daily + weekly)
 │   ├── task-category-card.tsx     # memoized category header + list
 │   ├── mobile-board-switcher.tsx  # small-screen Daily/Weekly tabs
 │   └── rollover-banner.tsx        # today/past-day rollover helpers
 ├── dialogs/                       # AddTaskDialog, EditTaskDialog, RenameCategoryDialog, DeleteCategoryDialog
-└── hooks/
-    ├── use-task-board-persistence.ts
-    ├── use-task-board-hydration.ts
-    ├── use-task-board-state.ts
-    ├── use-week-navigation.ts
-    ├── use-task-moves.ts          # one MoveIntent seam (commitTaskMove)
-    ├── use-task-mutations.ts      # status/edit/delete/scope/rollover
-    ├── use-category-mutations.ts  # rename/delete category
-    └── use-task-drag-and-drop.ts  # drag state + drop routing
+├── hooks/
+│   ├── use-task-board-model.ts    # composes every hook/derived value/handler
+│   ├── use-task-modals.ts         # add/edit task modal state
+│   ├── use-task-board-persistence.ts
+│   ├── use-task-board-hydration.ts
+│   ├── use-task-board-state.ts
+│   ├── use-week-navigation.ts
+│   ├── use-task-moves.ts          # one MoveIntent seam (commitTaskMove)
+│   ├── use-task-mutations.ts      # status/edit/delete/scope/rollover
+│   ├── use-category-mutations.ts  # rename/delete category
+│   └── use-task-drag-and-drop.ts  # drag state + drop routing
+└── task-board.test.tsx            # integration suite (moved from study-logs)
 ```
 
 Rules:

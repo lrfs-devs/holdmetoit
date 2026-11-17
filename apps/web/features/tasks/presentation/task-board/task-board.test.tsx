@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CockpitTasksSection } from "@/features/tasks/presentation/task-board";
+import { CockpitTasksSection } from "./index";
 import type { UserCategorizedTasks } from "@/features/tasks/domain/task.types";
 
 describe("CockpitTasksSection", () => {
