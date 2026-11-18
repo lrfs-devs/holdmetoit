@@ -21,6 +21,21 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 const apply = process.argv.includes("--apply");
 
+/**
+ * Prints only the allowlisted parts of the connection string. Masking the
+ * userinfo alone is not enough: credentials can also arrive as query
+ * parameters (`?password=...`).
+ */
+function describeDatabase(rawUrl: string): string {
+   try {
+      const url = new URL(rawUrl);
+      const database = url.pathname.replace(/^\//, "");
+      return `${url.host}${database ? `/${database}` : ""}`;
+   } catch {
+      return "(unparseable DATABASE_URL)";
+   }
+}
+
 const adapter = new PrismaPg({
    connectionString: process.env.DATABASE_URL as string,
 });
@@ -41,7 +56,7 @@ async function main() {
       `  categories: ${categoryCount} (${deletedCategoryCount} soft-deleted)`
    );
    console.log(
-      `  database:   ${(process.env.DATABASE_URL ?? "").replace(/:\/\/[^@]*@/, "://***@")}`
+      `  database:   ${describeDatabase(process.env.DATABASE_URL ?? "")}`
    );
 
    if (!apply) {

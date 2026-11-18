@@ -247,6 +247,103 @@ describe("applyPendingTasks", () => {
       expect(result.dailyCategories[1].tasks).toHaveLength(0);
    });
 
+   it("lets an in-mount optimistic change win over the stored record", () => {
+      const mountStartedAt = Date.parse("2026-11-17T10:00:00.000Z");
+      const board = {
+         dailyCategories: [
+            category("cx", "X", [
+               task({
+                  id: "a",
+                  syncState: "pending",
+                  // Written during this mount: memory is newer.
+                  updatedAt: "2026-11-17T10:05:00.000Z",
+               }),
+            ]),
+            category("cy", "Y", []),
+         ],
+         weeklyCategories: [],
+      };
+      const current = {
+         dailyCategories: [
+            category("cx", "X", []),
+            category("cy", "Y", [task({ id: "a" })]),
+         ],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(
+         board,
+         current,
+         new Set(["a"]),
+         mountStartedAt
+      );
+
+      expect(result.dailyCategories[1].tasks.map((t) => t.id)).toEqual(["a"]);
+      expect(result.dailyCategories[0].tasks).toHaveLength(0);
+   });
+
+   it("keeps a queued record restored from a previous visit", () => {
+      const mountStartedAt = Date.parse("2026-11-17T10:00:00.000Z");
+      const board = {
+         dailyCategories: [
+            category("cx", "X", [
+               task({
+                  id: "a",
+                  syncState: "pending",
+                  // Written before this mount: the queued edit is newer than
+                  // the server snapshot.
+                  updatedAt: "2026-11-16T09:00:00.000Z",
+               }),
+            ]),
+            category("cy", "Y", []),
+         ],
+         weeklyCategories: [],
+      };
+      const current = {
+         dailyCategories: [
+            category("cx", "X", []),
+            category("cy", "Y", [task({ id: "a" })]),
+         ],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(
+         board,
+         current,
+         new Set(["a"]),
+         mountStartedAt
+      );
+
+      expect(result.dailyCategories[0].tasks.map((t) => t.id)).toEqual(["a"]);
+      expect(result.dailyCategories[1].tasks).toHaveLength(0);
+   });
+
+   it("adds an absent category as an empty shell and inserts once", () => {
+      // Two pending tasks whose shared category is missing from the snapshot.
+      const board = {
+         dailyCategories: [],
+         weeklyCategories: [],
+      };
+      const current = {
+         dailyCategories: [
+            category("cx", "Local", [
+               task({ id: "a" }),
+               task({ id: "b" }),
+               task({ id: "excluded" }),
+            ]),
+         ],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(board, current, new Set(["a", "b"]));
+
+      const shell = result.dailyCategories[0];
+      expect(shell.id).toBe("cx");
+      expect(shell.tasks.map((t) => t.id).sort()).toEqual(["a", "b"]);
+      // A task that was not pending is never pulled back in.
+      expect(shell.tasks.map((t) => t.id)).not.toContain("excluded");
+   });
+
    it("keeps a pending task in its newer column", () => {
       const board = {
          dailyCategories: [category("d1", "Daily", [task({ id: "a" })])],

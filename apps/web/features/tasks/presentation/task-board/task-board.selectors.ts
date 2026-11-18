@@ -511,14 +511,13 @@ export interface BoardSnapshot {
 export function applyPendingTasks(
    board: BoardSnapshot,
    current: BoardSnapshot,
-   pendingTaskIds: Set<string>
+   pendingTaskIds: Set<string>,
+   mountStartedAt?: number
 ): BoardSnapshot {
    if (pendingTaskIds.size === 0) return board;
 
-   // IndexedDB is authoritative for rows that are still pending. Overlaying
-   // the in-memory snapshot would replace a queued offline edit with the older
-   // server copy. Only rows whose stored record is already synced get the
-   // in-memory overlay (a move that exists only in React state).
+   // IndexedDB is authoritative for rows restored from a previous visit, but
+   // memory is authoritative for a change made during this mount.
    const storedTasks = new Map<string, BoardTask>();
    for (const category of [
       ...board.dailyCategories,
@@ -537,10 +536,21 @@ export function applyPendingTasks(
       for (const task of category.tasks) {
          if (!pendingTaskIds.has(task.id)) continue;
          const stored = storedTasks.get(task.id);
-         // A queued record outranks the server snapshot: it holds the user's
-         // offline edit, which the snapshot predates. Legacy records without a
-         // syncState keep the previous overlay behaviour.
-         if (stored?.syncState && stored.syncState !== "synced") continue;
+
+         // A queued record outranks the server snapshot unless we can prove it
+         // was written during this mount. Records with no timestamp predate
+         // this change, so they keep the original behaviour.
+         const storedAt = stored?.updatedAt
+            ? Date.parse(stored.updatedAt)
+            : NaN;
+         const writtenThisMount =
+            mountStartedAt !== undefined &&
+            Number.isFinite(storedAt) &&
+            storedAt >= mountStartedAt;
+         const queuedOnDisk =
+            Boolean(stored?.syncState) && stored?.syncState !== "synced";
+         if (queuedOnDisk && !writtenThisMount) continue;
+
          currentTasks.set(task.id, task);
       }
    }
@@ -600,13 +610,20 @@ export function applyPendingTasks(
          )
       ) {
          // The category is not in the snapshot (created locally, not yet
-         // synced): keep the whole current category.
+         // synced): add an empty shell, never the whole category, which would
+         // reintroduce tasks the visibility filters excluded.
          const exists = targetBoard.some(
             (category) =>
                (currentCategory.id && category.id === currentCategory.id) ||
                category.name === currentCategory.name
          );
-         if (!exists) targetBoard.push(currentCategory);
+         if (!exists) targetBoard.push({ ...currentCategory, tasks: [] });
+         insertInto(
+            targetBoard,
+            currentCategory.id,
+            currentCategory.name,
+            task
+         );
       }
    }
 

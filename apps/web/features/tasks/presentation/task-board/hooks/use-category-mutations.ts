@@ -83,18 +83,20 @@ export function useCategoryMutations({
          return;
       }
 
+      // An id always wins; the name is only a fallback for categories that
+      // have no id yet. Otherwise a same-named category in the other column
+      // would be renamed locally while persistence updates just one row.
+      const matchesRenamed = (cat: BoardCategory) =>
+         catId ? cat.id === catId : cat.name === oldName;
+
       setDailyCategories((prev) =>
          prev.map((cat) =>
-            (catId && cat.id === catId) || cat.name === oldName
-               ? { ...cat, name: trimmed }
-               : cat
+            matchesRenamed(cat) ? { ...cat, name: trimmed } : cat
          )
       );
       setWeeklyCategories((prev) =>
          prev.map((cat) =>
-            (catId && cat.id === catId) || cat.name === oldName
-               ? { ...cat, name: trimmed }
-               : cat
+            matchesRenamed(cat) ? { ...cat, name: trimmed } : cat
          )
       );
 

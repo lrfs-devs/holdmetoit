@@ -392,20 +392,23 @@ async function applyCategoryMutation(
       if (!parsed.success) return INVALID;
       const { categoryIds, baseRevisions } = parsed.data;
 
-      // Optimistic concurrency: a stale batch must not clobber a newer order.
-      if (baseRevisions) {
-         const current = await tx.category.findMany({
-            where: { id: { in: categoryIds }, userId },
-            select: { id: true, revision: true },
+      // Optimistic concurrency: the expected revision is part of the write, so
+      // two batches that both read revision N cannot both commit.
+      for (let i = 0; i < categoryIds.length; i++) {
+         const categoryId = categoryIds[i];
+         const expected = baseRevisions?.[categoryId];
+         const { count } = await tx.category.updateMany({
+            where: {
+               id: categoryId,
+               userId,
+               ...(expected !== undefined ? { revision: expected } : {}),
+            },
+            data: { sortOrder: i, revision: { increment: 1 } },
          });
-         const drifted = current.find(
-            (category) =>
-               baseRevisions[category.id] !== undefined &&
-               category.revision !== baseRevisions[category.id]
-         );
-         if (drifted) {
+
+         if (count === 0) {
             const row = await tx.category.findFirst({
-               where: { id: drifted.id, userId, isDeleted: false },
+               where: { id: categoryId, userId, isDeleted: false },
             });
             return {
                status: "conflict",
@@ -413,13 +416,6 @@ async function applyCategoryMutation(
                currentCategory: row ? toCategoryItem(row) : null,
             };
          }
-      }
-
-      for (let i = 0; i < categoryIds.length; i++) {
-         await tx.category.updateMany({
-            where: { id: categoryIds[i], userId },
-            data: { sortOrder: i, revision: { increment: 1 } },
-         });
       }
       return APPLIED;
    }
@@ -800,20 +796,24 @@ async function applyTaskMutation(
       if (!parsed.success) return INVALID;
       const { taskIds, baseRevisions } = parsed.data;
 
-      // Optimistic concurrency: a stale batch must not clobber a newer order.
-      if (baseRevisions) {
-         const current = await tx.task.findMany({
-            where: { id: { in: taskIds }, userId, isDeleted: false },
-            select: { id: true, revision: true, categoryId: true },
+      // Optimistic concurrency: the expected revision is part of the write, so
+      // two batches that both read revision N cannot both commit.
+      for (let i = 0; i < taskIds.length; i++) {
+         const taskIdAtIndex = taskIds[i];
+         const expected = baseRevisions?.[taskIdAtIndex];
+         const { count } = await tx.task.updateMany({
+            where: {
+               id: taskIdAtIndex,
+               userId,
+               isDeleted: false,
+               ...(expected !== undefined ? { revision: expected } : {}),
+            },
+            data: { sortOrder: i, revision: { increment: 1 } },
          });
-         const drifted = current.find(
-            (task) =>
-               baseRevisions[task.id] !== undefined &&
-               task.revision !== baseRevisions[task.id]
-         );
-         if (drifted) {
+
+         if (count === 0) {
             const row = await tx.task.findFirst({
-               where: { id: drifted.id, userId, isDeleted: false },
+               where: { id: taskIdAtIndex, userId, isDeleted: false },
             });
             return {
                status: "conflict",
@@ -821,13 +821,6 @@ async function applyTaskMutation(
                currentTask: row ? toTaskItem(row, row.taskType) : null,
             };
          }
-      }
-
-      for (let i = 0; i < taskIds.length; i++) {
-         await tx.task.updateMany({
-            where: { id: taskIds[i], userId, isDeleted: false },
-            data: { sortOrder: i, revision: { increment: 1 } },
-         });
       }
       return APPLIED;
    }

@@ -800,11 +800,6 @@ describe("processBatchSync (task-sync.repository)", () => {
    });
 
    it("applies a reorder when every base revision matches", async () => {
-      vi.mocked(prisma.task.findMany).mockResolvedValueOnce([
-         { id: "t_a", revision: 2, categoryId: "c1" },
-         { id: "t_b", revision: 5, categoryId: "c1" },
-      ] as never);
-
       const res = await processBatchSync(userId, [
          {
             id: "mut-reorder-ok",
@@ -824,10 +819,11 @@ describe("processBatchSync (task-sync.repository)", () => {
    });
 
    it("rejects a reorder when any base revision drifted", async () => {
-      vi.mocked(prisma.task.findMany).mockResolvedValueOnce([
-         { id: "t_a", revision: 3, categoryId: "c1" },
-         { id: "t_b", revision: 5, categoryId: "c1" },
-      ] as never);
+      // The expected revision is part of the write, so a drifted row simply
+      // updates zero rows instead of being caught by a pre-read.
+      vi.mocked(prisma.task.updateMany).mockResolvedValueOnce({
+         count: 0,
+      } as never);
       vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
          id: "t_a",
          userId,
@@ -859,7 +855,13 @@ describe("processBatchSync (task-sync.repository)", () => {
       const result = res.mutationResults?.[0];
       expect(result?.status).toBe("conflict");
       expect(result?.reason).toBe("zero_rows");
-      expect(prisma.task.updateMany).not.toHaveBeenCalled();
+      // The loop stops at the first conflict instead of writing the rest.
+      expect(prisma.task.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.task.updateMany).toHaveBeenCalledWith(
+         expect.objectContaining({
+            where: expect.objectContaining({ id: "t_a", revision: 2 }),
+         })
+      );
    });
 
    it("applies a legacy reorder without base revisions", async () => {

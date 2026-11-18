@@ -2,6 +2,7 @@
 
 import {
    useEffect,
+   useRef,
    type Dispatch,
    type MutableRefObject,
    type SetStateAction,
@@ -105,6 +106,10 @@ export function useTaskBoardHydration({
    setDailyCategories,
    setWeeklyCategories,
 }: UseTaskBoardHydrationOptions): void {
+   // A record stored before this instant was restored from a previous visit;
+   // anything newer was produced by this mount.
+   const mountStartedAtRef = useRef(Date.now());
+
    useEffect(() => {
       const cleanup = initTaskSync(userId);
       let isCancelled = false;
@@ -209,7 +214,8 @@ export function useTaskBoardHydration({
                      dailyCategories: dailyCategoriesRef.current,
                      weeklyCategories: weeklyCategoriesRef.current,
                   },
-                  pendingTaskIds
+                  pendingTaskIds,
+                  mountStartedAtRef.current
                );
                setDailyCategories(merged.dailyCategories);
                setWeeklyCategories(merged.weeklyCategories);
