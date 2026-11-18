@@ -5,6 +5,7 @@ import {
    Check,
    ChevronDown,
    GripVertical,
+   Lock,
    MoreVertical,
    RotateCcw,
    Trash2,
@@ -51,6 +52,8 @@ export interface TaskRowProps {
    dayOptions: ChallengeDayOption[];
    /** Daily-only: show the one-click rollover affordance. */
    showRollover: boolean;
+   /** The linked challenge's results are locked, so the goal is read-only. */
+   isResultsLocked?: boolean;
 }
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -84,6 +87,7 @@ interface MenuItemsProps {
    actions: TaskRowActions;
    hasChallengeContext: boolean;
    linkableChallengeId: string | null;
+   isResultsLocked?: boolean;
    effectiveTodayDate: string;
    selectedDateKey: string;
    dayOptions: ChallengeDayOption[];
@@ -99,6 +103,7 @@ function MenuItems({
    actions,
    hasChallengeContext,
    linkableChallengeId,
+   isResultsLocked,
    effectiveTodayDate,
    selectedDateKey,
    dayOptions,
@@ -116,6 +121,7 @@ function MenuItems({
          dayOptions={dayOptions}
          selectedDateKey={selectedDateKey}
          linkableChallengeId={linkableChallengeId}
+         isResultsLocked={isResultsLocked}
          onToggleChallengeScope={(newScope) =>
             actions.onToggleChallengeScope(task.id, newScope)
          }
@@ -185,6 +191,7 @@ function TaskRowComponent({
    selectedDateKey,
    dayOptions,
    showRollover,
+   isResultsLocked = false,
 }: TaskRowProps) {
    const status = getTaskStatus(task);
    const isLongText = task.text.length > 45 || task.text.includes("\n");
@@ -204,7 +211,19 @@ function TaskRowComponent({
 
    const trailingAction: ReactNode =
       variant === "weekly" ? (
-         <ScopeBadge task={task} linkableChallengeId={linkableChallengeId} />
+         <>
+            <ScopeBadge task={task} linkableChallengeId={linkableChallengeId} />
+            {isResultsLocked && (
+               <span
+                  data-testid="task-results-locked"
+                  className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-surface-nested text-text-tertiary border border-border-subtle mt-0.5"
+                  title="Challenge results are locked — this goal is read-only"
+                  aria-label="Results locked"
+               >
+                  <Lock className="h-3 w-3" />
+               </span>
+            )}
+         </>
       ) : canRollover ? (
          <button
             type="button"
@@ -390,6 +409,7 @@ function TaskRowComponent({
                         actions={actions}
                         hasChallengeContext={hasChallengeContext}
                         linkableChallengeId={linkableChallengeId}
+                        isResultsLocked={isResultsLocked}
                         effectiveTodayDate={effectiveTodayDate}
                         selectedDateKey={selectedDateKey}
                         dayOptions={dayOptions}
@@ -409,6 +429,7 @@ function TaskRowComponent({
                actions={actions}
                hasChallengeContext={hasChallengeContext}
                linkableChallengeId={linkableChallengeId}
+               isResultsLocked={isResultsLocked}
                effectiveTodayDate={effectiveTodayDate}
                selectedDateKey={selectedDateKey}
                dayOptions={dayOptions}

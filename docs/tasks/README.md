@@ -181,16 +181,20 @@ The upgrade only adds the new index/store; existing rows are preserved.
 
 The daily board shows every daily task, including `COMPLETED` and `CROSSED_OUT` rows.
 
-The weekly board hides a task only when it is linked to a challenge whose results are
-finalized (`Challenge.resultsLockedAt != null`). Everything else stays visible and
-editable, including completed/crossed-out weekly tasks that are unlinked or belong to an
-active/upcoming challenge. `completedChallengeIds` is computed server-side from the task's
+The weekly board shows every weekly task, including goals whose challenge results are
+finalized (`Challenge.resultsLockedAt != null`). Goals from a finished challenge remain
+visible so the board matches the card's `x/y Completed` counter and the user keeps a record
+of what they committed to. `completedChallengeIds` is computed server-side from the task's
 challenge relation and passed to the cockpit; the client never infers it from task status.
 
-Hiding is presentation-only. Hidden tasks remain in IndexedDB and PostgreSQL so progress
-counts, scoring, and finalized results are unchanged. The filter never queues a delete or
-rewrites a challenge result; weekly write protection remains the server-side
-`resultsLockedAt` guard.
+Visibility is not editability. A goal from a finished challenge is marked read-only: the
+row renders a lock beside its challenge badge and the task menu disables Edit, Goal Scope,
+and Delete with the message "This challenge's results are locked; goals can no longer be
+changed". Status toggles stay enabled because they record a fact, not a goal. Enforcement is
+server-side: `assertChallengeWritable` rejects goal writes when `resultsLockedAt != null`,
+and the 24-hour weekly grace lock still blocks rename/delete on older goals. The weekly
+board performs no local filtering, so displaying a row can never queue a delete or rewrite a
+challenge result.
 
 ---
 

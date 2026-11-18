@@ -49,3 +49,4 @@ pokemon_metadata.sqlite
 # generated prisma client
 packages/database/src/generated/
 .commandcode/
+packages/database/prisma/copy-user-data.ts

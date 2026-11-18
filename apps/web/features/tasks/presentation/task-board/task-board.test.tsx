@@ -223,7 +223,7 @@ describe("CockpitTasksSection", () => {
       expect(html).not.toContain("Incomplete");
    });
 
-   it("hides weekly tasks bound to a completed challenge while keeping daily and other weekly tasks", () => {
+   it("renders weekly tasks from a completed challenge and marks them read-only", () => {
       const completedChallengeTasks: UserCategorizedTasks = {
          ...mockTasks,
          dailyCategories: [
@@ -324,11 +324,20 @@ describe("CockpitTasksSection", () => {
          })
       );
 
+      // Goals from a finished challenge stay visible so the board matches the
+      // header counter, but they are read-only.
       expect(html).toContain("Old Challenge Daily Completed");
-      expect(html).not.toContain("Old Challenge Weekly Todo");
-      expect(html).not.toContain("Old Challenge Weekly Completed");
+      expect(html).toContain("Old Challenge Weekly Todo");
+      expect(html).toContain("Old Challenge Weekly Completed");
       expect(html).toContain("Personal Weekly Completed");
       expect(html).toContain("Active Weekly Completed");
+
+      // Only the two chal-old goals carry the results-locked affordance.
+      expect(html.match(/data-testid="task-results-locked"/g)).toHaveLength(2);
+      expect(html).not.toContain("No weekly todos for this week");
+
+      // The header counter counts what the board renders: 3 of 4 weekly goals.
+      expect(html).toContain("3/4 Completed");
    });
 
    it("shows weekly challenge tasks when no completed challenge ids are provided", () => {

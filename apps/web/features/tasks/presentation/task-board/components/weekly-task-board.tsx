@@ -66,6 +66,7 @@ function WeeklyTaskBoardComponent({ model }: WeeklyTaskBoardProps) {
       userId,
       hasChallengeContext,
       linkableChallengeId,
+      completedChallengeIdSet,
       mobileActiveTab,
       setMobileActiveTab,
       dailyCategories,
@@ -404,6 +405,12 @@ function WeeklyTaskBoardComponent({ model }: WeeklyTaskBoardProps) {
                                           selectedDateKey={selectedDateKey}
                                           dayOptions={dayOptions}
                                           showRollover={showRollover}
+                                          isResultsLocked={Boolean(
+                                             task.challengeId &&
+                                             completedChallengeIdSet.has(
+                                                task.challengeId
+                                             )
+                                          )}
                                        />
                                     );
                                  })

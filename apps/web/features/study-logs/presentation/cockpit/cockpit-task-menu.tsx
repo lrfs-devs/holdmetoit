@@ -31,6 +31,8 @@ interface TaskMenuItemsProps {
    dayOptions: ChallengeDayOption[];
    selectedDateKey: string;
    isChallengeActive?: boolean;
+   /** The linked challenge's results are locked: the goal is read-only. */
+   isResultsLocked?: boolean;
    linkableChallengeId?: string | null;
    onToggleChallengeScope?: (newChallengeId: string | null) => void;
    onSetStatus: (status: TaskStatus) => void;
@@ -48,6 +50,7 @@ export function TaskMenuItems({
    effectiveTodayDate,
    dayOptions,
    isChallengeActive = true,
+   isResultsLocked = false,
    linkableChallengeId,
    onToggleChallengeScope,
    onSetStatus,
@@ -80,6 +83,11 @@ export function TaskMenuItems({
       challengeId: task.challengeId,
       createdAt: task.createdAt ?? new Date(),
    });
+
+   const isReadOnly = isResultsLocked || isGraceLocked;
+   const readOnlyReason = isResultsLocked
+      ? "This challenge's results are locked; goals can no longer be changed"
+      : "Weekly goals lock 24 hours after they are added";
 
    const moveDaysConfig =
       taskType === "daily"
@@ -271,7 +279,7 @@ export function TaskMenuItems({
          {taskType === "weekly" &&
             linkableChallengeId &&
             onToggleChallengeScope &&
-            !isGraceLocked && (
+            !isReadOnly && (
                <>
                   <Separator />
                   <div className="px-3 py-1 text-label font-semibold tracking-wider uppercase text-text-tertiary">
@@ -305,22 +313,33 @@ export function TaskMenuItems({
 
          <Separator />
 
-         <Item
-            onSelect={onEditTask}
-            onClick={onEditTask}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-text-primary rounded-lg hover:bg-surface-nested transition-colors text-left"
-         >
-            <Pencil className="h-3.5 w-3.5 text-text-tertiary" />
-            <span>Edit Task</span>
-         </Item>
+         {isReadOnly ? (
+            <Item
+               disabled
+               title={readOnlyReason}
+               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-text-tertiary cursor-not-allowed text-left opacity-50"
+            >
+               <Pencil className="h-3.5 w-3.5 text-text-tertiary" />
+               <span>Edit Task (Locked)</span>
+            </Item>
+         ) : (
+            <Item
+               onSelect={onEditTask}
+               onClick={onEditTask}
+               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-text-primary rounded-lg hover:bg-surface-nested transition-colors text-left"
+            >
+               <Pencil className="h-3.5 w-3.5 text-text-tertiary" />
+               <span>Edit Task</span>
+            </Item>
+         )}
 
-         {Boolean((isChallengeActive && isTaskOnPastDay) || isGraceLocked) ? (
+         {Boolean((isChallengeActive && isTaskOnPastDay) || isReadOnly) ? (
             <Item
                disabled
                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-text-tertiary cursor-not-allowed text-left opacity-50"
                title={
-                  isGraceLocked
-                     ? "Weekly goals lock 24 hours after they are added"
+                  isReadOnly
+                     ? readOnlyReason
                      : "Tasks on past challenge days cannot be deleted"
                }
             >

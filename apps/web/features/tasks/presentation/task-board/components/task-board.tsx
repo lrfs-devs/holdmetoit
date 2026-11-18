@@ -76,6 +76,7 @@ export interface TaskBoardModel {
    userId?: string | null;
    hasChallengeContext: boolean;
    linkableChallengeId: string | null;
+   completedChallengeIdSet: Set<string>;
 
    mobileActiveTab: Column;
    setMobileActiveTab: Dispatch<SetStateAction<Column>>;
@@ -250,6 +251,7 @@ export function TaskBoard({ model }: TaskBoardProps) {
       userId,
       hasChallengeContext,
       linkableChallengeId,
+      completedChallengeIdSet,
       mobileActiveTab,
       setMobileActiveTab,
       dailyCategories,

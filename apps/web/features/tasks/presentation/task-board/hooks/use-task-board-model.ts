@@ -171,7 +171,6 @@ import {
    selectTaskDateKey,
    selectTasksForDateKey,
    selectTodayDayOption,
-   selectVisibleWeeklyCategories,
    selectWeekRangeLabel,
    selectWeekScopedTotals,
    selectWeeklyCategoryNameToId,
@@ -318,14 +317,9 @@ export function useTaskBoardModel({
       [completedChallengeIds, challengeStatus, challengeId]
    );
 
-   const visibleWeeklyCategories = useMemo(
-      () =>
-         selectVisibleWeeklyCategories(
-            weeklyCategories,
-            completedChallengeIdSet
-         ),
-      [weeklyCategories, completedChallengeIdSet]
-   );
+   // Named for compatibility. The results-lock filter was removed: goals from a
+   // finished challenge stay visible and are read-only server-side.
+   const visibleWeeklyCategories = weeklyCategories;
 
    const {
       activeWeekAnchorDateKey,
@@ -1157,6 +1151,7 @@ export function useTaskBoardModel({
       userId,
       hasChallengeContext,
       linkableChallengeId,
+      completedChallengeIdSet,
       mobileActiveTab,
       setMobileActiveTab,
       dailyCategories,
