@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement, act } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { CockpitTasksSection } from "./cockpit-tasks-section";
+import { CockpitTasksSection } from "@/features/tasks/presentation/task-board";
 import type { UserCategorizedTasks } from "@/features/tasks/domain/task.types";
 import {
    COLLAPSED_CATEGORIES_COOKIE,

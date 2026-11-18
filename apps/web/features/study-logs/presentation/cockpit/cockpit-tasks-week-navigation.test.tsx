@@ -8,7 +8,7 @@ import {
    within,
 } from "@testing-library/react";
 import React from "react";
-import { CockpitTasksSection } from "./cockpit-tasks-section";
+import { CockpitTasksSection } from "@/features/tasks/presentation/task-board";
 import type { UserCategorizedTasks } from "@/features/tasks/domain/task.types";
 
 afterEach(cleanup);

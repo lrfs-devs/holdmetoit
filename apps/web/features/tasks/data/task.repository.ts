@@ -211,6 +211,9 @@ export async function getUserCategorizedTasksFromDatabase(
 
    const categoryItems: CategoryItem[] = categories.map(toCategoryItem);
 
+   // Grouping stays task-driven so legacy mixed categories remain visible while
+   // the repair script has not run yet. New mixed categories can no longer be
+   // created, and a category move now cascades its type to every task.
    const dailyCategories: CategoryGroup[] = categories
       .filter((c) => {
          const hasDailyTasks = c.tasks.some((t) => t.taskType === "DAILY");
@@ -748,6 +751,19 @@ export async function deleteCategory(params: {
          select: { taskType: true, challengeId: true, createdAt: true },
       });
       categoryTasks.forEach((task) => assertWeeklyTaskEditable(task));
+
+      // A results-locked weekly goal is a permanent record: deleting its
+      // category must not remove it. Daily tasks are never challenge-evaluated,
+      // so a legacy DAILY row carrying a challengeId does not block the delete.
+      const lockedChallengeIds = new Set(
+         categoryTasks
+            .filter((task) => task.taskType === "WEEKLY")
+            .map((task) => task.challengeId)
+            .filter((id): id is string => Boolean(id))
+      );
+      for (const challengeId of lockedChallengeIds) {
+         await assertChallengeWritable(tx, challengeId);
+      }
 
       await tx.task.updateMany({
          where: {

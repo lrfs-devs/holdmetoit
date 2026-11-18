@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React, { act } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { CockpitTasksSection } from "./cockpit-tasks-section";
+import { CockpitTasksSection } from "@/features/tasks/presentation/task-board";
 import type { UserCategorizedTasks } from "@/features/tasks/domain/task.types";
 import * as confettiModule from "@/lib/confetti";
 

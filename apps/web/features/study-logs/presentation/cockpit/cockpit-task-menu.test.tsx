@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TaskMenuItems, CategoryMenuItems } from "./cockpit-task-menu";
-import type { TaskItem, CategoryGroup } from "./cockpit-tasks-section";
+import type {
+   BoardTask,
+   BoardCategory,
+} from "@/features/tasks/presentation/task-board";
 import type { ChallengeDayOption } from "@/features/study-logs/domain/challenge-day";
 
 const MockItem = ({ children, ...props }: any) =>
@@ -48,7 +51,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
       },
    ];
 
-   const mockTask: TaskItem = {
+   const mockTask: BoardTask = {
       id: "t_test_1",
       text: "Finish Chapter 4 Notes",
       completed: false,
@@ -57,7 +60,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
       createdAt: "2026-10-02T10:00:00Z",
    };
 
-   const mockCategory: CategoryGroup = {
+   const mockCategory: BoardCategory = {
       id: "cat_test_1",
       name: "Core Subjects",
       isCollapsed: false,
@@ -95,8 +98,35 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
       expect(html).not.toContain("Delete Task (Locked)");
    });
 
+   it("locks every status action when the challenge results are locked", () => {
+      const html = renderToStaticMarkup(
+         createElement(TaskMenuItems, {
+            task: mockTask,
+            catIdx: 0,
+            taskType: "weekly",
+            effectiveTodayDate: "2026-10-02",
+            dayOptions: mockDayOptions,
+            selectedDateKey: "2026-10-02",
+            isResultsLocked: true,
+            onSetStatus: vi.fn(),
+            onMoveToDay: vi.fn(),
+            onEditTask: vi.fn(),
+            onDeleteTask: vi.fn(),
+            Item: MockItem,
+            Separator: MockSeparator,
+            Label: MockLabel,
+         })
+      );
+
+      expect(html).toContain("Status (Locked)");
+      expect(html).not.toContain("Mark as Completed");
+      expect(html).not.toContain("In Progress");
+      expect(html).toContain("Edit Task (Locked)");
+      expect(html).toContain("Delete Task (Locked)");
+   });
+
    it("renders TaskMenuItems with completed task options", () => {
-      const completedTask: TaskItem = {
+      const completedTask: BoardTask = {
          ...mockTask,
          completed: true,
          status: "COMPLETED",
@@ -126,7 +156,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
    });
 
    it("locks deletion when task is on a past challenge day", () => {
-      const pastTask: TaskItem = {
+      const pastTask: BoardTask = {
          ...mockTask,
          dueDate: "2026-10-01",
          createdAt: "2026-10-01T08:00:00Z",
@@ -154,7 +184,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
    });
 
    it("allows deletion when task is on a past day if not in an active challenge (GH-125)", () => {
-      const pastTask: TaskItem = {
+      const pastTask: BoardTask = {
          ...mockTask,
          dueDate: "2026-10-01",
          createdAt: "2026-10-01T08:00:00Z",
@@ -210,7 +240,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
    });
 
    it("locks delete category option when category contains past tasks", () => {
-      const categoryWithPastTask: CategoryGroup = {
+      const categoryWithPastTask: BoardCategory = {
          ...mockCategory,
          tasks: [
             {
@@ -245,7 +275,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
    });
 
    it("does NOT lock delete category option when category contains past tasks if not in an active challenge (GH-125)", () => {
-      const categoryWithPastTask: CategoryGroup = {
+      const categoryWithPastTask: BoardCategory = {
          ...mockCategory,
          tasks: [
             {
@@ -282,7 +312,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
    });
 
    it("does NOT lock delete category option for weekly challenge categories even with tasks on past dates (GH-130)", () => {
-      const weeklyCategoryWithPastTask: CategoryGroup = {
+      const weeklyCategoryWithPastTask: BoardCategory = {
          ...mockCategory,
          name: "Weekly Goals",
          tasks: [
@@ -319,7 +349,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
    });
 
    it("does not falsely lock weekly category when a daily category shares the same name (GH-130)", () => {
-      const dailyCatWithPastTask: CategoryGroup = {
+      const dailyCatWithPastTask: BoardCategory = {
          id: "cat_daily_shared",
          name: "General",
          isCollapsed: false,
@@ -333,7 +363,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
             },
          ],
       };
-      const weeklyCat: CategoryGroup = {
+      const weeklyCat: BoardCategory = {
          id: "cat_weekly_shared",
          name: "General",
          isCollapsed: false,
@@ -371,7 +401,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
 
    it("locks weekly category deletion when the same category ID contains daily tasks on past challenge days", () => {
       const sharedCatId = "cat_shared_sprint";
-      const dailyCatWithPastTask: CategoryGroup = {
+      const dailyCatWithPastTask: BoardCategory = {
          id: sharedCatId,
          name: "Sprint Goals",
          isCollapsed: false,
@@ -385,7 +415,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
             },
          ],
       };
-      const weeklyCat: CategoryGroup = {
+      const weeklyCat: BoardCategory = {
          id: sharedCatId,
          name: "Sprint Goals",
          isCollapsed: false,
@@ -544,7 +574,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
 
    describe("Challenge Goal Scoping & Incomplete Rollover", () => {
       it("renders Convert to Personal Goal for challenge-linked weekly task", () => {
-         const weeklyTask: TaskItem = {
+         const weeklyTask: BoardTask = {
             id: "t_weekly_1",
             text: "Pass midterms",
             completed: false,
@@ -577,7 +607,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
       });
 
       it("renders Set as Challenge Goal for unlinked weekly task", () => {
-         const weeklyTask: TaskItem = {
+         const weeklyTask: BoardTask = {
             id: "t_weekly_2",
             text: "Personal book reading",
             completed: false,
@@ -610,7 +640,7 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
       });
 
       it("renders Roll over to Today when daily task is on a past day", () => {
-         const pastDailyTask: TaskItem = {
+         const pastDailyTask: BoardTask = {
             id: "t_past_daily",
             text: "Unfinished homework",
             completed: false,
@@ -653,10 +683,10 @@ describe("CockpitTaskMenu weekly goal grace lock (Issue #98)", () => {
          dueDate: null,
          createdAt: new Date(Date.now() - ageHours * HOUR_MS).toISOString(),
          challengeId,
-      } as TaskItem;
+      } as BoardTask;
    }
 
-   function renderTaskMenu(task: TaskItem) {
+   function renderTaskMenu(task: BoardTask) {
       return renderToStaticMarkup(
          createElement(TaskMenuItems, {
             task,
@@ -702,7 +732,7 @@ describe("CockpitTaskMenu weekly goal grace lock (Issue #98)", () => {
    });
 
    it("locks category deletion when it holds a locked weekly goal", () => {
-      const cat: CategoryGroup = {
+      const cat: BoardCategory = {
          id: "cat_weekly",
          name: "Problem Sets",
          isCollapsed: false,

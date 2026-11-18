@@ -7,7 +7,7 @@ import {
    GuestCockpitView,
    type GuestCockpitViewProps,
 } from "./guest-cockpit-view";
-import { LOAD_SAMPLE_TASK_EVENT } from "./cockpit-tasks-section";
+import { LOAD_SAMPLE_TASK_EVENT } from "@/features/tasks/presentation/task-board";
 
 vi.mock("next/link", () => ({
    default: ({
@@ -61,9 +61,11 @@ vi.mock("@/features/wrapped/presentation/dashboard-wrapped", () => ({
       }),
 }));
 
-vi.mock("./cockpit-tasks-section", async (importOriginal) => {
+vi.mock("@/features/tasks/presentation/task-board", async (importOriginal) => {
    const actual =
-      await importOriginal<typeof import("./cockpit-tasks-section")>();
+      await importOriginal<
+         typeof import("@/features/tasks/presentation/task-board")
+      >();
    return {
       ...actual,
       CockpitTasksSection: () =>

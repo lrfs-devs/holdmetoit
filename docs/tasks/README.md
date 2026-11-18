@@ -58,6 +58,12 @@ Toggles already send only `{ taskId, isComplete, status }`; moves and rollovers 
 `error` is never used for a known permanent condition. A zero-row update, a missing target
 category, a name collision, and a foreign row are all `conflict`.
 
+A `REORDER` mutation is all-or-nothing. Each row is written with its expected revision in the
+`where` clause, and a zero-row result aborts the surrounding transaction (`ReorderConflictError`)
+rather than returning early — a returned conflict would let Prisma commit the rows already
+reordered. The client therefore sees either the whole new ordering or none of it, never a
+half-applied blend.
+
 ### 2.3 Category identity
 
 1. **Live wins.** A live row with the same `(userId, taskType, LOWER(name))` wins. A create
@@ -164,30 +170,42 @@ The upgrade only adds the new index/store; existing rows are preserved.
 - `challengeId` is only valid on `taskType = "WEEKLY"`. Daily tasks never auto-link to the
   current challenge; an explicit daily `challengeId` is ignored (and logged), and a legacy
   daily link can be cleared with a `null` challengeId.
-- A task’s `taskType` is its own board column. A category may contain tasks of either type
-  (a weekly parent can hold daily tasks); task type is immutable on update/move, and a
-  category type change does not rewrite child task types.
+- A category belongs to exactly one board. A task's `taskType` always equals its category's
+  `taskType`: a task move adopts the target category's type, and a category move cascades its
+  type to every member task. New tasks resolve to a category in their own column, so a daily
+  task named like a weekly category gets (or reuses) a **daily** category of that name.
+  Legacy mixed categories are still readable and are reassigned by
+  `packages/database/scripts/repair-mixed-categories.ts`.
 - `getUserCategorizedTasksFromDatabase` groups tasks by their own `taskType`: a task is always
   visible in its own column, and a category appears in the columns where it has tasks. Empty
-  categories stay in their own column.
+  categories stay in their own column. This tolerance exists only for un-repaired legacy rows.
 - The results-lock guard applies only to weekly tasks. Legacy daily tasks with a challenge
-  link remain editable; the repair script unlinks them.
+  link remain editable; the repair script unlinks them. Promoting a category to weekly
+  unlinks any legacy daily `challengeId` before the type cascade, so a retype can never
+  manufacture a locked-challenge weekly goal.
 - Historical task data repairs were performed via `repair-task-invariants.ts` (archived in git history). Routine operations preserve invariant guarantees via standard Prisma repositories and transactions.
 
 ### 2.8 Cockpit visibility
 
 The daily board shows every daily task, including `COMPLETED` and `CROSSED_OUT` rows.
 
-The weekly board hides a task only when it is linked to a challenge whose results are
-finalized (`Challenge.resultsLockedAt != null`). Everything else stays visible and
-editable, including completed/crossed-out weekly tasks that are unlinked or belong to an
-active/upcoming challenge. `completedChallengeIds` is computed server-side from the task's
+The weekly board shows every weekly task, including goals whose challenge results are
+finalized (`Challenge.resultsLockedAt != null`). Goals from a finished challenge remain
+visible so the board matches the card's `x/y Completed` counter and the user keeps a record
+of what they committed to. `completedChallengeIds` is computed server-side from the task's
 challenge relation and passed to the cockpit; the client never infers it from task status.
 
-Hiding is presentation-only. Hidden tasks remain in IndexedDB and PostgreSQL so progress
-counts, scoring, and finalized results are unchanged. The filter never queues a delete or
-rewrites a challenge result; weekly write protection remains the server-side
-`resultsLockedAt` guard.
+Visibility is not editability. A goal from a finished challenge is fully read-only: the row
+renders a lock beside its challenge badge, the checkbox is disabled, and the task menu
+disables Status, Edit, Goal Scope, and Delete with the message "This challenge's results are
+locked; goals can no longer be changed". Status is not exempt — the server rejects every
+mutation on a results-locked goal, so an enabled toggle would only bounce back.
+
+Enforcement is server-side. `assertChallengeWritable` rejects goal writes when
+`resultsLockedAt != null`, the category guards (`categoryHasLockedGoals`, `deleteCategory`)
+refuse to retype or remove a category holding a locked goal, and the 24-hour weekly grace
+lock still blocks rename/delete on older goals. The weekly board performs no local
+filtering, so displaying a row can never queue a delete or rewrite a challenge result.
 
 ---
 
@@ -352,3 +370,45 @@ Enables users to export their Daily and Weekly Todo lists with a single click fr
 2. **High-Contrast Emojis:**
    - Visual emojis for Discord servers: `⬜` (TODO), `✅` (Completed), `⏳` (In Progress), `❌ ~~...~~` (Crossed Out), `🏆` (Challenge Goal).
    - Category headers formatted as `**📂 Category Name**`.
+
+---
+
+## 8. Task Board Presentation Module
+
+The former `study-logs/.../cockpit-tasks-section.tsx` mega-component now lives in the tasks slice:
+
+```
+apps/web/features/tasks/presentation/task-board/
+├── cockpit-tasks-section.tsx      # ~120-line shell: model hook -> <TaskBoard/> + dialogs
+├── task-board.types.ts            # BoardTask / BoardCategory / props / drag types
+├── task-board.utils.ts            # getTaskStatus + buildBoardTaskRecord + buildMoveIntent
+├── task-board.selectors.ts        # pure week bucketing, counts, visibility, board mapping
+├── components/
+│   ├── task-board.tsx             # two-column board view (accepts TaskBoardModel)
+│   ├── board-header.tsx           # title, badge, lock, counter
+│   ├── day-pill-switcher.tsx      # seven day pills + drag/drop
+│   ├── task-row.tsx               # memoized task card (daily + weekly)
+│   ├── task-category-card.tsx     # memoized category header + list
+│   ├── mobile-board-switcher.tsx  # small-screen Daily/Weekly tabs
+│   └── rollover-banner.tsx        # today/past-day rollover helpers
+├── dialogs/                       # AddTaskDialog, EditTaskDialog, RenameCategoryDialog, DeleteCategoryDialog
+├── hooks/
+│   ├── use-task-board-model.ts    # composes every hook/derived value/handler
+│   ├── use-task-modals.ts         # add/edit task modal state
+│   ├── use-task-board-persistence.ts
+│   ├── use-task-board-hydration.ts
+│   ├── use-task-board-state.ts
+│   ├── use-week-navigation.ts
+│   ├── use-task-moves.ts          # one MoveIntent seam (commitTaskMove)
+│   ├── use-task-mutations.ts      # status/edit/delete/scope/rollover
+│   ├── use-category-mutations.ts  # rename/delete category
+│   └── use-task-drag-and-drop.ts  # drag state + drop routing
+└── task-board.test.tsx            # integration suite (moved from study-logs)
+```
+
+Rules:
+
+- Pure math stays in `features/tasks/domain/` (`task-reorder`, `task-rollover`, `task-lock`, `task-edit-patch`).
+- `task-board.selectors.ts` and `buildBoardTaskRecord` are framework-free and unit-tested.
+- Every local task write goes through `buildBoardTaskRecord` so `sortOrder`/`challengeId` cannot be dropped.
+- Every move gesture resolves a `MoveIntent` and calls `commitTaskMove`. **Known gap:** the server still ignores `taskType` on task UPDATE/MOVE and the drag-onto-task path emits REORDER only; the weekly↔daily/category revert fixes are tracked in `breaker.md` for Stage 7.**

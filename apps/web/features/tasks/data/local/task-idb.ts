@@ -167,7 +167,10 @@ export async function putLocalTask(task: LocalTaskRecord): Promise<void> {
    });
 }
 
-export async function putLocalTasks(tasks: LocalTaskRecord[]): Promise<void> {
+export async function putLocalTasks(
+   tasks: LocalTaskRecord[],
+   options: { skipIfPending?: boolean } = {}
+): Promise<void> {
    const db = await openDatabase();
    if (!db || tasks.length === 0) return;
 
@@ -178,6 +181,15 @@ export async function putLocalTasks(tasks: LocalTaskRecord[]): Promise<void> {
          const getRequest = store.get(task.id);
          getRequest.onsuccess = () => {
             const existing = getRequest.result as LocalTaskRecord | undefined;
+            // A seed must not clobber an edit written after it was planned.
+            // The check lives in this transaction so it cannot race.
+            if (
+               options.skipIfPending &&
+               existing?.syncState &&
+               existing.syncState !== "synced"
+            ) {
+               return;
+            }
             store.put({
                ...task,
                revision: task.revision ?? existing?.revision,
@@ -255,7 +267,8 @@ export async function putLocalCategory(
 }
 
 export async function putLocalCategories(
-   categories: LocalCategoryRecord[]
+   categories: LocalCategoryRecord[],
+   options: { skipIfPending?: boolean } = {}
 ): Promise<void> {
    const db = await openDatabase();
    if (!db || categories.length === 0) return;
@@ -268,6 +281,13 @@ export async function putLocalCategories(
          getRequest.onsuccess = () => {
             const existing = getRequest.result as
                LocalCategoryRecord | undefined;
+            if (
+               options.skipIfPending &&
+               existing?.syncState &&
+               existing.syncState !== "synced"
+            ) {
+               return;
+            }
             store.put({
                ...cat,
                revision: cat.revision ?? existing?.revision,

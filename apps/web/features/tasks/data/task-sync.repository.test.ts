@@ -15,6 +15,7 @@ function p2002(): Prisma.PrismaClientKnownRequestError {
 vi.mock("@/core/db", () => ({
    prisma: {
       $transaction: vi.fn(),
+      $queryRaw: vi.fn().mockResolvedValue([]),
       category: {
          findUnique: vi.fn(),
          findFirst: vi.fn(),
@@ -140,8 +141,21 @@ describe("processBatchSync (task-sync.repository)", () => {
          },
       });
 
-      // Category type changes do not rewrite child task types.
-      expect(prisma.task.updateMany).not.toHaveBeenCalled();
+      // A category type change cascades to its legacy DAILY child tasks in a
+      // single write, clearing any inherited challenge link.
+      expect(prisma.task.updateMany).toHaveBeenCalledWith({
+         where: {
+            categoryId: catId,
+            userId,
+            isDeleted: false,
+            taskType: "DAILY",
+         },
+         data: {
+            taskType: "WEEKLY",
+            challengeId: null,
+            revision: { increment: 1 },
+         },
+      });
    });
 
    it("disambiguates category name when moving across columns with an existing name collision", async () => {
@@ -793,6 +807,193 @@ describe("processBatchSync (task-sync.repository)", () => {
       });
    });
 
+   it("applies a reorder when every base revision matches", async () => {
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-reorder-ok",
+            entityType: "TASK",
+            action: "REORDER",
+            payload: {
+               taskIds: ["t_a", "t_b"],
+               baseRevisions: { t_a: 2, t_b: 5 },
+            },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      expect(res.mutationResults?.[0]).toMatchObject({ status: "applied" });
+      expect(prisma.task.updateMany).toHaveBeenCalledTimes(2);
+   });
+
+   it("rejects a reorder when any base revision drifted", async () => {
+      // The expected revision is part of the write, so a drifted row simply
+      // updates zero rows instead of being caught by a pre-read.
+      vi.mocked(prisma.task.updateMany).mockResolvedValueOnce({
+         count: 0,
+      } as never);
+      vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
+         id: "t_a",
+         userId,
+         categoryId: "c1",
+         title: "A",
+         taskType: "DAILY",
+         isComplete: false,
+         isDeleted: false,
+         createdAt: new Date(),
+         updatedAt: new Date(),
+         completedAt: null,
+         revision: 3,
+      } as never);
+
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-reorder-stale",
+            entityType: "TASK",
+            action: "REORDER",
+            payload: {
+               taskIds: ["t_a", "t_b"],
+               baseRevisions: { t_a: 2, t_b: 5 },
+            },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      const result = res.mutationResults?.[0];
+      expect(result?.status).toBe("conflict");
+      expect(result?.reason).toBe("zero_rows");
+      // The loop stops at the first conflict instead of writing the rest.
+      expect(prisma.task.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.task.updateMany).toHaveBeenCalledWith(
+         expect.objectContaining({
+            where: expect.objectContaining({ id: "t_a", revision: 2 }),
+         })
+      );
+   });
+
+   it("aborts the reorder transaction when a later row conflicts", async () => {
+      // First row applies, second row drifts. Returning the conflict would let
+      // Prisma commit the first row's new position, so the handler must throw.
+      vi.mocked(prisma.task.updateMany)
+         .mockResolvedValueOnce({ count: 1 } as never)
+         .mockResolvedValueOnce({ count: 0 } as never);
+      vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
+         id: "t_c",
+         userId,
+         categoryId: "c1",
+         title: "C",
+         taskType: "DAILY",
+         isComplete: false,
+         isDeleted: false,
+         createdAt: new Date(),
+         updatedAt: new Date(),
+         completedAt: null,
+         revision: 7,
+      } as never);
+
+      let committed = false;
+      vi.mocked(prisma.$transaction).mockImplementationOnce(
+         async (callback) => {
+            const result = await (
+               callback as (tx: unknown) => Promise<unknown>
+            )(prisma);
+            committed = true;
+            return result;
+         }
+      );
+
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-reorder-later-conflict",
+            entityType: "TASK",
+            action: "REORDER",
+            payload: {
+               taskIds: ["t_b", "t_c"],
+               baseRevisions: { t_b: 1, t_c: 2 },
+            },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      const result = res.mutationResults?.[0];
+      expect(result).toMatchObject({
+         id: "mut-reorder-later-conflict",
+         status: "conflict",
+         reason: "zero_rows",
+         currentTask: expect.objectContaining({ id: "t_c" }),
+      });
+      // Both rows were attempted; the conflict escaped as an abort, so the
+      // transaction body never reported success.
+      expect(prisma.task.updateMany).toHaveBeenCalledTimes(2);
+      expect(committed).toBe(false);
+   });
+
+   it("aborts a category reorder when a later row conflicts", async () => {
+      vi.mocked(prisma.category.updateMany)
+         .mockResolvedValueOnce({ count: 1 } as never)
+         .mockResolvedValueOnce({ count: 0 } as never);
+      vi.mocked(prisma.category.findFirst).mockResolvedValueOnce({
+         id: "cat_c",
+         userId,
+         name: "C",
+         taskType: "DAILY",
+         sortOrder: 9,
+         isDeleted: false,
+         deletionTime: null,
+         createdAt: new Date(),
+         updatedAt: new Date(),
+         revision: 4,
+      } as never);
+
+      let committed = false;
+      vi.mocked(prisma.$transaction).mockImplementationOnce(
+         async (callback) => {
+            const result = await (
+               callback as (tx: unknown) => Promise<unknown>
+            )(prisma);
+            committed = true;
+            return result;
+         }
+      );
+
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-cat-reorder-later-conflict",
+            entityType: "CATEGORY",
+            action: "REORDER",
+            payload: { categoryIds: ["cat_b", "cat_c"] },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      expect(res.mutationResults?.[0]).toMatchObject({
+         id: "mut-cat-reorder-later-conflict",
+         status: "conflict",
+         reason: "zero_rows",
+      });
+      expect(prisma.category.updateMany).toHaveBeenCalledTimes(2);
+      expect(committed).toBe(false);
+   });
+
+   it("applies a legacy reorder without base revisions", async () => {
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-reorder-legacy",
+            entityType: "TASK",
+            action: "REORDER",
+            payload: { taskIds: ["t_a"] },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      expect(res.mutationResults?.[0]).toMatchObject({ status: "applied" });
+      expect(prisma.task.updateMany).toHaveBeenCalledTimes(1);
+   });
+
    it("writes a category update with the base revision", async () => {
       vi.mocked(prisma.category.updateMany).mockResolvedValueOnce({
          count: 1,
@@ -997,6 +1198,179 @@ describe("processBatchSync (task-sync.repository)", () => {
             status: "applied",
          });
          expect(prisma.task.updateMany).toHaveBeenCalled();
+      });
+
+      it("rejects a category-only move that would retype a locked goal", async () => {
+         // The payload carries no taskType: only the destination category's
+         // DAILY type would reclassify (and unlink) the weekly goal.
+         vi.mocked(prisma.task.findFirst)
+            .mockResolvedValueOnce(lockedGuard as never)
+            .mockResolvedValueOnce(lockedRow as never);
+         vi.mocked(prisma.category.findFirst).mockResolvedValueOnce({
+            id: "cat_daily",
+            userId,
+            name: "Daily",
+            taskType: "DAILY",
+            isDeleted: false,
+         } as never);
+
+         const res = await processBatchSync(userId, [
+            {
+               id: "mut-grace-move",
+               entityType: "TASK",
+               action: "MOVE",
+               payload: { taskId: "t_weekly", categoryId: "cat_daily" },
+               createdAt: Date.now(),
+               retryCount: 0,
+            },
+         ]);
+
+         expect(res.mutationResults?.[0]).toMatchObject({
+            id: "mut-grace-move",
+            status: "conflict",
+            reason: "task_locked",
+         });
+         expect(prisma.task.updateMany).not.toHaveBeenCalled();
+      });
+
+      it("allows a category retype when only a legacy DAILY row is challenge-linked", async () => {
+         vi.mocked(prisma.category.findUnique).mockResolvedValueOnce({
+            id: "cat_1",
+            userId,
+            name: "Chemistry",
+            taskType: "WEEKLY",
+            sortOrder: 0,
+            isDeleted: false,
+            deletionTime: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            revision: 1,
+         } as never);
+         vi.mocked(prisma.category.findFirst).mockResolvedValueOnce(null);
+         vi.mocked(prisma.task.findMany).mockResolvedValue([
+            {
+               taskType: "DAILY",
+               challengeId: "c_locked",
+               createdAt: new Date(),
+               challenge: { resultsLockedAt: new Date() },
+            },
+         ] as never);
+
+         const res = await processBatchSync(userId, [
+            {
+               id: "mut-legacy-daily-cat",
+               entityType: "CATEGORY",
+               action: "UPDATE",
+               payload: { categoryId: "cat_1", taskType: "DAILY" },
+               createdAt: Date.now(),
+               retryCount: 0,
+            },
+         ]);
+
+         expect(res.mutationResults?.[0]).toMatchObject({
+            id: "mut-legacy-daily-cat",
+            status: "applied",
+         });
+         expect(prisma.category.updateMany).toHaveBeenCalled();
+      });
+
+      it("unlinks a legacy daily challenge before promoting its category to weekly", async () => {
+         vi.mocked(prisma.category.findUnique).mockResolvedValueOnce({
+            id: "cat_1",
+            userId,
+            name: "Chemistry",
+            taskType: "DAILY",
+            sortOrder: 0,
+            isDeleted: false,
+            deletionTime: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            revision: 1,
+         } as never);
+         vi.mocked(prisma.category.findFirst).mockResolvedValueOnce(null);
+         vi.mocked(prisma.task.findMany).mockResolvedValue([
+            {
+               taskType: "DAILY",
+               challengeId: "c_locked",
+               createdAt: new Date(),
+               challenge: { resultsLockedAt: new Date() },
+            },
+         ] as never);
+
+         const res = await processBatchSync(userId, [
+            {
+               id: "mut-promote-cat",
+               entityType: "CATEGORY",
+               action: "UPDATE",
+               payload: { categoryId: "cat_1", taskType: "WEEKLY" },
+               createdAt: Date.now(),
+               retryCount: 0,
+            },
+         ]);
+
+         expect(res.mutationResults?.[0]).toMatchObject({
+            id: "mut-promote-cat",
+            status: "applied",
+         });
+         // The legacy daily link is cleared in the SAME write that promotes the
+         // row, so each member gains exactly one revision increment.
+         expect(prisma.task.updateMany).toHaveBeenCalledTimes(1);
+         expect(prisma.task.updateMany).toHaveBeenCalledWith({
+            where: {
+               categoryId: "cat_1",
+               userId,
+               isDeleted: false,
+               taskType: "DAILY",
+            },
+            data: {
+               taskType: "WEEKLY",
+               challengeId: null,
+               revision: { increment: 1 },
+            },
+         });
+      });
+
+      it("rejects a category type change when a child goal's results are locked", async () => {
+         vi.mocked(prisma.category.findUnique).mockResolvedValueOnce({
+            id: "cat_1",
+            userId,
+            name: "Chemistry",
+            taskType: "WEEKLY",
+            sortOrder: 0,
+            isDeleted: false,
+            deletionTime: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            revision: 1,
+         } as never);
+         vi.mocked(prisma.category.findFirst).mockResolvedValueOnce(null);
+         // Inside the grace window, so only the results lock can reject it.
+         vi.mocked(prisma.task.findMany).mockResolvedValue([
+            {
+               ...lockedGuard,
+               createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+               challenge: { resultsLockedAt: new Date() },
+            },
+         ] as never);
+
+         const res = await processBatchSync(userId, [
+            {
+               id: "mut-results-cat",
+               entityType: "CATEGORY",
+               action: "UPDATE",
+               payload: { categoryId: "cat_1", taskType: "DAILY" },
+               createdAt: Date.now(),
+               retryCount: 0,
+            },
+         ]);
+
+         expect(res.mutationResults?.[0]).toMatchObject({
+            id: "mut-results-cat",
+            status: "conflict",
+            reason: "task_locked",
+         });
+         expect(prisma.category.updateMany).not.toHaveBeenCalled();
+         expect(prisma.task.updateMany).not.toHaveBeenCalled();
       });
 
       it("deletes a weekly goal inside the grace period", async () => {
@@ -1296,7 +1670,7 @@ describe("processBatchSync (task-sync.repository)", () => {
       );
    });
 
-   it("does not change a task's type when moving it to another category", async () => {
+   it("adopts the target category's type when moving a task to another category", async () => {
       vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
          challengeId: null,
          taskType: "DAILY",
@@ -1323,14 +1697,125 @@ describe("processBatchSync (task-sync.repository)", () => {
       ]);
 
       expect(res.mutationResults?.[0]).toMatchObject({ status: "applied" });
-      expect(prisma.task.updateMany).toHaveBeenCalled();
       const call = vi.mocked(prisma.task.updateMany).mock.calls[0]?.[0] as
          { data: Record<string, unknown> } | undefined;
-      expect(call?.data).toMatchObject({ categoryId: "cat_weekly" });
-      expect(call?.data).not.toHaveProperty("taskType");
+      // The category wins over the client's stale payload type.
+      expect(call?.data).toMatchObject({
+         categoryId: "cat_weekly",
+         taskType: "WEEKLY",
+      });
    });
 
-   it("does not cascade a category type change to child tasks", async () => {
+   it("moves a type-only task change into a compatible category", async () => {
+      // The task is unlinked and currently sits in a WEEKLY category.
+      vi.mocked(prisma.task.findFirst)
+         .mockResolvedValueOnce({
+            challengeId: null,
+            taskType: "WEEKLY",
+            createdAt: new Date(),
+         } as never)
+         .mockResolvedValueOnce({ categoryId: "cat_weekly" } as never);
+      vi.mocked(prisma.category.findFirst)
+         // the stored category
+         .mockResolvedValueOnce({
+            id: "cat_weekly",
+            userId,
+            taskType: "WEEKLY",
+         } as never)
+         // the compatible destination
+         .mockResolvedValueOnce({ id: "cat_daily" } as never);
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+         { id: "cat_daily", taskType: "DAILY" },
+      ] as never);
+
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-type-only",
+            entityType: "TASK",
+            action: "UPDATE",
+            payload: { taskId: "t_type", taskType: "DAILY" },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      expect(res.mutationResults?.[0]).toMatchObject({ status: "applied" });
+      const call = vi.mocked(prisma.task.updateMany).mock.calls[0]?.[0] as
+         { data: Record<string, unknown> } | undefined;
+      // The type change must not leave the row in a WEEKLY category.
+      expect(call?.data).toMatchObject({
+         taskType: "DAILY",
+         categoryId: "cat_daily",
+      });
+   });
+
+   it("keeps the stored category when a type-only change already matches it", async () => {
+      vi.mocked(prisma.task.findFirst)
+         .mockResolvedValueOnce({
+            challengeId: null,
+            taskType: "DAILY",
+            createdAt: new Date(),
+         } as never)
+         .mockResolvedValueOnce({ categoryId: "cat_daily" } as never);
+      vi.mocked(prisma.category.findFirst).mockResolvedValueOnce({
+         id: "cat_daily",
+         userId,
+         taskType: "DAILY",
+      } as never);
+
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-type-same",
+            entityType: "TASK",
+            action: "UPDATE",
+            payload: { taskId: "t_same", taskType: "DAILY" },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      expect(res.mutationResults?.[0]).toMatchObject({ status: "applied" });
+      const call = vi.mocked(prisma.task.updateMany).mock.calls[0]?.[0] as
+         { data: Record<string, unknown> } | undefined;
+      expect(call?.data).not.toHaveProperty("categoryId");
+   });
+
+   it("clears a weekly task's challenge link when it moves to the daily board", async () => {
+      vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
+         challengeId: "chal_1",
+         taskType: "WEEKLY",
+      } as never);
+      vi.mocked(prisma.category.findFirst).mockResolvedValueOnce({
+         id: "cat_daily",
+         userId,
+         taskType: "DAILY",
+      } as never);
+
+      await processBatchSync(userId, [
+         {
+            id: "mut-unlink",
+            entityType: "TASK",
+            action: "MOVE",
+            payload: {
+               taskId: "t_move",
+               categoryId: "cat_daily",
+               taskType: "DAILY",
+               dueDate: "2026-11-18",
+            },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      const call = vi.mocked(prisma.task.updateMany).mock.calls[0]?.[0] as
+         { data: Record<string, unknown> } | undefined;
+      expect(call?.data).toMatchObject({
+         taskType: "DAILY",
+         challengeId: null,
+      });
+   });
+
+   it("cascades a category type change to child tasks", async () => {
       vi.mocked(prisma.category.findUnique).mockResolvedValueOnce({
          id: "cat_goal",
          userId,
@@ -1361,6 +1846,19 @@ describe("processBatchSync (task-sync.repository)", () => {
             data: expect.objectContaining({ taskType: "WEEKLY" }),
          })
       );
-      expect(prisma.task.updateMany).not.toHaveBeenCalled();
+      // Promotion only rewrites legacy DAILY members, in one write each.
+      expect(prisma.task.updateMany).toHaveBeenCalledWith({
+         where: {
+            categoryId: "cat_goal",
+            userId,
+            isDeleted: false,
+            taskType: "DAILY",
+         },
+         data: {
+            taskType: "WEEKLY",
+            challengeId: null,
+            revision: { increment: 1 },
+         },
+      });
    });
 });

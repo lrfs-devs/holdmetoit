@@ -1370,6 +1370,59 @@ describe("task.repository", () => {
          expect(result).toEqual(expect.objectContaining({ id: "cat_del" }));
       });
 
+      it("deletes a category holding only a legacy DAILY challenge link", async () => {
+         vi.mocked(prisma.category.findFirst).mockResolvedValue({
+            id: "cat_del",
+            userId: "user_1",
+            name: "Legacy",
+         } as never);
+         vi.mocked(prisma.task.findMany).mockResolvedValue([
+            {
+               ...lockedWeeklyTask(),
+               taskType: "DAILY",
+               createdAt: new Date(),
+            },
+         ] as never);
+         vi.mocked(prisma.task.updateMany).mockResolvedValue({
+            count: 1,
+         } as never);
+         vi.mocked(prisma.category.update).mockResolvedValue({
+            id: "cat_del",
+            isDeleted: true,
+            deletionTime: new Date(),
+            name: "Legacy ·deleted·cat_del",
+         } as never);
+
+         await deleteCategory({ categoryId: "cat_del", userId: "user_1" });
+
+         expect(prisma.$queryRaw).not.toHaveBeenCalled();
+         expect(prisma.task.updateMany).toHaveBeenCalled();
+      });
+
+      it("rejects deleting a category when a goal's challenge results are locked", async () => {
+         vi.mocked(prisma.category.findFirst).mockResolvedValue({
+            id: "cat_del",
+            userId: "user_1",
+            name: "Chemistry",
+         } as never);
+         // Inside the 24h grace window, so only the results lock applies.
+         vi.mocked(prisma.task.findMany).mockResolvedValue([
+            {
+               ...lockedWeeklyTask(),
+               createdAt: new Date(),
+            },
+         ] as never);
+         vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+            { resultsLockedAt: new Date(), isDeleted: false },
+         ]);
+
+         await expect(
+            deleteCategory({ categoryId: "cat_del", userId: "user_1" })
+         ).rejects.toBeInstanceOf(ChallengeStateError);
+         expect(prisma.task.updateMany).not.toHaveBeenCalled();
+         expect(prisma.category.update).not.toHaveBeenCalled();
+      });
+
       it("returns null if category not found", async () => {
          vi.mocked(prisma.category.findFirst).mockResolvedValue(null);
 

@@ -432,7 +432,7 @@ describe("HomeCockpitView", () => {
       expect(html).toContain('aria-label="Calendar Week Day Tabs"');
    });
 
-   it("passes completedChallengeIds through to the weekly task board", () => {
+   it("keeps goals from a completed challenge visible on the weekly task board", () => {
       const userTasks: UserCategorizedTasks = {
          categories: [],
          dailyCategories: [],
@@ -473,7 +473,8 @@ describe("HomeCockpitView", () => {
          })
       );
 
-      expect(html).not.toContain("Old Weekly Goal");
+      expect(html).toContain("Old Weekly Goal");
+      expect(html).toContain('data-testid="task-results-locked"');
    });
 
    it("prioritizes platform username for Welcome header link", () => {

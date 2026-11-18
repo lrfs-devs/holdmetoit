@@ -42,6 +42,17 @@ type Outcome = Omit<MutationResult, "id">;
 const APPLIED: Outcome = { status: "applied" };
 const INVALID: Outcome = { status: "conflict", reason: "invalid_payload" };
 
+/**
+ * Thrown inside a transaction to abort a partially-applied reorder. Prisma
+ * commits a normally-returned callback, so a later-row conflict must throw to
+ * roll back the rows already written.
+ */
+class ReorderConflictError extends Error {
+   constructor(readonly outcome: Outcome) {
+      super("reorder_conflict");
+   }
+}
+
 function isValidCategoryMutation(m: QueuedMutation): boolean {
    switch (m.action) {
       case "CREATE":
@@ -139,9 +150,21 @@ async function categoryHasLockedGoals(
 ): Promise<boolean> {
    const tasks = await tx.task.findMany({
       where: { categoryId, userId, isDeleted: false },
-      select: { taskType: true, challengeId: true, createdAt: true },
+      select: {
+         taskType: true,
+         challengeId: true,
+         createdAt: true,
+         challenge: { select: { resultsLockedAt: true } },
+      },
    });
-   return tasks.some((task) => isWeeklyTaskGraceExpired(task));
+   // Only weekly goals feed challenge evaluation. A legacy DAILY row that
+   // still carries a challengeId must not freeze its category.
+   return tasks.some(
+      (task) =>
+         task.taskType === "WEEKLY" &&
+         (isWeeklyTaskGraceExpired(task) ||
+            task.challenge?.resultsLockedAt != null)
+   );
 }
 
 async function applyCategoryMutation(
@@ -354,6 +377,44 @@ async function applyCategoryMutation(
                   currentCategory: current ? toCategoryItem(current) : null,
                };
             }
+
+            // A category's column change cascades to its member tasks so the
+            // board never shows a task in the opposite column to its category.
+            if (dataToUpdate.taskType) {
+               const nextType = dataToUpdate.taskType as TaskType;
+
+               if (nextType === "WEEKLY") {
+                  // Promoting a legacy DAILY row that still carried a
+                  // challengeId would otherwise create a challenge-linked
+                  // WEEKLY goal without passing assertChallengeWritable.
+                  // Unlink and retype in ONE write so the row gains a single
+                  // revision increment. Members that were already WEEKLY keep
+                  // their scope and need no write at all.
+                  await tx.task.updateMany({
+                     where: {
+                        categoryId: catId,
+                        userId,
+                        isDeleted: false,
+                        taskType: "DAILY",
+                     },
+                     data: {
+                        taskType: "WEEKLY",
+                        challengeId: null,
+                        revision: { increment: 1 },
+                     },
+                  });
+               } else {
+                  await tx.task.updateMany({
+                     where: { categoryId: catId, userId, isDeleted: false },
+                     data: {
+                        taskType: "DAILY",
+                        // Challenge links are only valid on weekly tasks.
+                        challengeId: null,
+                        revision: { increment: 1 },
+                     },
+                  });
+               }
+            }
          }
       }
 
@@ -361,12 +422,34 @@ async function applyCategoryMutation(
    }
 
    if (m.action === "REORDER") {
-      const categoryIds = (payload.categoryIds as string[]) || [];
+      const parsed = categoryReorderPayloadSchema.safeParse(payload);
+      if (!parsed.success) return INVALID;
+      const { categoryIds, baseRevisions } = parsed.data;
+
+      // Optimistic concurrency: the expected revision is part of the write, so
+      // two batches that both read revision N cannot both commit.
       for (let i = 0; i < categoryIds.length; i++) {
-         await tx.category.updateMany({
-            where: { id: categoryIds[i], userId },
+         const categoryId = categoryIds[i];
+         const expected = baseRevisions?.[categoryId];
+         const { count } = await tx.category.updateMany({
+            where: {
+               id: categoryId,
+               userId,
+               ...(expected !== undefined ? { revision: expected } : {}),
+            },
             data: { sortOrder: i, revision: { increment: 1 } },
          });
+
+         if (count === 0) {
+            const row = await tx.category.findFirst({
+               where: { id: categoryId, userId, isDeleted: false },
+            });
+            throw new ReorderConflictError({
+               status: "conflict",
+               reason: "zero_rows",
+               currentCategory: row ? toCategoryItem(row) : null,
+            });
+         }
       }
       return APPLIED;
    }
@@ -560,6 +643,9 @@ async function applyTaskMutation(
       taskType: TaskType;
       createdAt: Date;
    } | null = null;
+   // Resolved once and reused by the write block: the post-move column comes
+   // from the destination category.
+   let resolvedTargetCategory: { id: string; taskType: TaskType } | null = null;
 
    if (
       m.action === "UPDATE" ||
@@ -597,13 +683,28 @@ async function applyTaskMutation(
          }
       }
 
+      // Resolve the destination category before the lock checks. The task's
+      // post-move column is derived from it, so a category-only MOVE must face
+      // the same grace-lock rules as an explicit taskType change.
+      resolvedTargetCategory = categoryId
+         ? await tx.category.findFirst({
+              where: { id: categoryId, userId, isDeleted: false },
+              select: { id: true, taskType: true },
+           })
+         : null;
+      const nextTaskType: TaskType =
+         resolvedTargetCategory?.taskType ??
+         (payload.taskType
+            ? taskType
+            : (currentTaskGuard?.taskType ?? taskType));
+
       const changesLockedFields =
          m.action === "DELETE" ||
          ((m.action === "UPDATE" || m.action === "MOVE") &&
             (Boolean(title) ||
                payload.challengeId !== undefined ||
-               (Boolean(payload.taskType) &&
-                  taskType !== currentTaskGuard?.taskType)));
+               (currentTaskGuard != null &&
+                  nextTaskType !== currentTaskGuard.taskType)));
 
       if (
          currentTaskGuard &&
@@ -626,17 +727,97 @@ async function applyTaskMutation(
 
       const dataToUpdate: Record<string, unknown> = {};
       let categoryMissing = false;
+      // The type the task will have after this mutation. Falls back to the
+      // stored type when no category is supplied.
+      let effectiveTaskType = currentTaskGuard?.taskType ?? taskType;
 
       if (title) dataToUpdate.title = title;
       if (categoryId) {
-         const targetCat = await tx.category.findFirst({
-            where: { id: categoryId, userId, isDeleted: false },
-         });
+         const targetCat = resolvedTargetCategory;
          if (targetCat) {
             dataToUpdate.categoryId = categoryId;
+            // A task's board column follows the category it belongs to.
+            effectiveTaskType = targetCat.taskType;
+            dataToUpdate.taskType = targetCat.taskType;
          } else {
             categoryMissing = true;
          }
+      } else if (payload.taskType) {
+         effectiveTaskType = taskType;
+         // A task's type must match its category's column. A type-only change
+         // therefore needs a compatible destination category: keep the current
+         // one when it already matches, otherwise resolve one.
+         const storedCategory = await tx.task.findFirst({
+            where: { id: taskId, userId, isDeleted: false },
+            select: { categoryId: true },
+         });
+         const currentCategory = storedCategory?.categoryId
+            ? await tx.category.findFirst({
+                 where: {
+                    id: storedCategory.categoryId,
+                    userId,
+                    isDeleted: false,
+                 },
+                 select: { id: true, taskType: true },
+              })
+            : null;
+
+         if (currentCategory?.taskType === taskType) {
+            dataToUpdate.taskType = taskType;
+         } else {
+            const compatibleCategory = await tx.category.findFirst({
+               where: { userId, taskType, isDeleted: false },
+               orderBy: { sortOrder: "asc" },
+               select: { id: true },
+            });
+            if (!compatibleCategory) {
+               return {
+                  status: "conflict",
+                  reason: "category_missing",
+                  currentTask: null,
+               };
+            }
+            // Lock the destination and recheck its type under the lock: the
+            // default READ COMMITTED level lets a concurrent write retype it
+            // between the lookup and the task update.
+            const lockedRows = await tx.$queryRaw<
+               { id: string; taskType: TaskType }[]
+            >`SELECT "id", "taskType" FROM "Category"
+              WHERE "id" = ${compatibleCategory.id} AND "userId" = ${userId}
+                AND "isDeleted" = false
+              FOR UPDATE`;
+            const locked = lockedRows[0];
+            if (!locked || locked.taskType !== taskType) {
+               return {
+                  status: "conflict",
+                  reason: "category_missing",
+                  currentTask: null,
+               };
+            }
+            dataToUpdate.categoryId = locked.id;
+            dataToUpdate.taskType = taskType;
+         }
+      }
+
+      // A legacy DAILY row promoted to WEEKLY must not inherit its challenge
+      // link: that would create a weekly goal of a possibly results-locked
+      // challenge without passing assertChallengeWritable. An explicit
+      // payload.challengeId is applied below through the writable resolver.
+      if (
+         payload.taskType === "WEEKLY" &&
+         currentTaskGuard?.taskType === "DAILY" &&
+         payload.challengeId === undefined
+      ) {
+         dataToUpdate.challengeId = null;
+      }
+
+      // Dropping a weekly task to the daily board must clear its challenge
+      // link; daily tasks cannot be challenge-scoped.
+      if (
+         effectiveTaskType !== "WEEKLY" &&
+         currentTaskGuard?.taskType === "WEEKLY"
+      ) {
+         dataToUpdate.challengeId = null;
       }
       if (typeof payload.sortOrder === "number")
          dataToUpdate.sortOrder = payload.sortOrder;
@@ -646,7 +827,7 @@ async function applyTaskMutation(
             : null;
       }
       if (payload.challengeId !== undefined) {
-         if (currentTaskGuard?.taskType === "WEEKLY") {
+         if (effectiveTaskType === "WEEKLY") {
             const rawChalId = payload.challengeId;
             const linked = await resolveWritableChallengeLink(
                tx,
@@ -709,12 +890,35 @@ async function applyTaskMutation(
    }
 
    if (m.action === "REORDER") {
-      const taskIds = (payload.taskIds as string[]) || [];
+      const parsed = taskReorderPayloadSchema.safeParse(payload);
+      if (!parsed.success) return INVALID;
+      const { taskIds, baseRevisions } = parsed.data;
+
+      // Optimistic concurrency: the expected revision is part of the write, so
+      // two batches that both read revision N cannot both commit.
       for (let i = 0; i < taskIds.length; i++) {
-         await tx.task.updateMany({
-            where: { id: taskIds[i], userId, isDeleted: false },
+         const taskIdAtIndex = taskIds[i];
+         const expected = baseRevisions?.[taskIdAtIndex];
+         const { count } = await tx.task.updateMany({
+            where: {
+               id: taskIdAtIndex,
+               userId,
+               isDeleted: false,
+               ...(expected !== undefined ? { revision: expected } : {}),
+            },
             data: { sortOrder: i, revision: { increment: 1 } },
          });
+
+         if (count === 0) {
+            const row = await tx.task.findFirst({
+               where: { id: taskIdAtIndex, userId, isDeleted: false },
+            });
+            throw new ReorderConflictError({
+               status: "conflict",
+               reason: "zero_rows",
+               currentTask: row ? toTaskItem(row, row.taskType) : null,
+            });
+         }
       }
       return APPLIED;
    }
@@ -873,6 +1077,11 @@ export async function processBatchSync(
 
          mutationResults.push({ id: m.id, ...outcome });
       } catch (err) {
+         if (err instanceof ReorderConflictError) {
+            mutationResults.push({ id: m.id, ...err.outcome });
+            continue;
+         }
+
          if (isP2002(err)) {
             try {
                const recovery = await recoverP2002(userId, m);
