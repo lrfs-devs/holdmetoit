@@ -79,7 +79,7 @@ function useHarness(
       persistCategory,
    });
 
-   return { dnd, weeklyCategories };
+   return { dnd, weeklyCategories, dailyCategories };
 }
 
 function dragEvent() {
@@ -194,13 +194,48 @@ describe("useTaskDragAndDrop — column and header drops", () => {
          result.current.dnd.handleColumnDrop(dragEvent(), "weekly");
       });
 
-      const createCall = persistCategory.mock.calls.find(
-         ([, mutation]) => mutation.action === "CREATE"
+      // The category and its first task land in a single batch: a task that
+      // points at an unpersisted category is unloadable.
+      expect(commitLocalBatchMock).toHaveBeenCalledTimes(1);
+      const batch = commitLocalBatchMock.mock.calls[0][0];
+      expect(batch.categories).toHaveLength(1);
+      expect(batch.tasks).toHaveLength(1);
+      const actions = batch.mutations.map(
+         (mutation: { entityType: string; action: string }) =>
+            `${mutation.entityType}/${mutation.action}`
       );
-      expect(createCall?.[1].payload).toMatchObject({ taskType: "WEEKLY" });
+      expect(actions).toEqual(["CATEGORY/CREATE", "TASK/MOVE"]);
+      expect(batch.mutations[0].payload).toMatchObject({
+         taskType: "WEEKLY",
+      });
       expect(result.current.weeklyCategories[0].tasks.map((t) => t.id)).toEqual(
          ["d1"]
       );
+   });
+
+   it("restores the source column when the empty-column batch fails", async () => {
+      const daily: BoardCategory[] = [
+         {
+            id: "cat_d",
+            name: "Daily",
+            isCollapsed: false,
+            tasks: [{ id: "d1", text: "D1", completed: false, status: "TODO" }],
+         },
+      ];
+      commitLocalBatchMock.mockRejectedValueOnce(new Error("idb down"));
+      const { result } = renderHook(() => useHarness([], daily));
+
+      act(() => {
+         result.current.dnd.handleTaskDragStart(dragEvent(), "d1", 0, "daily");
+      });
+      await act(async () => {
+         result.current.dnd.handleColumnDrop(dragEvent(), "weekly");
+      });
+
+      expect(result.current.weeklyCategories).toHaveLength(0);
+      expect(result.current.dailyCategories[0].tasks.map((t) => t.id)).toEqual([
+         "d1",
+      ]);
    });
 
    it("sends the viewed week with members moved to the weekly column", () => {

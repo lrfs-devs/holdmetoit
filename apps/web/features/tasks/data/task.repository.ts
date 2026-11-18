@@ -752,10 +752,12 @@ export async function deleteCategory(params: {
       });
       categoryTasks.forEach((task) => assertWeeklyTaskEditable(task));
 
-      // A results-locked goal is a permanent record: deleting its category
-      // must not remove it.
+      // A results-locked weekly goal is a permanent record: deleting its
+      // category must not remove it. Daily tasks are never challenge-evaluated,
+      // so a legacy DAILY row carrying a challengeId does not block the delete.
       const lockedChallengeIds = new Set(
          categoryTasks
+            .filter((task) => task.taskType === "WEEKLY")
             .map((task) => task.challengeId)
             .filter((id): id is string => Boolean(id))
       );

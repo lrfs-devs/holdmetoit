@@ -70,6 +70,7 @@ export function CockpitTasksSection(props: CockpitTasksSectionProps) {
             hasChallengeContext={m.hasChallengeContext}
             categoryInputRef={add.categoryInputRef}
             categorySelectRef={add.categorySelectRef}
+            errorMessage={add.errorMessage}
             onTextChange={add.setText}
             onSelectedCategoryChange={add.setSelectedCategory}
             onCustomCategoryChange={add.setCustomCategory}

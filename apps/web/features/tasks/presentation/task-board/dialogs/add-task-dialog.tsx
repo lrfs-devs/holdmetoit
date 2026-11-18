@@ -470,6 +470,15 @@ export function AddTaskDialog({
                   </div>
                </div>
 
+               {errorMessage && (
+                  <p
+                     role="alert"
+                     className="text-xs font-medium text-feedback-error"
+                  >
+                     {errorMessage}
+                  </p>
+               )}
+
                <div className="flex items-center justify-end gap-3 pt-3">
                   <Button
                      type="button"

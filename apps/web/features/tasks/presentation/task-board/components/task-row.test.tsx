@@ -35,7 +35,8 @@ const actions: TaskRowActions = {
 
 function renderRow(
    overrides: Partial<BoardTask> = {},
-   variant: "daily" | "weekly" = "daily"
+   variant: "daily" | "weekly" = "daily",
+   isResultsLocked = false
 ) {
    return renderToStaticMarkup(
       createElement(TaskRow, {
@@ -52,6 +53,7 @@ function renderRow(
          selectedDateKey: "2026-11-17",
          dayOptions: [],
          showRollover: false,
+         isResultsLocked,
       })
    );
 }
@@ -88,5 +90,35 @@ describe("TaskRow", () => {
 
    it("does not show the control for short descriptions", () => {
       expect(renderRow()).not.toContain("Show more");
+   });
+
+   it("makes every mutating control inert for a results-locked goal", () => {
+      const html = renderRow({}, "weekly", true);
+
+      // The drag handle is no longer draggable and advertises the lock.
+      expect(html).not.toMatch(/draggable="true"/);
+      expect(html).toContain("this goal is read-only");
+
+      // Status badge and delete are disabled.
+      expect(html).toMatch(/<button[^>]*disabled=""[^>]*>To-Do<\/button>/);
+      expect(html).toMatch(/aria-label="Delete task Study Chemistry"[^>]*/);
+      expect(html.match(/disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+   });
+
+   it("keeps expand and the options menu available when locked", () => {
+      const html = renderRow(
+         { text: "A very long study task description that exceeds the limit" },
+         "weekly",
+         true
+      );
+
+      expect(html).toContain("Show more");
+      expect(html).toContain("Options for task");
+   });
+
+   it("leaves unlocked rows fully interactive", () => {
+      const html = renderRow({}, "weekly", false);
+      expect(html).not.toContain("this goal is read-only");
+      expect(html).not.toContain('disabled=""');
    });
 });

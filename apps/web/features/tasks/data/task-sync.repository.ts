@@ -146,10 +146,13 @@ async function categoryHasLockedGoals(
          challenge: { select: { resultsLockedAt: true } },
       },
    });
+   // Only weekly goals feed challenge evaluation. A legacy DAILY row that
+   // still carries a challengeId must not freeze its category.
    return tasks.some(
       (task) =>
-         isWeeklyTaskGraceExpired(task) ||
-         task.challenge?.resultsLockedAt != null
+         task.taskType === "WEEKLY" &&
+         (isWeeklyTaskGraceExpired(task) ||
+            task.challenge?.resultsLockedAt != null)
    );
 }
 

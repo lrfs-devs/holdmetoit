@@ -386,6 +386,7 @@ export function useTaskBoardModel({
          categorySelectRef,
          errorMessage: addSubmitError,
          setSubmitError: setAddSubmitError,
+         submissionTokenRef: addSubmissionTokenRef,
          setText: setNewTodoText,
          setSelectedCategory,
          setCustomCategory,
@@ -937,6 +938,12 @@ export function useTaskBoardModel({
          retryCount: 0,
       });
 
+      // If the dialog is closed or reopened while this save is in flight, the
+      // new draft owns the board — this submission must not touch it.
+      const submissionToken = addSubmissionTokenRef.current;
+      const isStaleSubmission = () =>
+         addSubmissionTokenRef.current !== submissionToken;
+
       try {
          await commitLocalBatch({
             categories: localCategories,
@@ -947,6 +954,7 @@ export function useTaskBoardModel({
                   : [],
          });
       } catch {
+         if (isStaleSubmission()) return;
          // Undo the optimistic insertion but keep the draft so the user can
          // retry instead of losing the task silently.
          const dropTask = (prev: BoardCategory[]) =>
@@ -979,6 +987,8 @@ export function useTaskBoardModel({
          );
          return;
       }
+
+      if (isStaleSubmission()) return;
 
       if (isLoggedIn && userId) {
          scheduleSync(userId);

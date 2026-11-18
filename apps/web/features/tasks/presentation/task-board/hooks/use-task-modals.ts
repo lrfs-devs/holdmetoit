@@ -28,6 +28,8 @@ export interface AddTaskModalState {
    categorySelectRef: RefObject<HTMLButtonElement | null>;
    errorMessage: string | null;
    setSubmitError: (message: string | null) => void;
+   submissionTokenRef: RefObject<number>;
+   invalidateSubmission: () => void;
    setText: (value: string) => void;
    setSelectedCategory: (value: string) => void;
    setCustomCategory: (value: string) => void;
@@ -100,6 +102,12 @@ export function useTaskModals({
 
    const categoryInputRef = useRef<HTMLInputElement>(null);
    const categorySelectRef = useRef<HTMLButtonElement>(null);
+   // Bumped whenever the add dialog is opened or closed, so a save that
+   // settles after the draft changed cannot clear or close the new draft.
+   const submissionTokenRef = useRef(0);
+   const invalidateSubmission = () => {
+      submissionTokenRef.current += 1;
+   };
 
    useEffect(() => {
       if (isCreatingCategory && addModalType) {
@@ -125,6 +133,7 @@ export function useTaskModals({
 
       setDateKey(initialDateKey);
       setSubmitError(null);
+      invalidateSubmission();
       setText("");
       if (dailyCategoryOptions.length > 0) {
          setSelectedCategory(dailyCategoryOptions[0]);
@@ -141,6 +150,7 @@ export function useTaskModals({
    const openWeekly = () => {
       setChallengeScope(linkableChallengeId ? "CHALLENGE" : "PERSONAL");
       setSubmitError(null);
+      invalidateSubmission();
       setText("");
       setStatus("TODO");
       setCustomCategory("");
@@ -187,6 +197,8 @@ export function useTaskModals({
          categorySelectRef,
          errorMessage: submitError,
          setSubmitError,
+         submissionTokenRef,
+         invalidateSubmission,
          setText,
          setSelectedCategory,
          setCustomCategory,
@@ -196,7 +208,10 @@ export function useTaskModals({
          setChallengeScope,
          openDaily,
          openWeekly,
-         close: () => setAddModalType(null),
+         close: () => {
+            invalidateSubmission();
+            setAddModalType(null);
+         },
       },
       editTask: {
          modal: editTaskModal,

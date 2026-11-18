@@ -20,6 +20,7 @@ import type {
 import {
    commitLocalBatch,
    logTaskSync,
+   putLocalCategories,
    putLocalTask,
    putLocalTasks,
 } from "@/features/tasks/data/local/task-idb";
@@ -1297,32 +1298,12 @@ export function useTaskDragAndDrop({
             };
             const currentWeeklyCats = [...weeklyCategories, newWeeklyCat];
             const targetWeeklyIdx = currentWeeklyCats.length - 1;
+            const nowIso = new Date().toISOString();
 
-            persistCategory(
-               {
-                  id: newCatId,
-                  userId: userId ?? null,
-                  name: newWeeklyCat.name,
-                  taskType: "WEEKLY",
-                  sortOrder: targetWeeklyIdx,
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                  syncState: "pending",
-               },
-               {
-                  id: crypto.randomUUID(),
-                  entityType: "CATEGORY",
-                  action: "CREATE",
-                  payload: {
-                     id: newCatId,
-                     name: newWeeklyCat.name,
-                     taskType: "WEEKLY",
-                     sortOrder: targetWeeklyIdx,
-                  },
-                  createdAt: Date.now(),
-                  retryCount: 0,
-               }
-            ).catch(() => {});
+            // Snapshot before the optimistic move so a failed write can put the
+            // task back where it came from.
+            const snapshotDaily = dailyCategories;
+            const snapshotWeekly = weeklyCategories;
 
             const targetDueDate = resolveTargetDueDate(
                draggedItem.sourceColumn,
@@ -1344,6 +1325,8 @@ export function useTaskDragAndDrop({
             setWeeklyCategories(res.weeklyCategories);
 
             if (res.movedTask && res.targetCategoryId) {
+               const resolvedDueDate =
+                  res.movedTask.dueDate ?? targetDueDate ?? null;
                const isMovedComplete = Boolean(
                   res.movedTask.completed ?? res.movedTask.isComplete
                );
@@ -1351,24 +1334,95 @@ export function useTaskDragAndDrop({
                   (res.movedTask.status as TaskStatus) ||
                   (isMovedComplete ? "COMPLETED" : "TODO");
 
-               commitTaskMove({
-                  task: res.movedTask,
-                  targetCategoryId: res.targetCategoryId,
-                  targetTaskType: res.targetTaskType,
-                  targetDueDate: res.movedTask.dueDate ?? targetDueDate ?? null,
+               const localCategory: LocalCategoryRecord = {
+                  id: newCatId,
+                  userId: userId ?? null,
+                  name: newWeeklyCat.name,
+                  taskType: "WEEKLY",
+                  sortOrder: targetWeeklyIdx,
+                  createdAt: nowIso,
+                  updatedAt: nowIso,
+                  syncState: "pending",
+               };
+
+               const localTask = buildBoardTaskRecord({
+                  task: {
+                     id: res.movedTask.id,
+                     text: res.movedTask.text ?? res.movedTask.title ?? "",
+                     completed: isMovedComplete,
+                     status: movedStatus,
+                     dueDate: resolvedDueDate,
+                     createdAt: res.movedTask.createdAt
+                        ? typeof res.movedTask.createdAt === "string"
+                           ? res.movedTask.createdAt
+                           : res.movedTask.createdAt.toISOString()
+                        : undefined,
+                     challengeId: null,
+                  },
+                  userId: userId ?? null,
+                  categoryId: res.targetCategoryId,
+                  taskType: res.targetTaskType,
                   sortOrder: 0,
+                  isComplete: isMovedComplete,
+                  status: movedStatus,
+                  dueDate: resolvedDueDate,
+                  challengeId: null,
+                  nowIso,
+               });
+
+               const categoryMutation: Omit<QueuedMutation, "userId"> = {
+                  id: crypto.randomUUID(),
+                  entityType: "CATEGORY",
+                  action: "CREATE",
+                  payload: {
+                     id: newCatId,
+                     name: newWeeklyCat.name,
+                     taskType: "WEEKLY",
+                     sortOrder: targetWeeklyIdx,
+                  },
+                  createdAt: Date.now(),
+                  retryCount: 0,
+               };
+
+               const taskMutation: Omit<QueuedMutation, "userId"> = {
+                  id: crypto.randomUUID(),
+                  entityType: "TASK",
                   action: "MOVE",
                   payload: {
                      taskId: res.movedTask.id,
                      categoryId: res.targetCategoryId,
                      taskType: res.targetTaskType,
                      sortOrder: 0,
-                     dueDate: res.movedTask.dueDate ?? targetDueDate ?? null,
+                     dueDate: resolvedDueDate,
                   },
-                  isComplete: isMovedComplete,
-                  status: movedStatus,
-                  challengeId: null,
-               });
+                  createdAt: Date.now() + 1,
+                  retryCount: 0,
+               };
+
+               // The category and its first task must land together: a task
+               // pointing at an unpersisted category is unloadable.
+               if (isLoggedIn && userId) {
+                  commitLocalBatch({
+                     categories: [localCategory],
+                     tasks: [localTask],
+                     mutations: [categoryMutation, taskMutation].map(
+                        (mutation) => ({ ...mutation, userId })
+                     ),
+                  })
+                     .then(() => scheduleSync(userId))
+                     .catch(() => {
+                        setDailyCategories(snapshotDaily);
+                        setWeeklyCategories(snapshotWeekly);
+                     });
+               } else {
+                  Promise.all([
+                     putLocalCategories([localCategory]),
+                     putLocalTasks([localTask]),
+                  ]).catch(() => {
+                     setDailyCategories(snapshotDaily);
+                     setWeeklyCategories(snapshotWeekly);
+                  });
+               }
             }
          } else if (targetCategories.length > 0) {
             const lastCatIdx = targetCategories.length - 1;

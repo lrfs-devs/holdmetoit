@@ -1370,6 +1370,35 @@ describe("task.repository", () => {
          expect(result).toEqual(expect.objectContaining({ id: "cat_del" }));
       });
 
+      it("deletes a category holding only a legacy DAILY challenge link", async () => {
+         vi.mocked(prisma.category.findFirst).mockResolvedValue({
+            id: "cat_del",
+            userId: "user_1",
+            name: "Legacy",
+         } as never);
+         vi.mocked(prisma.task.findMany).mockResolvedValue([
+            {
+               ...lockedWeeklyTask(),
+               taskType: "DAILY",
+               createdAt: new Date(),
+            },
+         ] as never);
+         vi.mocked(prisma.task.updateMany).mockResolvedValue({
+            count: 1,
+         } as never);
+         vi.mocked(prisma.category.update).mockResolvedValue({
+            id: "cat_del",
+            isDeleted: true,
+            deletionTime: new Date(),
+            name: "Legacy ·deleted·cat_del",
+         } as never);
+
+         await deleteCategory({ categoryId: "cat_del", userId: "user_1" });
+
+         expect(prisma.$queryRaw).not.toHaveBeenCalled();
+         expect(prisma.task.updateMany).toHaveBeenCalled();
+      });
+
       it("rejects deleting a category when a goal's challenge results are locked", async () => {
          vi.mocked(prisma.category.findFirst).mockResolvedValue({
             id: "cat_del",

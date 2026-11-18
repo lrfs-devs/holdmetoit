@@ -195,6 +195,8 @@ function TaskRowComponent({
 }: TaskRowProps) {
    const status = getTaskStatus(task);
    const isLongText = task.text.length > 45 || task.text.includes("\n");
+   const lockedTooltip =
+      "Challenge results are locked — this goal is read-only";
 
    const nextBadgeStatus: TaskStatus =
       variant === "daily" && status === "TODO"
@@ -217,7 +219,7 @@ function TaskRowComponent({
                <span
                   data-testid="task-results-locked"
                   className="shrink-0 inline-flex items-center justify-center p-1 rounded bg-surface-nested text-text-tertiary border border-border-subtle mt-0.5"
-                  title="Challenge results are locked — this goal is read-only"
+                  title={lockedTooltip}
                   aria-label="Results locked"
                >
                   <Lock className="h-3 w-3" />
@@ -262,14 +264,26 @@ function TaskRowComponent({
                }`}
             >
                <div
-                  draggable
-                  onDragStart={(e) =>
-                     actions.onDragStart(e, task.id, catIdx, variant)
+                  draggable={!isResultsLocked}
+                  onDragStart={
+                     isResultsLocked
+                        ? undefined
+                        : (e) =>
+                             actions.onDragStart(e, task.id, catIdx, variant)
                   }
-                  onDragEnd={actions.onDragEnd}
+                  onDragEnd={isResultsLocked ? undefined : actions.onDragEnd}
                   onClick={(e) => e.stopPropagation()}
-                  className="p-1 -ml-1 text-text-tertiary hover:text-brand-2 cursor-grab active:cursor-grabbing rounded transition-colors shrink-0 mt-0.5"
-                  title="Drag task to reorder or move across categories"
+                  aria-disabled={isResultsLocked || undefined}
+                  className={`p-1 -ml-1 rounded transition-colors shrink-0 mt-0.5 ${
+                     isResultsLocked
+                        ? "text-text-tertiary cursor-not-allowed opacity-50"
+                        : "text-text-tertiary hover:text-brand-2 cursor-grab active:cursor-grabbing"
+                  }`}
+                  title={
+                     isResultsLocked
+                        ? lockedTooltip
+                        : "Drag task to reorder or move across categories"
+                  }
                   aria-label={`Drag task ${task.text}`}
                >
                   <GripVertical className="h-3.5 w-3.5" />
@@ -290,11 +304,7 @@ function TaskRowComponent({
                         ? "cursor-not-allowed opacity-70"
                         : "cursor-pointer"
                   }`}
-                  title={
-                     isResultsLocked
-                        ? "Challenge results are locked — this goal is read-only"
-                        : STATUS_HINT[status]
-                  }
+                  title={isResultsLocked ? lockedTooltip : STATUS_HINT[status]}
                >
                   <div
                      className={`h-5 w-5 rounded flex items-center justify-center border transition-all shrink-0 mt-0.5 ${
@@ -358,25 +368,36 @@ function TaskRowComponent({
                   {!(variant === "weekly" && status === "COMPLETED") && (
                      <button
                         type="button"
-                        onClick={(e) =>
-                           actions.onStatusAction(
-                              catIdx,
-                              task.id,
-                              variant,
-                              nextBadgeStatus,
-                              e
-                           )
+                        disabled={isResultsLocked}
+                        onClick={
+                           isResultsLocked
+                              ? undefined
+                              : (e) =>
+                                   actions.onStatusAction(
+                                      catIdx,
+                                      task.id,
+                                      variant,
+                                      nextBadgeStatus,
+                                      e
+                                   )
                         }
+                        aria-disabled={isResultsLocked || undefined}
                         title={
-                           status === "COMPLETED"
-                              ? "Status: Completed. Click to reset to To-Do"
-                              : status === "IN_PROGRESS"
-                                ? "Status: In Progress. Click to mark Completed"
-                                : status === "CROSSED_OUT"
-                                  ? "Status: Crossed Out. Click to reset to To-Do"
-                                  : "Status: To-Do. Click to set In Progress"
+                           isResultsLocked
+                              ? lockedTooltip
+                              : status === "COMPLETED"
+                                ? "Status: Completed. Click to reset to To-Do"
+                                : status === "IN_PROGRESS"
+                                  ? "Status: In Progress. Click to mark Completed"
+                                  : status === "CROSSED_OUT"
+                                    ? "Status: Crossed Out. Click to reset to To-Do"
+                                    : "Status: To-Do. Click to set In Progress"
                         }
-                        className={BADGE_CLASS[status]}
+                        className={`${BADGE_CLASS[status]} ${
+                           isResultsLocked
+                              ? "cursor-not-allowed opacity-50"
+                              : ""
+                        }`}
                      >
                         {STATUS_LABEL[status]}
                      </button>
@@ -387,14 +408,20 @@ function TaskRowComponent({
 
                <button
                   type="button"
-                  onClick={(e) => {
-                     e.preventDefault();
-                     e.stopPropagation();
-                     actions.onDelete(catIdx, task.id, variant);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5"
-                  title="Delete task"
+                  disabled={isResultsLocked}
+                  onClick={
+                     isResultsLocked
+                        ? undefined
+                        : (e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                             actions.onDelete(catIdx, task.id, variant);
+                          }
+                  }
+                  className="opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-text-tertiary hover:text-feedback-error rounded hover:bg-input-bg transition-opacity shrink-0 mt-0.5 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-text-tertiary disabled:hover:bg-transparent"
+                  title={isResultsLocked ? lockedTooltip : "Delete task"}
                   aria-label={`Delete task ${task.text}`}
+                  aria-disabled={isResultsLocked || undefined}
                >
                   <Trash2 className="h-3.5 w-3.5" />
                </button>
