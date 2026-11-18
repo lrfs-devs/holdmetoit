@@ -48,7 +48,8 @@ export interface TaskBoardState {
    handleSnoozeRolloverToday: () => void;
 }
 
-function mapServerCategories(
+/** Maps the server's categorized payload onto board categories. */
+export function mapServerCategories(
    categories: UserCategorizedTasks["dailyCategories"] | undefined
 ): BoardCategory[] {
    if (!categories || categories.length === 0) return [];
@@ -182,13 +183,28 @@ export function useTaskBoardState({
    );
    const [isRolloverDismissed, setIsRolloverDismissed] = useState(false);
 
+   // Tracks the (user, date) scope the rollover flags currently belong to, so a
+   // scope change can reset them without clobbering the server-provided
+   // initial value on first mount (SSR hydration parity).
+   const rolloverScopeRef = useRef(`${userId ?? ""}|${effectiveTodayDate}`);
+
    useEffect(() => {
       cleanupExpiredRolloverSnooze(userId, effectiveTodayDate);
+      const scope = `${userId ?? ""}|${effectiveTodayDate}`;
+      const scopeChanged = scope !== rolloverScopeRef.current;
       const isSnoozed = isRolloverSnoozedForDate(userId, effectiveTodayDate);
+
+      // Both flags belong to one (user, date) scope. A scope change must not
+      // carry the previous scope's snooze or dismissal forward.
+      if (scopeChanged) {
+         rolloverScopeRef.current = scope;
+         setIsRolloverSnoozed(isSnoozed);
+         setIsRolloverDismissed(false);
+      } else if (isSnoozed && !isRolloverSnoozed) {
+         setIsRolloverSnoozed(true);
+      }
+
       if (isSnoozed) {
-         if (!isRolloverSnoozed) {
-            setIsRolloverSnoozed(true);
-         }
          // Sync to cookie so all future reloads have the cookie on the server
          setRolloverSnoozedForDate(userId, effectiveTodayDate);
       }

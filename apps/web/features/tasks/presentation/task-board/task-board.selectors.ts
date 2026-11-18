@@ -529,11 +529,15 @@ export function applyPendingTasks(
    }
 
    const currentTasks = new Map<string, BoardTask>();
+   // Position of each pending task inside its current category, so a restore
+   // can be inserted where it belongs instead of sorted by title.
+   const currentOrder = new Map<string, number>();
    for (const category of [
       ...current.dailyCategories,
       ...current.weeklyCategories,
    ]) {
-      for (const task of category.tasks) {
+      for (let index = 0; index < category.tasks.length; index++) {
+         const task = category.tasks[index];
          if (!pendingTaskIds.has(task.id)) continue;
          const stored = storedTasks.get(task.id);
 
@@ -552,6 +556,7 @@ export function applyPendingTasks(
          if (queuedOnDisk && !writtenThisMount) continue;
 
          currentTasks.set(task.id, task);
+         currentOrder.set(task.id, index);
       }
    }
 
@@ -567,7 +572,8 @@ export function applyPendingTasks(
       categories: BoardCategory[],
       categoryId: string | undefined,
       categoryName: string,
-      task: BoardTask
+      task: BoardTask,
+      insertIndex: number
    ): boolean => {
       const index = categories.findIndex(
          (category) =>
@@ -577,12 +583,15 @@ export function applyPendingTasks(
       if (index === -1) return false;
 
       const target = categories[index];
-      categories[index] = {
-         ...target,
-         tasks: [...target.tasks, task].sort((a, b) =>
-            (a.text || "").localeCompare(b.text || "")
-         ),
-      };
+      const nextTasks = [...target.tasks];
+      // Restore the task at its in-memory position rather than sorting by
+      // title, which would reorder the whole category on a background sync.
+      nextTasks.splice(
+         Math.min(Math.max(insertIndex, 0), nextTasks.length),
+         0,
+         task
+      );
+      categories[index] = { ...target, tasks: nextTasks };
       return true;
    };
 
@@ -600,13 +609,15 @@ export function applyPendingTasks(
          category.tasks.some((t) => t.id === taskId)
       );
       const targetBoard = isDaily ? nextDaily : nextWeekly;
+      const insertIndex = currentOrder.get(taskId) ?? Number.MAX_SAFE_INTEGER;
 
       if (
          !insertInto(
             targetBoard,
             currentCategory.id,
             currentCategory.name,
-            task
+            task,
+            insertIndex
          )
       ) {
          // The category is not in the snapshot (created locally, not yet
@@ -622,7 +633,8 @@ export function applyPendingTasks(
             targetBoard,
             currentCategory.id,
             currentCategory.name,
-            task
+            task,
+            insertIndex
          );
       }
    }

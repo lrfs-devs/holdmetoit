@@ -34,7 +34,12 @@ import type {
    DragOverInfo,
    DraggedItem,
 } from "../task-board.types";
-import { buildBoardTaskRecord, getTaskStatus } from "../task-board.utils";
+import {
+   buildBoardTaskRecord,
+   getTaskStatus,
+   revertTaskMove,
+   toBoardTask,
+} from "../task-board.utils";
 
 export interface UseTaskDragAndDropOptions {
    userId?: string | null;
@@ -56,7 +61,6 @@ export interface UseTaskDragAndDropOptions {
    commitTaskMove: TaskMoves["commitTaskMove"];
    persistTask: TaskBoardPersistence["persistTask"];
    persistTasks: TaskBoardPersistence["persistTasks"];
-   persistCategory: TaskBoardPersistence["persistCategory"];
 }
 
 export interface TaskDragAndDrop {
@@ -130,7 +134,6 @@ export function useTaskDragAndDrop({
    commitTaskMove,
    persistTask,
    persistTasks,
-   persistCategory,
 }: UseTaskDragAndDropOptions): TaskDragAndDrop {
    /** Week/day stamp a task receives when it changes column. */
    const resolveTargetDueDate = (
@@ -783,6 +786,10 @@ export function useTaskDragAndDrop({
                   categoryId: catId,
                   taskType: targetType,
                   sortOrder: idx,
+                  dueDate:
+                     targetType === "DAILY"
+                        ? selectedDateKey
+                        : (targetDueDate ?? undefined),
                   challengeId:
                      targetType === "WEEKLY" ? (t.challengeId ?? null) : null,
                   nowIso,
@@ -1087,6 +1094,10 @@ export function useTaskDragAndDrop({
                   categoryId: catId,
                   taskType: targetType,
                   sortOrder: idx,
+                  dueDate:
+                     targetType === "DAILY"
+                        ? selectedDateKey
+                        : (targetDueDate ?? undefined),
                   challengeId:
                      targetType === "WEEKLY" ? (t.challengeId ?? null) : null,
                   nowIso,
@@ -1171,6 +1182,28 @@ export function useTaskDragAndDrop({
                   createdAt: Date.now() + 2,
                   retryCount: 0,
                });
+
+               // Mirror the category-header route: every member follows its
+               // category into the new column, and weekly members carry the
+               // viewed week so they stay visible after sync.
+               for (const t of res.movedCategory.tasks ?? []) {
+                  mutations.push({
+                     id: crypto.randomUUID(),
+                     entityType: "TASK",
+                     action: "MOVE",
+                     payload: {
+                        taskId: t.id,
+                        categoryId: catId,
+                        taskType: targetType,
+                        dueDate:
+                           targetType === "DAILY"
+                              ? selectedDateKey
+                              : (targetDueDate ?? null),
+                     },
+                     createdAt: Date.now() + 3,
+                     retryCount: 0,
+                  });
+               }
             }
 
             commitLocalBatch({
@@ -1197,43 +1230,57 @@ export function useTaskDragAndDrop({
                      c.name === sourceCat.name
                );
                let currentDailyCats = dailyCategories;
+               let createdCategoryId: string | undefined;
                if (targetDailyIdx === -1) {
-                  const newCatId = crypto.randomUUID();
+                  createdCategoryId = crypto.randomUUID();
                   const newDailyCat: BoardCategory = {
-                     id: newCatId,
+                     id: createdCategoryId,
                      name: sourceCat.name,
                      isCollapsed: false,
                      tasks: [],
                   };
                   currentDailyCats = [...dailyCategories, newDailyCat];
                   targetDailyIdx = currentDailyCats.length - 1;
-
-                  persistCategory(
-                     {
-                        id: newCatId,
-                        userId: userId ?? null,
-                        name: sourceCat.name,
-                        taskType: "DAILY",
-                        sortOrder: targetDailyIdx,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                        syncState: "pending",
-                     },
-                     {
-                        id: crypto.randomUUID(),
-                        entityType: "CATEGORY",
-                        action: "CREATE",
-                        payload: {
-                           id: newCatId,
-                           name: sourceCat.name,
-                           taskType: "DAILY",
-                           sortOrder: targetDailyIdx,
-                        },
-                        createdAt: Date.now(),
-                        retryCount: 0,
-                     }
-                  ).catch(() => {});
                }
+
+               // Remember the pre-move placement so a failed write can reverse
+               // just this move, leaving any concurrent edit intact.
+               const previousTask = sourceCat.tasks.find(
+                  (task) => task.id === draggedItem.id
+               );
+               const rollbackMove = () => {
+                  if (!previousTask) return;
+                  const rollbackParams = {
+                     taskId: previousTask.id,
+                     task: toBoardTask(previousTask),
+                     sourceColumn: "weekly" as const,
+                     sourceCategoryId: sourceCat.id,
+                     sourceCategoryName: sourceCat.name,
+                  };
+                  setDailyCategories(
+                     (prevDaily) =>
+                        revertTaskMove(
+                           {
+                              dailyCategories: prevDaily,
+                              weeklyCategories: [],
+                           },
+                           {
+                              ...rollbackParams,
+                              createdCategoryId,
+                           }
+                        ).dailyCategories
+                  );
+                  setWeeklyCategories(
+                     (prevWeekly) =>
+                        revertTaskMove(
+                           {
+                              dailyCategories: [],
+                              weeklyCategories: prevWeekly,
+                           },
+                           rollbackParams
+                        ).weeklyCategories
+                  );
+               };
 
                const res = moveTaskBetweenCategories({
                   taskId: draggedItem.id,
@@ -1260,13 +1307,55 @@ export function useTaskDragAndDrop({
                      (isMovedComplete ? "COMPLETED" : "TODO");
                   const sortOrder =
                      currentDailyCats[targetDailyIdx].tasks.length;
+                  const nowIso = new Date().toISOString();
 
-                  commitTaskMove({
-                     task: res.movedTask,
-                     targetCategoryId: res.targetCategoryId,
-                     targetTaskType: res.targetTaskType,
-                     targetDueDate: selectedDateKey,
+                  // The destination category and the moved task are written in
+                  // one batch: a task pointing at an unpersisted category is
+                  // unloadable after reload.
+                  const localCategory: LocalCategoryRecord | null =
+                     createdCategoryId
+                        ? {
+                             id: createdCategoryId,
+                             userId: userId ?? null,
+                             name: sourceCat.name,
+                             taskType: "DAILY",
+                             sortOrder: targetDailyIdx,
+                             createdAt: nowIso,
+                             updatedAt: nowIso,
+                             syncState: "pending",
+                          }
+                        : null;
+
+                  const localTask = buildBoardTaskRecord({
+                     task: toBoardTask(res.movedTask),
+                     userId: userId ?? null,
+                     categoryId: res.targetCategoryId,
+                     taskType: res.targetTaskType,
                      sortOrder,
+                     dueDate: selectedDateKey,
+                     challengeId: null,
+                     nowIso,
+                  });
+
+                  const mutations: Array<Omit<QueuedMutation, "userId">> = [];
+                  if (createdCategoryId) {
+                     mutations.push({
+                        id: crypto.randomUUID(),
+                        entityType: "CATEGORY",
+                        action: "CREATE",
+                        payload: {
+                           id: createdCategoryId,
+                           name: sourceCat.name,
+                           taskType: "DAILY",
+                           sortOrder: targetDailyIdx,
+                        },
+                        createdAt: Date.now(),
+                        retryCount: 0,
+                     });
+                  }
+                  mutations.push({
+                     id: crypto.randomUUID(),
+                     entityType: "TASK",
                      action: "MOVE",
                      payload: {
                         taskId: res.movedTask.id,
@@ -1275,10 +1364,23 @@ export function useTaskDragAndDrop({
                         sortOrder,
                         dueDate: selectedDateKey,
                      },
-                     isComplete: isMovedComplete,
-                     status: movedStatus,
-                     challengeId: null,
+                     createdAt: Date.now() + 1,
+                     retryCount: 0,
                   });
+
+                  commitLocalBatch({
+                     categories: localCategory ? [localCategory] : [],
+                     tasks: [localTask],
+                     mutations:
+                        isLoggedIn && userId
+                           ? mutations.map((mutation) => ({
+                                ...mutation,
+                                userId,
+                             }))
+                           : [],
+                  })
+                     .then(() => scheduleSync(userId))
+                     .catch(() => rollbackMove());
                }
             }
          } else if (
@@ -1300,10 +1402,42 @@ export function useTaskDragAndDrop({
             const targetWeeklyIdx = currentWeeklyCats.length - 1;
             const nowIso = new Date().toISOString();
 
-            // Snapshot before the optimistic move so a failed write can put the
-            // task back where it came from.
-            const snapshotDaily = dailyCategories;
-            const snapshotWeekly = weeklyCategories;
+            // Remember the pre-move placement so a failed write can reverse
+            // just this move, leaving any concurrent edit intact.
+            const previousTask = sourceCat?.tasks.find(
+               (task) => task.id === draggedItem.id
+            );
+            const rollbackMove = () => {
+               if (!previousTask) return;
+               const rollbackParams = {
+                  taskId: previousTask.id,
+                  task: toBoardTask(previousTask),
+                  sourceColumn: "daily" as const,
+                  sourceCategoryId: sourceCat?.id,
+                  sourceCategoryName: sourceCat?.name ?? "General",
+                  createdCategoryId: newCatId,
+               };
+               setDailyCategories(
+                  (prevDaily) =>
+                     revertTaskMove(
+                        {
+                           dailyCategories: prevDaily,
+                           weeklyCategories: [],
+                        },
+                        rollbackParams
+                     ).dailyCategories
+               );
+               setWeeklyCategories(
+                  (prevWeekly) =>
+                     revertTaskMove(
+                        {
+                           dailyCategories: [],
+                           weeklyCategories: prevWeekly,
+                        },
+                        rollbackParams
+                     ).weeklyCategories
+               );
+            };
 
             const targetDueDate = resolveTargetDueDate(
                draggedItem.sourceColumn,
@@ -1410,18 +1544,12 @@ export function useTaskDragAndDrop({
                      ),
                   })
                      .then(() => scheduleSync(userId))
-                     .catch(() => {
-                        setDailyCategories(snapshotDaily);
-                        setWeeklyCategories(snapshotWeekly);
-                     });
+                     .catch(() => rollbackMove());
                } else {
                   Promise.all([
                      putLocalCategories([localCategory]),
                      putLocalTasks([localTask]),
-                  ]).catch(() => {
-                     setDailyCategories(snapshotDaily);
-                     setWeeklyCategories(snapshotWeekly);
-                  });
+                  ]).catch(() => rollbackMove());
                }
             }
          } else if (targetCategories.length > 0) {

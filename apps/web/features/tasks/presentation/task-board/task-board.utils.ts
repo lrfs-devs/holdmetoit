@@ -1,11 +1,48 @@
 import type { TaskStatus, TaskType } from "@/features/tasks/domain/task.types";
 import type { LocalTaskRecord } from "@/features/tasks/domain/task-sync.types";
-import type { BoardTask } from "./task-board.types";
+import type { BoardCategory, BoardTask } from "./task-board.types";
 
 /** Derives the presentation status for a task item. */
 export function getTaskStatus(task: BoardTask): TaskStatus {
    if (task.status) return task.status;
    return task.completed ? "COMPLETED" : "TODO";
+}
+
+/** Any shape a task arrives in from a drag gesture or a domain move helper. */
+export interface LooseTask {
+   id: string;
+   text?: string;
+   title?: string;
+   completed?: boolean;
+   isComplete?: boolean;
+   status?: string;
+   dueDate?: string | null;
+   createdAt?: string | Date;
+   updatedAt?: string;
+   challengeId?: string | null;
+   syncState?: string;
+}
+
+/**
+ * Narrows any drag/shape variant to a full `BoardTask`. Domain move helpers are
+ * generic over looser interfaces, so records coming back from them need this
+ * before they can be re-inserted into board state.
+ */
+export function toBoardTask(task: LooseTask): BoardTask {
+   return {
+      id: task.id,
+      text: task.text ?? task.title ?? "",
+      completed: Boolean(task.completed ?? task.isComplete),
+      status: task.status as TaskStatus | undefined,
+      dueDate: task.dueDate ?? null,
+      createdAt:
+         task.createdAt instanceof Date
+            ? task.createdAt.toISOString()
+            : task.createdAt,
+      updatedAt: task.updatedAt,
+      challengeId: task.challengeId ?? null,
+      syncState: task.syncState,
+   };
 }
 
 /** A task is hidden from the weekly column once its challenge results are locked. */
@@ -100,6 +137,89 @@ export interface BuildMoveIntentParams {
    targetDueDate?: string | null;
    sourceDueDate?: string | null;
    insertIndex: number;
+}
+
+/** Minimal board shape needed to reverse one task move. */
+export interface MoveRollbackBoard {
+   dailyCategories: BoardCategory[];
+   weeklyCategories: BoardCategory[];
+}
+
+export interface RevertTaskMoveParams {
+   taskId: string;
+   /** Pre-move record, re-inserted into its source category. */
+   task: BoardTask;
+   sourceColumn: "daily" | "weekly";
+   sourceCategoryId?: string;
+   sourceCategoryName: string;
+   /** Category created purely by this move; dropped if it ends up empty. */
+   createdCategoryId?: string;
+}
+
+/**
+ * Reverses a single task move against the CURRENT board.
+ *
+ * Unlike restoring a pre-move snapshot, this preserves any task or category
+ * change that landed while the persistence batch was pending.
+ */
+export function revertTaskMove(
+   board: MoveRollbackBoard,
+   params: RevertTaskMoveParams
+): MoveRollbackBoard {
+   const strip = (categories: BoardCategory[]): BoardCategory[] =>
+      categories.map((category) => ({
+         ...category,
+         tasks: category.tasks.filter((task) => task.id !== params.taskId),
+      }));
+
+   const insertBack = (categories: BoardCategory[]): BoardCategory[] => {
+      // Id wins globally: a same-named category earlier in the list must not
+      // capture a task that belongs to the id-matched one.
+      const byId = params.sourceCategoryId
+         ? categories.findIndex(
+              (category) => category.id === params.sourceCategoryId
+           )
+         : -1;
+      const index =
+         byId !== -1
+            ? byId
+            : categories.findIndex(
+                 (category) => category.name === params.sourceCategoryName
+              );
+
+      if (index === -1) {
+         return [
+            ...categories,
+            {
+               id: params.sourceCategoryId,
+               name: params.sourceCategoryName,
+               isCollapsed: false,
+               tasks: [params.task],
+            },
+         ];
+      }
+
+      return categories.map((category, i) =>
+         i === index
+            ? {
+                 ...category,
+                 tasks: [...category.tasks, params.task].sort((a, b) =>
+                    (a.text || "").localeCompare(b.text || "")
+                 ),
+              }
+            : category
+      );
+   };
+
+   const daily = strip(board.dailyCategories);
+   const weekly = strip(board.weeklyCategories).filter(
+      (category) =>
+         !(params.createdCategoryId && category.id === params.createdCategoryId)
+   );
+
+   return params.sourceColumn === "daily"
+      ? { dailyCategories: insertBack(daily), weeklyCategories: weekly }
+      : { dailyCategories: daily, weeklyCategories: insertBack(weekly) };
 }
 
 /** Normalizes any drop/day-pill gesture into one move description. */

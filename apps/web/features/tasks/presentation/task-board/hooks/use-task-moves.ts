@@ -24,7 +24,12 @@ import { scheduleSync } from "@/features/tasks/data/local/task-sync.service";
 import { trackLogRocketEvent } from "@/core/observability/logrocket";
 import type { TaskBoardPersistence } from "./use-task-board-persistence";
 import type { BoardCategory, BoardTask } from "../task-board.types";
-import { buildBoardTaskRecord, getTaskStatus } from "../task-board.utils";
+import {
+   buildBoardTaskRecord,
+   getTaskStatus,
+   revertTaskMove,
+   toBoardTask,
+} from "../task-board.utils";
 
 export interface UseTaskMovesOptions {
    userId?: string | null;
@@ -38,7 +43,6 @@ export interface UseTaskMovesOptions {
    setDailyCategories: Dispatch<SetStateAction<BoardCategory[]>>;
    setWeeklyCategories: Dispatch<SetStateAction<BoardCategory[]>>;
    persistTask: TaskBoardPersistence["persistTask"];
-   persistCategory: TaskBoardPersistence["persistCategory"];
    checkIsDayLocked: (dateKey: string) => boolean;
    getTaskDateKey: (task: BoardTask) => string;
 }
@@ -102,7 +106,6 @@ export function useTaskMoves({
    setDailyCategories,
    setWeeklyCategories,
    persistTask,
-   persistCategory,
    checkIsDayLocked,
    getTaskDateKey,
 }: UseTaskMovesOptions): TaskMoves {
@@ -188,42 +191,24 @@ export function useTaskMoves({
                   c.name === sourceCat.name
             );
             let currentDailyCats = dailyCategories;
+            let createdCategoryId: string | undefined;
             if (targetDailyIdx === -1) {
-               const newCatId = crypto.randomUUID();
+               createdCategoryId = crypto.randomUUID();
                const newDailyCat: BoardCategory = {
-                  id: newCatId,
+                  id: createdCategoryId,
                   name: sourceCat.name,
                   isCollapsed: false,
                   tasks: [],
                };
                currentDailyCats = [...dailyCategories, newDailyCat];
                targetDailyIdx = currentDailyCats.length - 1;
-               persistCategory(
-                  {
-                     id: newCatId,
-                     userId: userId ?? null,
-                     name: sourceCat.name,
-                     taskType: "DAILY",
-                     sortOrder: targetDailyIdx,
-                     createdAt: new Date().toISOString(),
-                     updatedAt: new Date().toISOString(),
-                     syncState: "pending",
-                  },
-                  {
-                     id: crypto.randomUUID(),
-                     entityType: "CATEGORY",
-                     action: "CREATE",
-                     payload: {
-                        id: newCatId,
-                        name: sourceCat.name,
-                        taskType: "DAILY",
-                        sortOrder: targetDailyIdx,
-                     },
-                     createdAt: Date.now(),
-                     retryCount: 0,
-                  }
-               ).catch(() => {});
             }
+
+            // Pre-move record, used to reverse just this move if the write
+            // rejects while other edits are landing.
+            const foundWeeklyPlacement = sourceCat.tasks.find(
+               (task) => task.id === taskId
+            );
 
             const res = moveTaskBetweenCategories({
                taskId,
@@ -248,13 +233,55 @@ export function useTaskMoves({
                   (res.movedTask.status as TaskStatus) ||
                   (isMovedComplete ? "COMPLETED" : "TODO");
                const sortOrder = currentDailyCats[targetDailyIdx].tasks.length;
+               const nowIso = new Date().toISOString();
 
-               commitTaskMove({
-                  task: res.movedTask,
-                  targetCategoryId: res.targetCategoryId,
-                  targetTaskType: "DAILY",
-                  targetDueDate: targetDateKey,
+               // The destination category and the moved task are written in one
+               // batch: a task pointing at an unpersisted category is unloadable
+               // after reload.
+               const localCategory: LocalCategoryRecord | null =
+                  createdCategoryId
+                     ? {
+                          id: createdCategoryId,
+                          userId: userId ?? null,
+                          name: sourceCat.name,
+                          taskType: "DAILY",
+                          sortOrder: targetDailyIdx,
+                          createdAt: nowIso,
+                          updatedAt: nowIso,
+                          syncState: "pending",
+                       }
+                     : null;
+
+               const localTask = buildBoardTaskRecord({
+                  task: toBoardTask(res.movedTask),
+                  userId: userId ?? null,
+                  categoryId: res.targetCategoryId,
+                  taskType: "DAILY",
                   sortOrder,
+                  dueDate: targetDateKey,
+                  challengeId: null,
+                  nowIso,
+               });
+
+               const mutations: Array<Omit<QueuedMutation, "userId">> = [];
+               if (createdCategoryId) {
+                  mutations.push({
+                     id: crypto.randomUUID(),
+                     entityType: "CATEGORY",
+                     action: "CREATE",
+                     payload: {
+                        id: createdCategoryId,
+                        name: sourceCat.name,
+                        taskType: "DAILY",
+                        sortOrder: targetDailyIdx,
+                     },
+                     createdAt: Date.now(),
+                     retryCount: 0,
+                  });
+               }
+               mutations.push({
+                  id: crypto.randomUUID(),
+                  entityType: "TASK",
                   action: "MOVE",
                   payload: {
                      taskId: res.movedTask.id,
@@ -263,11 +290,55 @@ export function useTaskMoves({
                      sortOrder,
                      dueDate: targetDateKey,
                   },
-                  title: res.movedTask.text ?? res.movedTask.title ?? "",
-                  isComplete: isMovedComplete,
-                  status: movedStatus,
-                  challengeId: null,
+                  createdAt: Date.now() + 1,
+                  retryCount: 0,
                });
+
+               commitLocalBatch({
+                  categories: localCategory ? [localCategory] : [],
+                  tasks: [localTask],
+                  mutations:
+                     isLoggedIn && userId
+                        ? mutations.map((mutation) => ({
+                             ...mutation,
+                             userId,
+                          }))
+                        : [],
+               })
+                  .then(() => scheduleSync(userId))
+                  .catch(() => {
+                     if (!foundWeeklyPlacement) return;
+                     const rollbackParams = {
+                        taskId: foundWeeklyPlacement.id,
+                        task: toBoardTask(foundWeeklyPlacement),
+                        sourceColumn: "weekly" as const,
+                        sourceCategoryId: sourceCat.id,
+                        sourceCategoryName: sourceCat.name,
+                     };
+                     setDailyCategories(
+                        (prevDaily) =>
+                           revertTaskMove(
+                              {
+                                 dailyCategories: prevDaily,
+                                 weeklyCategories: [],
+                              },
+                              {
+                                 ...rollbackParams,
+                                 createdCategoryId,
+                              }
+                           ).dailyCategories
+                     );
+                     setWeeklyCategories(
+                        (prevWeekly) =>
+                           revertTaskMove(
+                              {
+                                 dailyCategories: [],
+                                 weeklyCategories: prevWeekly,
+                              },
+                              rollbackParams
+                           ).weeklyCategories
+                     );
+                  });
             }
             return;
          }
@@ -360,7 +431,7 @@ export function useTaskMoves({
          effectiveTodayDate,
          getTaskDateKey,
          hasChallengeContext,
-         persistCategory,
+         isLoggedIn,
          setDailyCategories,
          setWeeklyCategories,
          userId,

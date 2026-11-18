@@ -474,7 +474,21 @@ export function useTaskMutations({
       newDueDate?: string | null
    ) => {
       if (!editTaskModal || !newText.trim()) return;
-      const { id, catIdx, taskType } = editTaskModal;
+      const { id, taskType } = editTaskModal;
+      // Resolve the category from the task at save time: a sync or hydration
+      // can reorder categories while the dialog is open, which would make the
+      // modal's snapshot index point at a different category.
+      const catIdx =
+         taskType === "daily"
+            ? dailyCategories.findIndex((category) =>
+                 category.tasks.some((task) => task.id === id)
+              )
+            : weeklyCategories.findIndex((category) =>
+                 category.tasks.some((task) => task.id === id)
+              );
+      // The task disappeared (deleted or filtered out) while the dialog was
+      // open; nothing to save.
+      if (catIdx === -1) return;
       const trimmed = newText.trim();
       const nextCompleted = newStatus === "COMPLETED";
       const nowIso = new Date().toISOString();

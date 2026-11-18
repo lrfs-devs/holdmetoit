@@ -58,6 +58,12 @@ Toggles already send only `{ taskId, isComplete, status }`; moves and rollovers 
 `error` is never used for a known permanent condition. A zero-row update, a missing target
 category, a name collision, and a foreign row are all `conflict`.
 
+A `REORDER` mutation is all-or-nothing. Each row is written with its expected revision in the
+`where` clause, and a zero-row result aborts the surrounding transaction (`ReorderConflictError`)
+rather than returning early — a returned conflict would let Prisma commit the rows already
+reordered. The client therefore sees either the whole new ordering or none of it, never a
+half-applied blend.
+
 ### 2.3 Category identity
 
 1. **Live wins.** A live row with the same `(userId, taskType, LOWER(name))` wins. A create
@@ -174,7 +180,9 @@ The upgrade only adds the new index/store; existing rows are preserved.
   visible in its own column, and a category appears in the columns where it has tasks. Empty
   categories stay in their own column. This tolerance exists only for un-repaired legacy rows.
 - The results-lock guard applies only to weekly tasks. Legacy daily tasks with a challenge
-  link remain editable; the repair script unlinks them.
+  link remain editable; the repair script unlinks them. Promoting a category to weekly
+  unlinks any legacy daily `challengeId` before the type cascade, so a retype can never
+  manufacture a locked-challenge weekly goal.
 - Historical task data repairs were performed via `repair-task-invariants.ts` (archived in git history). Routine operations preserve invariant guarantees via standard Prisma repositories and transactions.
 
 ### 2.8 Cockpit visibility

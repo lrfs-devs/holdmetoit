@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { BoardTask } from "./task-board.types";
-import { buildBoardTaskRecord, buildMoveIntent } from "./task-board.utils";
+import type { BoardCategory, BoardTask } from "./task-board.types";
+import {
+   buildBoardTaskRecord,
+   buildMoveIntent,
+   revertTaskMove,
+} from "./task-board.utils";
 
 function task(overrides: Partial<BoardTask> = {}): BoardTask {
    return {
@@ -176,6 +180,113 @@ describe("buildMoveIntent", () => {
       ).toMatchObject({
          targetDueDate: "2026-11-17",
          columnChanged: false,
+      });
+   });
+});
+
+function category(
+   overrides: Partial<BoardCategory> & { name: string }
+): BoardCategory {
+   return { isCollapsed: false, tasks: [], ...overrides };
+}
+
+describe("revertTaskMove", () => {
+   it("restores the moved task and keeps tasks added while the write was pending", () => {
+      const board = {
+         dailyCategories: [
+            category({
+               id: "d1",
+               name: "Daily",
+               tasks: [task({ id: "other" })],
+            }),
+         ],
+         weeklyCategories: [
+            category({
+               id: "w1",
+               name: "Weekly",
+               tasks: [task({ id: "t1" }), task({ id: "added" })],
+            }),
+         ],
+      };
+
+      const result = revertTaskMove(board, {
+         taskId: "t1",
+         task: task({ id: "t1", text: "Study" }),
+         sourceColumn: "daily",
+         sourceCategoryId: "d1",
+         sourceCategoryName: "Daily",
+      });
+
+      expect(result.dailyCategories[0].tasks.map((t) => t.id)).toEqual([
+         "other",
+         "t1",
+      ]);
+      // The concurrently added task must survive the rollback.
+      expect(result.weeklyCategories[0].tasks.map((t) => t.id)).toEqual([
+         "added",
+      ]);
+   });
+
+   it("drops a category that the failed move created", () => {
+      const board = {
+         dailyCategories: [],
+         weeklyCategories: [
+            category({
+               id: "w-new",
+               name: "Weekly",
+               tasks: [task({ id: "t1" })],
+            }),
+         ],
+      };
+
+      const result = revertTaskMove(board, {
+         taskId: "t1",
+         task: task({ id: "t1" }),
+         sourceColumn: "daily",
+         sourceCategoryId: "d-source",
+         sourceCategoryName: "Source",
+         createdCategoryId: "w-new",
+      });
+
+      expect(result.weeklyCategories).toEqual([]);
+      expect(result.dailyCategories[0]).toMatchObject({
+         id: "d-source",
+         tasks: [task({ id: "t1" })],
+      });
+   });
+
+   it("matches the source category by id before name and recreates it when absent", () => {
+      const board = {
+         dailyCategories: [
+            category({ id: "by-name", name: "Focus", tasks: [] }),
+            category({ id: "by-id", name: "Renamed", tasks: [] }),
+         ],
+         weeklyCategories: [],
+      };
+
+      const result = revertTaskMove(board, {
+         taskId: "t1",
+         task: task({ id: "t1" }),
+         sourceColumn: "daily",
+         sourceCategoryId: "by-id",
+         sourceCategoryName: "Focus",
+      });
+
+      expect(result.dailyCategories[1].tasks).toHaveLength(1);
+      expect(result.dailyCategories[0].tasks).toHaveLength(0);
+
+      const missing = revertTaskMove(
+         { dailyCategories: [], weeklyCategories: [] },
+         {
+            taskId: "t1",
+            task: task({ id: "t1" }),
+            sourceColumn: "daily",
+            sourceCategoryName: "Gone",
+         }
+      );
+      expect(missing.dailyCategories[0]).toMatchObject({
+         name: "Gone",
+         tasks: [task({ id: "t1" })],
       });
    });
 });

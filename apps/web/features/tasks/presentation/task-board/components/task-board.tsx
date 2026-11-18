@@ -344,8 +344,8 @@ export function TaskBoard({ model }: TaskBoardProps) {
             onTabChange={setMobileActiveTab}
             dailyCompleted={completedDailyTasksForDay}
             dailyTotal={totalDailyTasksForDay}
-            weeklyCompleted={completedWeeklyTasks}
-            weeklyTotal={totalWeeklyTasks}
+            weeklyCompleted={completedWeeklyTasksForWeek}
+            weeklyTotal={totalWeeklyTasksForWeek}
          />
 
          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

@@ -29,6 +29,8 @@ export interface AddTaskModalState {
    errorMessage: string | null;
    setSubmitError: (message: string | null) => void;
    submissionTokenRef: RefObject<number>;
+   /** Mirror of the current draft text, readable from async completions. */
+   textRef: RefObject<string>;
    invalidateSubmission: () => void;
    setText: (value: string) => void;
    setSelectedCategory: (value: string) => void;
@@ -102,6 +104,13 @@ export function useTaskModals({
 
    const categoryInputRef = useRef<HTMLInputElement>(null);
    const categorySelectRef = useRef<HTMLButtonElement>(null);
+   // Mirrors `text` so a save that settles later can tell whether the draft it
+   // submitted is still the one on screen.
+   const textRef = useRef(text);
+   const setTextTracked = (value: string) => {
+      textRef.current = value;
+      setText(value);
+   };
    // Bumped whenever the add dialog is opened or closed, so a save that
    // settles after the draft changed cannot clear or close the new draft.
    const submissionTokenRef = useRef(0);
@@ -124,9 +133,13 @@ export function useTaskModals({
       const isTargetLocked = checkIsDayLocked(rawDateKey);
 
       // If the target day is a locked past challenge day, clamp to today or
-      // the first available non-past day.
+      // the first available non-past day. `todayDayOption` is only used when it
+      // is itself unlocked; otherwise the dialog would open on a date that
+      // submission rejects.
       const initialDateKey = isTargetLocked
-         ? todayDayOption?.dateKey ||
+         ? (todayDayOption && !checkIsDayLocked(todayDayOption.dateKey)
+              ? todayDayOption.dateKey
+              : undefined) ||
            dayOptions.find((d) => !checkIsDayLocked(d.dateKey))?.dateKey ||
            effectiveTodayDate
          : rawDateKey;
@@ -134,7 +147,7 @@ export function useTaskModals({
       setDateKey(initialDateKey);
       setSubmitError(null);
       invalidateSubmission();
-      setText("");
+      setTextTracked("");
       if (dailyCategoryOptions.length > 0) {
          setSelectedCategory(dailyCategoryOptions[0]);
          setIsCreatingCategory(false);
@@ -151,7 +164,7 @@ export function useTaskModals({
       setChallengeScope(linkableChallengeId ? "CHALLENGE" : "PERSONAL");
       setSubmitError(null);
       invalidateSubmission();
-      setText("");
+      setTextTracked("");
       setStatus("TODO");
       setCustomCategory("");
       if (weeklyCategoryOptions.length > 0) {
@@ -198,8 +211,9 @@ export function useTaskModals({
          errorMessage: submitError,
          setSubmitError,
          submissionTokenRef,
+         textRef,
          invalidateSubmission,
-         setText,
+         setText: setTextTracked,
          setSelectedCategory,
          setCustomCategory,
          setIsCreatingCategory,
@@ -210,6 +224,7 @@ export function useTaskModals({
          openWeekly,
          close: () => {
             invalidateSubmission();
+            textRef.current = "";
             setAddModalType(null);
          },
       },

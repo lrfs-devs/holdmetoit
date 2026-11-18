@@ -35,6 +35,7 @@ import {
    applyPendingTasks,
    mapLocalRecordsToBoard,
 } from "../task-board.selectors";
+import { mapServerCategories } from "./use-task-board-state";
 import type { BoardCategory } from "../task-board.types";
 
 export interface UseTaskBoardHydrationOptions {
@@ -45,6 +46,28 @@ export interface UseTaskBoardHydrationOptions {
    weeklyCategoriesRef: MutableRefObject<BoardCategory[]>;
    setDailyCategories: Dispatch<SetStateAction<BoardCategory[]>>;
    setWeeklyCategories: Dispatch<SetStateAction<BoardCategory[]>>;
+}
+
+/**
+ * Cheap content signature for a server snapshot. Used to publish a refreshed
+ * `userTasks` to the board without re-publishing an unchanged payload.
+ */
+function userTasksSignature(userTasks: UserCategorizedTasks): string {
+   const parts: string[] = [];
+   for (const category of userTasks.categories ?? []) {
+      parts.push(`c:${category.id}:${category.name}:${category.taskType}`);
+   }
+   for (const category of [
+      ...(userTasks.dailyCategories ?? []),
+      ...(userTasks.weeklyCategories ?? []),
+   ]) {
+      for (const task of category.tasks ?? []) {
+         parts.push(
+            `t:${task.id}:${task.title}:${task.status ?? ""}:${task.isComplete}:${task.dueDate ?? ""}:${task.categoryId}`
+         );
+      }
+   }
+   return parts.sort().join("|");
 }
 
 function buildSeedRecords(
@@ -109,6 +132,9 @@ export function useTaskBoardHydration({
    // A record stored before this instant was restored from a previous visit;
    // anything newer was produced by this mount.
    const mountStartedAtRef = useRef(Date.now());
+   // Signature of the last server snapshot published to the board, so a
+   // refreshed `userTasks` with identical content does not trigger a re-render.
+   const publishedSignatureRef = useRef<string | null>(null);
 
    useEffect(() => {
       const cleanup = initTaskSync(userId);
@@ -175,6 +201,48 @@ export function useTaskBoardHydration({
                   }
                   if (seedTasks.length > 0) {
                      await putLocalTasks(seedTasks, { skipIfPending: true });
+                  }
+
+                  // Publish the server snapshot only when the board is still
+                  // empty or when `userTasks` arrives with content the board has
+                  // not seen yet. On first mount the board was already built
+                  // from this same `userTasks`, so republishing would undo any
+                  // optimistic update made since.
+                  const serverSignature = userTasksSignature(userTasks);
+                  const hasRenderedTasks =
+                     dailyCategoriesRef.current.length > 0 ||
+                     weeklyCategoriesRef.current.length > 0;
+                  const isFirstPublish = publishedSignatureRef.current === null;
+                  const publish =
+                     !hasRenderedTasks ||
+                     (!isFirstPublish &&
+                        serverSignature !== publishedSignatureRef.current);
+
+                  if (isFirstPublish) {
+                     publishedSignatureRef.current = serverSignature;
+                  }
+
+                  if (publish) {
+                     publishedSignatureRef.current = serverSignature;
+                     const mapped = {
+                        dailyCategories: mapServerCategories(
+                           userTasks.dailyCategories
+                        ),
+                        weeklyCategories: mapServerCategories(
+                           userTasks.weeklyCategories
+                        ),
+                     };
+                     const merged = applyPendingTasks(
+                        mapped,
+                        {
+                           dailyCategories: dailyCategoriesRef.current,
+                           weeklyCategories: weeklyCategoriesRef.current,
+                        },
+                        pendingTaskIds,
+                        mountStartedAtRef.current
+                     );
+                     setDailyCategories(merged.dailyCategories);
+                     setWeeklyCategories(merged.weeklyCategories);
                   }
                }
                return;

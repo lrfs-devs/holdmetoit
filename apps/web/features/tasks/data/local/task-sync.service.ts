@@ -345,6 +345,29 @@ async function runSync(
             return m;
          }
 
+         // A category column change cascades `taskType` to every member task
+         // and bumps each task's revision server-side. Mirror that here, or a
+         // later TASK reorder in this same batch sends a stale base revision
+         // and is rejected as a zero_rows conflict.
+         if (
+            m.entityType === "CATEGORY" &&
+            (m.action === "UPDATE" || m.action === "MOVE") &&
+            typeof (m.payload as Record<string, unknown>).taskType === "string"
+         ) {
+            const revision = tracked.get(id);
+            if (typeof revision === "number") {
+               tracked.set(id, revision + 1);
+            }
+            for (const task of localTaskRecords) {
+               if (task.categoryId !== id) continue;
+               const taskRevision = tracked.get(task.id);
+               if (typeof taskRevision === "number") {
+                  tracked.set(task.id, taskRevision + 1);
+               }
+            }
+            return { ...m, baseRevision: revision };
+         }
+
          const baseRevision = tracked.get(id);
          if (typeof baseRevision === "number") {
             tracked.set(id, baseRevision + 1);

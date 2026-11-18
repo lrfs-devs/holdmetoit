@@ -73,3 +73,28 @@ describe("useTaskModals — submission token", () => {
       expect(result.current.add.submissionTokenRef.current).toBe(token);
    });
 });
+
+describe("useTaskModals — draft text mirror", () => {
+   it("tracks edits so a pending save can detect a newer draft", () => {
+      const { result } = harness();
+
+      act(() => result.current.add.openDaily());
+      act(() => result.current.add.setText("Read Chapter 4"));
+
+      expect(result.current.add.textRef.current).toBe("Read Chapter 4");
+      expect(result.current.add.text).toBe("Read Chapter 4");
+   });
+
+   it("resets the mirror on open and close", () => {
+      const { result } = harness();
+
+      act(() => result.current.add.openDaily());
+      act(() => result.current.add.setText("Stale draft"));
+      act(() => result.current.add.close());
+
+      expect(result.current.add.textRef.current).toBe("");
+
+      act(() => result.current.add.openDaily());
+      expect(result.current.add.textRef.current).toBe("");
+   });
+});

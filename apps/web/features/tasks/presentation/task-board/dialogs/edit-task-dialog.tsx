@@ -256,6 +256,7 @@ export function EditTaskDialog({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                      <button
                         type="button"
+                        aria-pressed={status === "TODO"}
                         onClick={() => onStatusChange("TODO")}
                         className={`flex items-center justify-center gap-1.5 h-10 px-2 rounded-xl text-xs font-semibold border transition-all ${
                            status === "TODO"
@@ -272,6 +273,7 @@ export function EditTaskDialog({
                      </button>
                      <button
                         type="button"
+                        aria-pressed={status === "IN_PROGRESS"}
                         onClick={() => onStatusChange("IN_PROGRESS")}
                         className={`flex items-center justify-center gap-1.5 h-10 px-2 rounded-xl text-xs font-semibold border transition-all ${
                            status === "IN_PROGRESS"
@@ -290,6 +292,7 @@ export function EditTaskDialog({
                      </button>
                      <button
                         type="button"
+                        aria-pressed={status === "COMPLETED"}
                         onClick={() => onStatusChange("COMPLETED")}
                         className={`flex items-center justify-center gap-1.5 h-10 px-2 rounded-xl text-xs font-semibold border transition-all ${
                            status === "COMPLETED"
@@ -308,6 +311,7 @@ export function EditTaskDialog({
                      </button>
                      <button
                         type="button"
+                        aria-pressed={status === "CROSSED_OUT"}
                         onClick={() => onStatusChange("CROSSED_OUT")}
                         className={`flex items-center justify-center gap-1.5 h-10 px-2 rounded-xl text-xs font-semibold border transition-all ${
                            status === "CROSSED_OUT"

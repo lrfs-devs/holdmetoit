@@ -37,12 +37,10 @@ const userCategories: BoardCategory[] = [
 
 const persistTask = vi.fn();
 const persistTasks = vi.fn();
-const persistCategory = vi.fn();
 
 beforeEach(() => {
    persistTask.mockReset().mockResolvedValue(undefined);
    persistTasks.mockReset().mockResolvedValue(undefined);
-   persistCategory.mockReset().mockResolvedValue(undefined);
    commitLocalBatchMock.mockReset().mockResolvedValue(undefined);
 });
 
@@ -76,7 +74,6 @@ function useHarness(
       commitTaskMove: vi.fn(),
       persistTask,
       persistTasks,
-      persistCategory,
    });
 
    return { dnd, weeklyCategories, dailyCategories };
@@ -265,5 +262,41 @@ describe("useTaskDragAndDrop — column and header drops", () => {
          taskType: "WEEKLY",
          dueDate: "2026-11-17",
       });
+   });
+
+   it("sends the viewed week with members when a category is dropped on a column", () => {
+      const daily: BoardCategory[] = [
+         {
+            id: "cat_d",
+            name: "Daily",
+            isCollapsed: false,
+            tasks: [
+               { id: "d1", text: "D1", completed: false, status: "TODO" },
+               { id: "d2", text: "D2", completed: false, status: "TODO" },
+            ],
+         },
+      ];
+      const { result } = renderHook(() => useHarness([], daily));
+
+      act(() => {
+         result.current.dnd.handleCategoryDragStart(dragEvent(), 0, "daily");
+      });
+      act(() => {
+         result.current.dnd.handleColumnDrop(dragEvent(), "weekly");
+      });
+
+      const batch = commitLocalBatchMock.mock.calls[0]?.[0];
+      const memberMoves = (batch?.mutations ?? []).filter(
+         (mutation: { action: string; entityType: string }) =>
+            mutation.action === "MOVE" && mutation.entityType === "TASK"
+      );
+      // Every member follows the category, carrying the viewed week.
+      expect(memberMoves).toHaveLength(2);
+      for (const mutation of memberMoves) {
+         expect(mutation.payload).toMatchObject({
+            taskType: "WEEKLY",
+            dueDate: "2026-11-17",
+         });
+      }
    });
 });

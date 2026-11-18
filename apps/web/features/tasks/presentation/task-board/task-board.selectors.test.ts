@@ -393,4 +393,54 @@ describe("applyPendingTasks", () => {
 
       expect(result.dailyCategories[0].tasks[0].text).toBe("from server");
    });
+
+   it("restores a pending task at its current position, not by title", () => {
+      // The snapshot has [Z, A]; only A is pending and must not be re-sorted.
+      const board = {
+         dailyCategories: [
+            category("d1", "Daily", [
+               task({ id: "zzz", text: "Z" }),
+               task({ id: "aaa", text: "A" }),
+            ]),
+         ],
+         weeklyCategories: [],
+      };
+      const current = {
+         dailyCategories: [
+            category("d1", "Daily", [
+               task({ id: "zzz", text: "Z" }),
+               task({ id: "aaa", text: "A" }),
+            ]),
+         ],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(board, current, new Set(["aaa"]));
+
+      expect(result.dailyCategories[0].tasks.map((t) => t.text)).toEqual([
+         "Z",
+         "A",
+      ]);
+   });
+
+   it("inserts each pending task once when its category is absent", () => {
+      const board = { dailyCategories: [], weeklyCategories: [] };
+      const missing = category("d-new", "New", [
+         task({ id: "a", text: "A" }),
+         task({ id: "b", text: "B" }),
+      ]);
+      const current = {
+         dailyCategories: [missing],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(board, current, new Set(["a", "b"]));
+
+      const ids = result.dailyCategories.flatMap((c) =>
+         c.tasks.map((t) => t.id)
+      );
+      expect(ids).toEqual(["a", "b"]);
+      expect(ids.filter((id) => id === "a")).toHaveLength(1);
+      expect(ids.filter((id) => id === "b")).toHaveLength(1);
+   });
 });

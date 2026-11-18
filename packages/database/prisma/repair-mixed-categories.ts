@@ -58,7 +58,7 @@ async function main() {
       const existing = await prisma.category.findFirst({
          where: {
             userId: task.userId,
-            name: categoryName,
+            name: { equals: categoryName, mode: "insensitive" },
             taskType: task.taskType,
             isDeleted: false,
          },
@@ -71,7 +71,7 @@ async function main() {
          const softDeleted = await prisma.category.findFirst({
             where: {
                userId: task.userId,
-               name: categoryName,
+               name: { equals: categoryName, mode: "insensitive" },
                taskType: task.taskType,
                isDeleted: true,
             },
@@ -155,13 +155,27 @@ async function main() {
             });
          }
 
-         await tx.task.update({
-            where: { id: entry.taskId },
+         // Match the planned state too: if the task changed while this run was
+         // planning, overwriting it would clobber a newer placement. A zero-row
+         // result throws so the transaction rolls back the category revival.
+         const { count } = await tx.task.updateMany({
+            where: {
+               id: entry.taskId,
+               categoryId: entry.fromCategoryId,
+               taskType: entry.taskType,
+               isDeleted: false,
+            },
             data: {
                categoryId: entry.toCategoryId,
                revision: { increment: 1 },
             },
          });
+
+         if (count === 0) {
+            throw new Error(
+               `Task ${entry.taskId} changed during the repair; rolled back. Re-run the script.`
+            );
+         }
       });
    }
 

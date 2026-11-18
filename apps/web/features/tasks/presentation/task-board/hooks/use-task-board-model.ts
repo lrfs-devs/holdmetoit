@@ -387,6 +387,7 @@ export function useTaskBoardModel({
          errorMessage: addSubmitError,
          setSubmitError: setAddSubmitError,
          submissionTokenRef: addSubmissionTokenRef,
+         textRef: addTextRef,
          setText: setNewTodoText,
          setSelectedCategory,
          setCustomCategory,
@@ -427,7 +428,6 @@ export function useTaskBoardModel({
          setDailyCategories,
          setWeeklyCategories,
          persistTask,
-         persistCategory,
          checkIsDayLocked,
          getTaskDateKey,
       });
@@ -467,7 +467,6 @@ export function useTaskBoardModel({
       commitTaskMove,
       persistTask,
       persistTasks,
-      persistCategory,
    });
    const weeklyCategoryNameToId = selectWeeklyCategoryNameToId(
       userTasks?.categories
@@ -941,6 +940,7 @@ export function useTaskBoardModel({
       // If the dialog is closed or reopened while this save is in flight, the
       // new draft owns the board — this submission must not touch it.
       const submissionToken = addSubmissionTokenRef.current;
+      const submittedText = newTodoText.trim();
       const isStaleSubmission = () =>
          addSubmissionTokenRef.current !== submissionToken;
 
@@ -954,9 +954,9 @@ export function useTaskBoardModel({
                   : [],
          });
       } catch {
-         if (isStaleSubmission()) return;
-         // Undo the optimistic insertion but keep the draft so the user can
-         // retry instead of losing the task silently.
+         // Always remove the optimistic row: it was never persisted and has no
+         // queued retry, so leaving it visible guarantees it disappears on
+         // reload.
          const dropTask = (prev: BoardCategory[]) =>
             prev
                .map((category) =>
@@ -982,9 +982,13 @@ export function useTaskBoardModel({
          } else {
             setWeeklyCategories(dropTask);
          }
-         setAddSubmitError(
-            "Could not save this task on this device. Your draft is kept — try again."
-         );
+         // The error belongs to the draft that failed; a newer draft must not
+         // inherit it.
+         if (!isStaleSubmission()) {
+            setAddSubmitError(
+               "Could not save this task on this device. Your draft is kept — try again."
+            );
+         }
          return;
       }
 
@@ -1003,6 +1007,10 @@ export function useTaskBoardModel({
          title: newTodoText.trim(),
          dueDate: resolvedDueDate,
       });
+
+      // Only settle the draft this submission came from. Text typed while the
+      // save was pending belongs to the next task and must not be cleared.
+      if (addTextRef.current.trim() !== submittedText) return;
 
       setNewTodoText("");
       setNewTodoStatus("TODO");

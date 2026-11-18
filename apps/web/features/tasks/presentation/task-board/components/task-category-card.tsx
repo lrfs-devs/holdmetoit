@@ -113,11 +113,22 @@ function TaskCategoryCardComponent({
                            {menuContent}
                         </DropdownMenuContent>
                      </DropdownMenu>
-                     {isCollapsed ? (
-                        <ChevronDown className="h-4 w-4 text-text-tertiary" />
-                     ) : (
-                        <ChevronUp className="h-4 w-4 text-text-tertiary" />
-                     )}
+                     <button
+                        type="button"
+                        onClick={(e) => {
+                           e.stopPropagation();
+                           onToggleCollapse();
+                        }}
+                        aria-expanded={!isCollapsed}
+                        aria-label={`${isCollapsed ? "Expand" : "Collapse"} category ${category.name}`}
+                        className="p-1 rounded-md text-text-tertiary hover:text-white hover:bg-input-bg transition-colors"
+                     >
+                        {isCollapsed ? (
+                           <ChevronDown className="h-4 w-4" />
+                        ) : (
+                           <ChevronUp className="h-4 w-4" />
+                        )}
+                     </button>
                   </div>
                </div>
             </ContextMenuTrigger>

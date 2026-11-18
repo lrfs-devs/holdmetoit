@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import type { TaskStatus } from "@/features/tasks/domain/task.types";
 import type { BoardTask } from "../task-board.types";
 
@@ -128,7 +128,11 @@ export function useTaskRowActions(
    handlers: UseTaskRowActionsOptions
 ): TaskRowActions {
    const latest = useRef(handlers);
-   latest.current = handlers;
+   // Assigned after commit, not during render: React may discard a render, and
+   // a discarded render's handlers must not become the ones rows call.
+   useLayoutEffect(() => {
+      latest.current = handlers;
+   });
 
    return useMemo<TaskRowActions>(
       () => ({

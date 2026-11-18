@@ -42,6 +42,17 @@ type Outcome = Omit<MutationResult, "id">;
 const APPLIED: Outcome = { status: "applied" };
 const INVALID: Outcome = { status: "conflict", reason: "invalid_payload" };
 
+/**
+ * Thrown inside a transaction to abort a partially-applied reorder. Prisma
+ * commits a normally-returned callback, so a later-row conflict must throw to
+ * roll back the rows already written.
+ */
+class ReorderConflictError extends Error {
+   constructor(readonly outcome: Outcome) {
+      super("reorder_conflict");
+   }
+}
+
 function isValidCategoryMutation(m: QueuedMutation): boolean {
    switch (m.action) {
       case "CREATE":
@@ -371,6 +382,24 @@ async function applyCategoryMutation(
             // board never shows a task in the opposite column to its category.
             if (dataToUpdate.taskType) {
                const nextType = dataToUpdate.taskType as TaskType;
+
+               // Promoting a legacy DAILY row that still carried a challengeId
+               // would otherwise create a challenge-linked WEEKLY goal without
+               // passing assertChallengeWritable. Unlink first so only a genuine
+               // weekly goal (already linked before the move) survives promotion.
+               if (nextType === "WEEKLY") {
+                  await tx.task.updateMany({
+                     where: {
+                        categoryId: catId,
+                        userId,
+                        isDeleted: false,
+                        taskType: "DAILY",
+                        challengeId: { not: null },
+                     },
+                     data: { challengeId: null, revision: { increment: 1 } },
+                  });
+               }
+
                await tx.task.updateMany({
                   where: { categoryId: catId, userId, isDeleted: false },
                   data: {
@@ -410,11 +439,11 @@ async function applyCategoryMutation(
             const row = await tx.category.findFirst({
                where: { id: categoryId, userId, isDeleted: false },
             });
-            return {
+            throw new ReorderConflictError({
                status: "conflict",
                reason: "zero_rows",
                currentCategory: row ? toCategoryItem(row) : null,
-            };
+            });
          }
       }
       return APPLIED;
@@ -710,7 +739,42 @@ async function applyTaskMutation(
          }
       } else if (payload.taskType) {
          effectiveTaskType = taskType;
-         dataToUpdate.taskType = taskType;
+         // A task's type must match its category's column. A type-only change
+         // therefore needs a compatible destination category: keep the current
+         // one when it already matches, otherwise resolve one.
+         const storedCategory = await tx.task.findFirst({
+            where: { id: taskId, userId, isDeleted: false },
+            select: { categoryId: true },
+         });
+         const currentCategory = storedCategory?.categoryId
+            ? await tx.category.findFirst({
+                 where: {
+                    id: storedCategory.categoryId,
+                    userId,
+                    isDeleted: false,
+                 },
+                 select: { id: true, taskType: true },
+              })
+            : null;
+
+         if (currentCategory?.taskType === taskType) {
+            dataToUpdate.taskType = taskType;
+         } else {
+            const compatibleCategory = await tx.category.findFirst({
+               where: { userId, taskType, isDeleted: false },
+               orderBy: { sortOrder: "asc" },
+               select: { id: true },
+            });
+            if (!compatibleCategory) {
+               return {
+                  status: "conflict",
+                  reason: "category_missing",
+                  currentTask: null,
+               };
+            }
+            dataToUpdate.categoryId = compatibleCategory.id;
+            dataToUpdate.taskType = taskType;
+         }
       }
 
       // Dropping a weekly task to the daily board must clear its challenge
@@ -815,11 +879,11 @@ async function applyTaskMutation(
             const row = await tx.task.findFirst({
                where: { id: taskIdAtIndex, userId, isDeleted: false },
             });
-            return {
+            throw new ReorderConflictError({
                status: "conflict",
                reason: "zero_rows",
                currentTask: row ? toTaskItem(row, row.taskType) : null,
-            };
+            });
          }
       }
       return APPLIED;
@@ -979,6 +1043,11 @@ export async function processBatchSync(
 
          mutationResults.push({ id: m.id, ...outcome });
       } catch (err) {
+         if (err instanceof ReorderConflictError) {
+            mutationResults.push({ id: m.id, ...err.outcome });
+            continue;
+         }
+
          if (isP2002(err)) {
             try {
                const recovery = await recoverP2002(userId, m);

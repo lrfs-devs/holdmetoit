@@ -293,6 +293,24 @@ function TaskRowComponent({
                   role="checkbox"
                   aria-checked={status === "COMPLETED"}
                   aria-disabled={isResultsLocked || undefined}
+                  tabIndex={isResultsLocked ? -1 : 0}
+                  onKeyDown={
+                     isResultsLocked
+                        ? undefined
+                        : (e) => {
+                             if (e.key !== " " && e.key !== "Enter") return;
+                             e.preventDefault();
+                             // Keyboard activation has no pointer position.
+                             // Derive one from the element so confetti/audio
+                             // anchoring still works.
+                             const rect =
+                                e.currentTarget.getBoundingClientRect();
+                             actions.onToggleStatus(catIdx, task.id, variant, {
+                                clientX: rect.left + rect.width / 2,
+                                clientY: rect.top + rect.height / 2,
+                             } as unknown as React.MouseEvent);
+                          }
+                  }
                   onClick={
                      isResultsLocked
                         ? undefined
