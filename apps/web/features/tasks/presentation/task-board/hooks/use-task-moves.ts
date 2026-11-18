@@ -314,6 +314,7 @@ export function useTaskMoves({
                         sourceColumn: "weekly" as const,
                         sourceCategoryId: sourceCat.id,
                         sourceCategoryName: sourceCat.name,
+                        expectedCategoryId: res.targetCategoryId ?? undefined,
                      };
                      setDailyCategories(
                         (prevDaily) =>

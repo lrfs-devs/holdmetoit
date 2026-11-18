@@ -298,6 +298,10 @@ function TaskRowComponent({
                      isResultsLocked
                         ? undefined
                         : (e) => {
+                             // Only handle keys aimed at the row itself: a
+                             // nested button (status badge, Show more) must
+                             // keep its own keyboard activation.
+                             if (e.target !== e.currentTarget) return;
                              if (e.key !== " " && e.key !== "Enter") return;
                              e.preventDefault();
                              // Keyboard activation has no pointer position.

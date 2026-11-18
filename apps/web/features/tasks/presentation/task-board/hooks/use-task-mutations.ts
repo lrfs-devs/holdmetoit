@@ -559,12 +559,30 @@ export function useTaskMutations({
          return;
       }
 
+      // The task may have been updated by hydration while the dialog was open,
+      // so apply only the patched fields to the CURRENT row. Writing the
+      // form's stale status would undo a newer completion.
+      const currentTasks =
+         taskType === "daily"
+            ? dailyCategories[catIdx].tasks
+            : weeklyCategories[catIdx].tasks;
+      const currentTask = currentTasks.find((t) => t.id === id);
+      if (!currentTask) return;
+
+      const mergedTask = {
+         ...currentTask,
+         ...(patch.title !== undefined ? { text: patch.title } : {}),
+         ...(patch.status !== undefined
+            ? { status: patch.status, completed: patch.isComplete ?? false }
+            : {}),
+         ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
+         ...(patch.challengeId !== undefined
+            ? { challengeId: patch.challengeId }
+            : {}),
+      };
+
       if (nextCompleted) {
-         const prevTask =
-            taskType === "daily"
-               ? dailyCategories[catIdx]?.tasks.find((t) => t.id === id)
-               : weeklyCategories[catIdx]?.tasks.find((t) => t.id === id);
-         if (prevTask && getTaskStatus(prevTask) !== "COMPLETED") {
+         if (getTaskStatus(currentTask) !== "COMPLETED") {
             const targetEl =
                typeof document !== "undefined"
                   ? document.querySelector(`[data-task-id="${id}"]`)
@@ -576,20 +594,12 @@ export function useTaskMutations({
 
       if (taskType === "daily") {
          setDailyCategories((prev) =>
-            prev.map((cat, i) =>
-               i === catIdx
+            prev.map((cat) =>
+               cat.id === dailyCategories[catIdx]?.id
                   ? {
                        ...cat,
                        tasks: cat.tasks.map((t) =>
-                          t.id === id
-                             ? {
-                                  ...t,
-                                  text: trimmed,
-                                  completed: nextCompleted,
-                                  status: newStatus,
-                                  dueDate: resolvedDueDate,
-                               }
-                             : t
+                          t.id === id ? { ...t, ...mergedTask } : t
                        ),
                     }
                   : cat
@@ -597,21 +607,12 @@ export function useTaskMutations({
          );
       } else {
          setWeeklyCategories((prev) =>
-            prev.map((cat, i) =>
-               i === catIdx
+            prev.map((cat) =>
+               cat.id === weeklyCategories[catIdx]?.id
                   ? {
                        ...cat,
                        tasks: cat.tasks.map((t) =>
-                          t.id === id
-                             ? {
-                                  ...t,
-                                  text: trimmed,
-                                  completed: nextCompleted,
-                                  status: newStatus,
-                                  dueDate: resolvedDueDate,
-                                  challengeId: editTaskInputChallengeId,
-                               }
-                             : t
+                          t.id === id ? { ...t, ...mergedTask } : t
                        ),
                     }
                   : cat
@@ -625,18 +626,7 @@ export function useTaskMutations({
             : weeklyCategories[catIdx];
       if (cat?.id) {
          const localTask: LocalTaskRecord = buildBoardTaskRecord({
-            task: {
-               id,
-               text: trimmed,
-               completed: nextCompleted,
-               status: newStatus,
-               dueDate: resolvedDueDate,
-               createdAt: editTaskModal.createdAt,
-               challengeId:
-                  taskType === "weekly"
-                     ? editTaskInputChallengeId
-                     : (editTaskModal.challengeId ?? null),
-            },
+            task: mergedTask,
             userId: userId ?? null,
             categoryId: cat.id,
             taskType: taskType === "daily" ? "DAILY" : "WEEKLY",
@@ -644,13 +634,10 @@ export function useTaskMutations({
                0,
                cat.tasks.findIndex((t) => t.id === id)
             ),
-            isComplete: nextCompleted,
-            status: newStatus,
-            dueDate: resolvedDueDate,
-            challengeId:
-               taskType === "weekly"
-                  ? editTaskInputChallengeId
-                  : (editTaskModal.challengeId ?? null),
+            isComplete: mergedTask.completed,
+            status: mergedTask.status,
+            dueDate: mergedTask.dueDate,
+            challengeId: mergedTask.challengeId ?? null,
             nowIso,
          });
 

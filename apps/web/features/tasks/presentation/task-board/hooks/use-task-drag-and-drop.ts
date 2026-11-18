@@ -786,10 +786,9 @@ export function useTaskDragAndDrop({
                   categoryId: catId,
                   taskType: targetType,
                   sortOrder: idx,
-                  dueDate:
-                     targetType === "DAILY"
-                        ? selectedDateKey
-                        : (targetDueDate ?? undefined),
+                  // `undefined` preserves each member's own date; a cross-column
+                  // move supplies the selected day or the viewed week.
+                  dueDate: targetDueDate,
                   challengeId:
                      targetType === "WEEKLY" ? (t.challengeId ?? null) : null,
                   nowIso,
@@ -1094,10 +1093,9 @@ export function useTaskDragAndDrop({
                   categoryId: catId,
                   taskType: targetType,
                   sortOrder: idx,
-                  dueDate:
-                     targetType === "DAILY"
-                        ? selectedDateKey
-                        : (targetDueDate ?? undefined),
+                  // `undefined` preserves each member's own date; a cross-column
+                  // move supplies the selected day or the viewed week.
+                  dueDate: targetDueDate,
                   challengeId:
                      targetType === "WEEKLY" ? (t.challengeId ?? null) : null,
                   nowIso,
@@ -1256,7 +1254,9 @@ export function useTaskDragAndDrop({
                      sourceColumn: "weekly" as const,
                      sourceCategoryId: sourceCat.id,
                      sourceCategoryName: sourceCat.name,
+                     expectedCategoryId: createdCategoryId,
                   };
+                  // The created category lives on the DESTINATION board (daily).
                   setDailyCategories(
                      (prevDaily) =>
                         revertTaskMove(
@@ -1415,7 +1415,7 @@ export function useTaskDragAndDrop({
                   sourceColumn: "daily" as const,
                   sourceCategoryId: sourceCat?.id,
                   sourceCategoryName: sourceCat?.name ?? "General",
-                  createdCategoryId: newCatId,
+                  expectedCategoryId: newCatId,
                };
                setDailyCategories(
                   (prevDaily) =>
@@ -1434,7 +1434,8 @@ export function useTaskDragAndDrop({
                            dailyCategories: [],
                            weeklyCategories: prevWeekly,
                         },
-                        rollbackParams
+                        // The created category lives on the WEEKLY board.
+                        { ...rollbackParams, createdCategoryId: newCatId }
                      ).weeklyCategories
                );
             };
@@ -1546,10 +1547,14 @@ export function useTaskDragAndDrop({
                      .then(() => scheduleSync(userId))
                      .catch(() => rollbackMove());
                } else {
-                  Promise.all([
-                     putLocalCategories([localCategory]),
-                     putLocalTasks([localTask]),
-                  ]).catch(() => rollbackMove());
+                  // Guests have no queue, but the two records must still be
+                  // written atomically: separate transactions cannot undo each
+                  // other, leaving a task pointing at a missing category.
+                  commitLocalBatch({
+                     categories: [localCategory],
+                     tasks: [localTask],
+                     mutations: [],
+                  }).catch(() => rollbackMove());
                }
             }
          } else if (targetCategories.length > 0) {

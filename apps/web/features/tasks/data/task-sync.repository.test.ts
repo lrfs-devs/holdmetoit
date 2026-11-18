@@ -15,6 +15,7 @@ function p2002(): Prisma.PrismaClientKnownRequestError {
 vi.mock("@/core/db", () => ({
    prisma: {
       $transaction: vi.fn(),
+      $queryRaw: vi.fn().mockResolvedValue([]),
       category: {
          findUnique: vi.fn(),
          findFirst: vi.fn(),
@@ -140,11 +141,18 @@ describe("processBatchSync (task-sync.repository)", () => {
          },
       });
 
-      // A category type change cascades to its child tasks.
+      // A category type change cascades to its legacy DAILY child tasks in a
+      // single write, clearing any inherited challenge link.
       expect(prisma.task.updateMany).toHaveBeenCalledWith({
-         where: { categoryId: catId, userId, isDeleted: false },
+         where: {
+            categoryId: catId,
+            userId,
+            isDeleted: false,
+            taskType: "DAILY",
+         },
          data: {
             taskType: "WEEKLY",
+            challengeId: null,
             revision: { increment: 1 },
          },
       });
@@ -1304,21 +1312,21 @@ describe("processBatchSync (task-sync.repository)", () => {
             id: "mut-promote-cat",
             status: "applied",
          });
-         // The stale daily link is cleared before the type cascade, so the
-         // promotion cannot manufacture a locked-challenge weekly goal.
-         expect(prisma.task.updateMany).toHaveBeenNthCalledWith(1, {
+         // The legacy daily link is cleared in the SAME write that promotes the
+         // row, so each member gains exactly one revision increment.
+         expect(prisma.task.updateMany).toHaveBeenCalledTimes(1);
+         expect(prisma.task.updateMany).toHaveBeenCalledWith({
             where: {
                categoryId: "cat_1",
                userId,
                isDeleted: false,
                taskType: "DAILY",
-               challengeId: { not: null },
             },
-            data: { challengeId: null, revision: { increment: 1 } },
-         });
-         expect(prisma.task.updateMany).toHaveBeenNthCalledWith(2, {
-            where: { categoryId: "cat_1", userId, isDeleted: false },
-            data: { taskType: "WEEKLY", revision: { increment: 1 } },
+            data: {
+               taskType: "WEEKLY",
+               challengeId: null,
+               revision: { increment: 1 },
+            },
          });
       });
 
@@ -1716,6 +1724,9 @@ describe("processBatchSync (task-sync.repository)", () => {
          } as never)
          // the compatible destination
          .mockResolvedValueOnce({ id: "cat_daily" } as never);
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+         { id: "cat_daily", taskType: "DAILY" },
+      ] as never);
 
       const res = await processBatchSync(userId, [
          {
@@ -1835,10 +1846,17 @@ describe("processBatchSync (task-sync.repository)", () => {
             data: expect.objectContaining({ taskType: "WEEKLY" }),
          })
       );
+      // Promotion only rewrites legacy DAILY members, in one write each.
       expect(prisma.task.updateMany).toHaveBeenCalledWith({
-         where: { categoryId: "cat_goal", userId, isDeleted: false },
+         where: {
+            categoryId: "cat_goal",
+            userId,
+            isDeleted: false,
+            taskType: "DAILY",
+         },
          data: {
             taskType: "WEEKLY",
+            challengeId: null,
             revision: { increment: 1 },
          },
       });

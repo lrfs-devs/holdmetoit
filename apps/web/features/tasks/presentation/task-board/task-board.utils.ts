@@ -154,6 +154,12 @@ export interface RevertTaskMoveParams {
    sourceCategoryName: string;
    /** Category created purely by this move; dropped if it ends up empty. */
    createdCategoryId?: string;
+   /**
+    * Category the task was moved INTO. When the task no longer sits there, a
+    * later operation has placed it elsewhere and this rollback must not undo
+    * that newer placement.
+    */
+   expectedCategoryId?: string;
 }
 
 /**
@@ -166,6 +172,18 @@ export function revertTaskMove(
    board: MoveRollbackBoard,
    params: RevertTaskMoveParams
 ): MoveRollbackBoard {
+   // A newer move of the same task owns the board now; undoing this failed
+   // write would drag it back to the pre-move position.
+   if (params.expectedCategoryId) {
+      const all = [...board.dailyCategories, ...board.weeklyCategories];
+      const holder = all.find((category) =>
+         category.tasks.some((task) => task.id === params.taskId)
+      );
+      if (holder && holder.id !== params.expectedCategoryId) {
+         return board;
+      }
+   }
+
    const strip = (categories: BoardCategory[]): BoardCategory[] =>
       categories.map((category) => ({
          ...category,
@@ -211,11 +229,21 @@ export function revertTaskMove(
       );
    };
 
-   const daily = strip(board.dailyCategories);
-   const weekly = strip(board.weeklyCategories).filter(
-      (category) =>
-         !(params.createdCategoryId && category.id === params.createdCategoryId)
-   );
+   const stripCreated = (categories: BoardCategory[]): BoardCategory[] =>
+      !params.createdCategoryId
+         ? categories
+         : categories.filter(
+              (category) =>
+                 category.id !== params.createdCategoryId ||
+                 // Another task landed in it while the write was pending:
+                 // dropping it would hide that task.
+                 category.tasks.length > 0
+           );
+
+   // Strip first: the created category's emptiness must be judged AFTER the
+   // failed task has been removed from it.
+   const daily = stripCreated(strip(board.dailyCategories));
+   const weekly = stripCreated(strip(board.weeklyCategories));
 
    return params.sourceColumn === "daily"
       ? { dailyCategories: insertBack(daily), weeklyCategories: weekly }

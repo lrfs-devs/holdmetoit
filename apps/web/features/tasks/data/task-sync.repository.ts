@@ -383,32 +383,37 @@ async function applyCategoryMutation(
             if (dataToUpdate.taskType) {
                const nextType = dataToUpdate.taskType as TaskType;
 
-               // Promoting a legacy DAILY row that still carried a challengeId
-               // would otherwise create a challenge-linked WEEKLY goal without
-               // passing assertChallengeWritable. Unlink first so only a genuine
-               // weekly goal (already linked before the move) survives promotion.
                if (nextType === "WEEKLY") {
+                  // Promoting a legacy DAILY row that still carried a
+                  // challengeId would otherwise create a challenge-linked
+                  // WEEKLY goal without passing assertChallengeWritable.
+                  // Unlink and retype in ONE write so the row gains a single
+                  // revision increment. Members that were already WEEKLY keep
+                  // their scope and need no write at all.
                   await tx.task.updateMany({
                      where: {
                         categoryId: catId,
                         userId,
                         isDeleted: false,
                         taskType: "DAILY",
-                        challengeId: { not: null },
                      },
-                     data: { challengeId: null, revision: { increment: 1 } },
+                     data: {
+                        taskType: "WEEKLY",
+                        challengeId: null,
+                        revision: { increment: 1 },
+                     },
+                  });
+               } else {
+                  await tx.task.updateMany({
+                     where: { categoryId: catId, userId, isDeleted: false },
+                     data: {
+                        taskType: "DAILY",
+                        // Challenge links are only valid on weekly tasks.
+                        challengeId: null,
+                        revision: { increment: 1 },
+                     },
                   });
                }
-
-               await tx.task.updateMany({
-                  where: { categoryId: catId, userId, isDeleted: false },
-                  data: {
-                     taskType: nextType,
-                     // Challenge links are only valid on weekly tasks.
-                     ...(nextType === "DAILY" ? { challengeId: null } : {}),
-                     revision: { increment: 1 },
-                  },
-               });
             }
          }
       }
@@ -772,9 +777,38 @@ async function applyTaskMutation(
                   currentTask: null,
                };
             }
-            dataToUpdate.categoryId = compatibleCategory.id;
+            // Lock the destination and recheck its type under the lock: the
+            // default READ COMMITTED level lets a concurrent write retype it
+            // between the lookup and the task update.
+            const lockedRows = await tx.$queryRaw<
+               { id: string; taskType: TaskType }[]
+            >`SELECT "id", "taskType" FROM "Category"
+              WHERE "id" = ${compatibleCategory.id} AND "userId" = ${userId}
+                AND "isDeleted" = false
+              FOR UPDATE`;
+            const locked = lockedRows[0];
+            if (!locked || locked.taskType !== taskType) {
+               return {
+                  status: "conflict",
+                  reason: "category_missing",
+                  currentTask: null,
+               };
+            }
+            dataToUpdate.categoryId = locked.id;
             dataToUpdate.taskType = taskType;
          }
+      }
+
+      // A legacy DAILY row promoted to WEEKLY must not inherit its challenge
+      // link: that would create a weekly goal of a possibly results-locked
+      // challenge without passing assertChallengeWritable. An explicit
+      // payload.challengeId is applied below through the writable resolver.
+      if (
+         payload.taskType === "WEEKLY" &&
+         currentTaskGuard?.taskType === "DAILY" &&
+         payload.challengeId === undefined
+      ) {
+         dataToUpdate.challengeId = null;
       }
 
       // Dropping a weekly task to the daily board must clear its challenge

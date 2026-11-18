@@ -27,6 +27,7 @@ import type {
    CategoryItem,
    TaskItem,
    TaskStatus,
+   TaskType,
 } from "@/features/tasks/domain/task.types";
 import { sortMutationsChronologically } from "@/features/tasks/domain/task-sync.schema";
 
@@ -289,6 +290,22 @@ async function runSync(
          }
       }
 
+      // Board state as the queue is replayed: a category mutation's cascade
+      // must see the members it will actually have at that position, not the
+      // optimistic snapshot (which already holds the destination category).
+      const taskCategoryRef = new Map<string, string>();
+      for (const task of localTaskRecords) {
+         taskCategoryRef.set(task.id, task.categoryId);
+      }
+      const taskTypeRef = new Map<string, TaskType>();
+      for (const task of localTaskRecords) {
+         taskTypeRef.set(task.id, task.taskType);
+      }
+      const categoryTypeRef = new Map<string, TaskType>();
+      for (const category of localCategoryRecords) {
+         categoryTypeRef.set(category.id, category.taskType);
+      }
+
       const enriched = sortMutationsChronologically(mutations).map((m) => {
          const id = entityIdOf(m);
 
@@ -345,27 +362,75 @@ async function runSync(
             return m;
          }
 
-         // A category column change cascades `taskType` to every member task
-         // and bumps each task's revision server-side. Mirror that here, or a
-         // later TASK reorder in this same batch sends a stale base revision
-         // and is rejected as a zero_rows conflict.
+         // A category column change cascades `taskType` to every affected
+         // member task and bumps each task's revision server-side. Mirror that
+         // here, or a later TASK reorder in this same batch sends a stale base
+         // revision and is rejected as a zero_rows conflict.
+         //
+         // Membership and type are evaluated at this mutation's queue
+         // position, not from the local snapshot: an optimistic move already
+         // writes the destination categoryId before its mutation is applied.
          if (
             m.entityType === "CATEGORY" &&
             (m.action === "UPDATE" || m.action === "MOVE") &&
             typeof (m.payload as Record<string, unknown>).taskType === "string"
          ) {
-            const revision = tracked.get(id);
-            if (typeof revision === "number") {
-               tracked.set(id, revision + 1);
+            const nextType = (m.payload as Record<string, unknown>)
+               .taskType as TaskType;
+            const previousType = categoryTypeRef.get(id) ?? null;
+
+            // No type change (e.g. a same-column reorder): the server leaves
+            // the member rows untouched, so advance nothing.
+            if (previousType !== nextType) {
+               const revision = tracked.get(id);
+               if (typeof revision === "number") {
+                  tracked.set(id, revision + 1);
+               }
+
+               for (const [taskId, categoryId] of taskCategoryRef) {
+                  if (categoryId !== id) continue;
+                  const taskTypeNow = taskTypeRef.get(taskId);
+
+                  // Promoting to WEEKLY only writes legacy DAILY rows; moving
+                  // to DAILY rewrites every member.
+                  if (nextType === "WEEKLY" && taskTypeNow !== "DAILY")
+                     continue;
+
+                  const taskRevision = tracked.get(taskId);
+                  if (typeof taskRevision === "number") {
+                     tracked.set(taskId, taskRevision + 1);
+                  }
+                  taskTypeRef.set(taskId, nextType);
+               }
+               categoryTypeRef.set(id, nextType);
+               return { ...m, baseRevision: revision };
             }
-            for (const task of localTaskRecords) {
-               if (task.categoryId !== id) continue;
-               const taskRevision = tracked.get(task.id);
-               if (typeof taskRevision === "number") {
-                  tracked.set(task.id, taskRevision + 1);
+
+            // Same-column sort only: the category row still gains a revision
+            // when the payload carries other fields.
+            const hasOtherFields = Object.keys(
+               m.payload as Record<string, unknown>
+            ).some((key) => key !== "taskType" && key !== "categoryId");
+            if (hasOtherFields) {
+               const revision = tracked.get(id);
+               if (typeof revision === "number") {
+                  tracked.set(id, revision + 1);
+                  return { ...m, baseRevision: revision };
                }
             }
-            return { ...m, baseRevision: revision };
+            return m;
+         }
+
+         // Track task membership/type as the queue is walked, so later category
+         // mutations see the board state at their own position.
+         if (m.entityType === "TASK") {
+            const payload = m.payload as Record<string, unknown>;
+            if (typeof payload.categoryId === "string") {
+               taskCategoryRef.set(id, payload.categoryId);
+            }
+            if (payload.taskType === "DAILY" || payload.taskType === "WEEKLY") {
+               taskTypeRef.set(id, payload.taskType);
+            }
          }
 
          const baseRevision = tracked.get(id);

@@ -529,9 +529,13 @@ export function applyPendingTasks(
    }
 
    const currentTasks = new Map<string, BoardTask>();
-   // Position of each pending task inside its current category, so a restore
-   // can be inserted where it belongs instead of sorted by title.
+   // In-memory index and identity of each pending task's neighbours, so a
+   // restore can anchor on rows that still exist instead of a raw position.
    const currentOrder = new Map<string, number>();
+   const currentNeighbours = new Map<
+      string,
+      { before?: string; after?: string }
+   >();
    for (const category of [
       ...current.dailyCategories,
       ...current.weeklyCategories,
@@ -557,6 +561,10 @@ export function applyPendingTasks(
 
          currentTasks.set(task.id, task);
          currentOrder.set(task.id, index);
+         currentNeighbours.set(task.id, {
+            before: category.tasks[index - 1]?.id,
+            after: category.tasks[index + 1]?.id,
+         });
       }
    }
 
@@ -573,7 +581,8 @@ export function applyPendingTasks(
       categoryId: string | undefined,
       categoryName: string,
       task: BoardTask,
-      insertIndex: number
+      neighbours: { before?: string; after?: string },
+      fallbackIndex: number
    ): boolean => {
       const index = categories.findIndex(
          (category) =>
@@ -584,13 +593,23 @@ export function applyPendingTasks(
 
       const target = categories[index];
       const nextTasks = [...target.tasks];
-      // Restore the task at its in-memory position rather than sorting by
-      // title, which would reorder the whole category on a background sync.
-      nextTasks.splice(
-         Math.min(Math.max(insertIndex, 0), nextTasks.length),
-         0,
-         task
-      );
+      // Anchor on the surviving in-memory neighbours: using a raw index would
+      // push the task past rows the snapshot still holds.
+      const afterIdx = neighbours.after
+         ? nextTasks.findIndex((t) => t.id === neighbours.after)
+         : -1;
+      const beforeIdx = neighbours.before
+         ? nextTasks.findIndex((t) => t.id === neighbours.before)
+         : -1;
+
+      const insertAt =
+         beforeIdx !== -1
+            ? beforeIdx + 1
+            : afterIdx !== -1
+              ? afterIdx
+              : Math.min(Math.max(fallbackIndex, 0), nextTasks.length);
+
+      nextTasks.splice(insertAt, 0, task);
       categories[index] = { ...target, tasks: nextTasks };
       return true;
    };
@@ -610,6 +629,7 @@ export function applyPendingTasks(
       );
       const targetBoard = isDaily ? nextDaily : nextWeekly;
       const insertIndex = currentOrder.get(taskId) ?? Number.MAX_SAFE_INTEGER;
+      const neighbours = currentNeighbours.get(taskId) ?? {};
 
       if (
          !insertInto(
@@ -617,6 +637,7 @@ export function applyPendingTasks(
             currentCategory.id,
             currentCategory.name,
             task,
+            neighbours,
             insertIndex
          )
       ) {
@@ -634,6 +655,7 @@ export function applyPendingTasks(
             currentCategory.id,
             currentCategory.name,
             task,
+            neighbours,
             insertIndex
          );
       }

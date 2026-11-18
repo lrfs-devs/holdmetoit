@@ -49,25 +49,42 @@ export interface UseTaskBoardHydrationOptions {
 }
 
 /**
- * Cheap content signature for a server snapshot. Used to publish a refreshed
- * `userTasks` to the board without re-publishing an unchanged payload.
+ * Content signature for a server snapshot, in display order.
+ *
+ * Covers every field the board renders so a scope change (e.g. a cleared
+ * `challengeId`) is detected, and keeps the original order so a reorder-only
+ * refresh is not mistaken for "unchanged".
  */
 function userTasksSignature(userTasks: UserCategorizedTasks): string {
    const parts: string[] = [];
    for (const category of userTasks.categories ?? []) {
-      parts.push(`c:${category.id}:${category.name}:${category.taskType}`);
+      parts.push(
+         `c:${category.id}:${category.name}:${category.taskType}:${category.sortOrder ?? 0}`
+      );
    }
    for (const category of [
       ...(userTasks.dailyCategories ?? []),
       ...(userTasks.weeklyCategories ?? []),
    ]) {
+      parts.push(`g:${category.id}:${category.name}:${category.taskType}`);
       for (const task of category.tasks ?? []) {
          parts.push(
-            `t:${task.id}:${task.title}:${task.status ?? ""}:${task.isComplete}:${task.dueDate ?? ""}:${task.categoryId}`
+            [
+               "t",
+               task.id,
+               task.title,
+               task.status ?? "",
+               task.isComplete,
+               task.dueDate ?? "",
+               task.categoryId,
+               task.challengeId ?? "",
+               task.sortOrder ?? 0,
+            ].join(":")
          );
       }
    }
-   return parts.sort().join("|");
+   // NOT sorted: order is part of what the board renders.
+   return parts.join("|");
 }
 
 function buildSeedRecords(
@@ -135,6 +152,12 @@ export function useTaskBoardHydration({
    // Signature of the last server snapshot published to the board, so a
    // refreshed `userTasks` with identical content does not trigger a re-render.
    const publishedSignatureRef = useRef<string | null>(null);
+   // Signature of the snapshot the board was initialized from. Recorded before
+   // any async work so a fast prop change cannot be mistaken for "already
+   // rendered".
+   const initialSignatureRef = useRef<string | null>(
+      userTasks ? userTasksSignature(userTasks) : null
+   );
 
    useEffect(() => {
       const cleanup = initTaskSync(userId);
@@ -203,27 +226,30 @@ export function useTaskBoardHydration({
                      await putLocalTasks(seedTasks, { skipIfPending: true });
                   }
 
-                  // Publish the server snapshot only when the board is still
-                  // empty or when `userTasks` arrives with content the board has
-                  // not seen yet. On first mount the board was already built
-                  // from this same `userTasks`, so republishing would undo any
-                  // optimistic update made since.
+                  // A newer `userTasks` invalidated this run while the seed was
+                  // writing: publish nothing from the stale snapshot.
+                  if (isCancelled) return;
+
                   const serverSignature = userTasksSignature(userTasks);
                   const hasRenderedTasks =
                      dailyCategoriesRef.current.length > 0 ||
                      weeklyCategoriesRef.current.length > 0;
-                  const isFirstPublish = publishedSignatureRef.current === null;
-                  const publish =
-                     !hasRenderedTasks ||
-                     (!isFirstPublish &&
-                        serverSignature !== publishedSignatureRef.current);
 
-                  if (isFirstPublish) {
-                     publishedSignatureRef.current = serverSignature;
+                  // Record the signature of the snapshot that INITIALIZED the
+                  // board, so a later S1 is not silently treated as "already
+                  // shown" while the board still renders S0.
+                  if (publishedSignatureRef.current === null) {
+                     publishedSignatureRef.current =
+                        initialSignatureRef.current ?? serverSignature;
                   }
 
+                  // Publish when the board is empty, or when this snapshot
+                  // differs from the one the board currently renders.
+                  const publish =
+                     !hasRenderedTasks ||
+                     serverSignature !== publishedSignatureRef.current;
+
                   if (publish) {
-                     publishedSignatureRef.current = serverSignature;
                      const mapped = {
                         dailyCategories: mapServerCategories(
                            userTasks.dailyCategories
@@ -232,15 +258,35 @@ export function useTaskBoardHydration({
                            userTasks.weeklyCategories
                         ),
                      };
+
+                     // Re-read the queue: the earlier read happened before
+                     // these writes, so an edit made during the seed would be
+                     // invisible and overwritten by the server snapshot.
+                     const latestPending = userId
+                        ? await getQueuedMutationsForUser(userId)
+                        : [];
+                     if (isCancelled) return;
+                     const latestPendingIds = new Set(
+                        latestPending.map((mutation) => {
+                           const p = mutation.payload as Record<
+                              string,
+                              unknown
+                           >;
+                           return String(p.taskId || p.id || "");
+                        })
+                     );
+                     latestPendingIds.delete("");
+
                      const merged = applyPendingTasks(
                         mapped,
                         {
                            dailyCategories: dailyCategoriesRef.current,
                            weeklyCategories: weeklyCategoriesRef.current,
                         },
-                        pendingTaskIds,
+                        latestPendingIds,
                         mountStartedAtRef.current
                      );
+                     publishedSignatureRef.current = serverSignature;
                      setDailyCategories(merged.dailyCategories);
                      setWeeklyCategories(merged.weeklyCategories);
                   }
