@@ -881,8 +881,12 @@ export function useTaskDragAndDrop({
                         taskId: t.id,
                         categoryId: catId,
                         taskType: targetType,
+                        // Weekly members must carry the viewed week; a null
+                        // due date would bucket them under their creation week.
                         dueDate:
-                           targetType === "DAILY" ? selectedDateKey : null,
+                           targetType === "DAILY"
+                              ? selectedDateKey
+                              : (targetDueDate ?? null),
                      },
                      createdAt: Date.now(),
                      retryCount: 0,
@@ -960,6 +964,54 @@ export function useTaskDragAndDrop({
                isComplete: isMovedComplete,
                status: movedStatus,
             });
+
+            // Persist the whole destination order. Writing only the moved
+            // task at 0 leaves duplicate sortOrder values behind, so the list
+            // can reshuffle after a reload.
+            const targetCategoryId = res.targetCategoryId;
+            const destinationCategory = (
+               res.targetTaskType === "DAILY"
+                  ? res.dailyCategories
+                  : res.weeklyCategories
+            ).find((category) => category.id === targetCategoryId);
+
+            if (destinationCategory && destinationCategory.tasks.length > 0) {
+               const nowIso = new Date().toISOString();
+               const tasksToUpdate: LocalTaskRecord[] =
+                  destinationCategory.tasks.map((t, idx) =>
+                     buildBoardTaskRecord({
+                        task: t,
+                        userId: userId ?? null,
+                        categoryId: targetCategoryId,
+                        taskType: res.targetTaskType,
+                        sortOrder: idx,
+                        challengeId:
+                           res.targetTaskType === "WEEKLY"
+                              ? (t.challengeId ?? null)
+                              : null,
+                        nowIso,
+                     })
+                  );
+
+               const taskIds = destinationCategory.tasks
+                  .map((t) => t.id)
+                  .filter((id) => Boolean(id));
+
+               if (isLoggedIn && userId && taskIds.length > 0) {
+                  persistTasks(tasksToUpdate, {
+                     id: crypto.randomUUID(),
+                     entityType: "TASK",
+                     action: "REORDER",
+                     payload: { taskIds },
+                     createdAt: Date.now() + 1,
+                     retryCount: 0,
+                  })
+                     .then(() => scheduleSync(userId))
+                     .catch(() => {});
+               } else {
+                  putLocalTasks(tasksToUpdate).catch(() => {});
+               }
+            }
          }
       }
 
@@ -1227,6 +1279,96 @@ export function useTaskDragAndDrop({
                      challengeId: null,
                   });
                }
+            }
+         } else if (
+            targetColumn === "weekly" &&
+            draggedItem.sourceColumn === "daily" &&
+            targetCategories.length === 0
+         ) {
+            // Mirror the weekly→daily route: without a destination category
+            // the drop would be silently discarded.
+            const sourceCat = dailyCategories[draggedItem.sourceCatIdx];
+            const newCatId = crypto.randomUUID();
+            const newWeeklyCat: BoardCategory = {
+               id: newCatId,
+               name: sourceCat?.name ?? "Weekly",
+               isCollapsed: false,
+               tasks: [],
+            };
+            const currentWeeklyCats = [...weeklyCategories, newWeeklyCat];
+            const targetWeeklyIdx = currentWeeklyCats.length - 1;
+
+            persistCategory(
+               {
+                  id: newCatId,
+                  userId: userId ?? null,
+                  name: newWeeklyCat.name,
+                  taskType: "WEEKLY",
+                  sortOrder: targetWeeklyIdx,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  syncState: "pending",
+               },
+               {
+                  id: crypto.randomUUID(),
+                  entityType: "CATEGORY",
+                  action: "CREATE",
+                  payload: {
+                     id: newCatId,
+                     name: newWeeklyCat.name,
+                     taskType: "WEEKLY",
+                     sortOrder: targetWeeklyIdx,
+                  },
+                  createdAt: Date.now(),
+                  retryCount: 0,
+               }
+            ).catch(() => {});
+
+            const targetDueDate = resolveTargetDueDate(
+               draggedItem.sourceColumn,
+               targetColumn
+            );
+            const res = moveTaskBetweenCategories({
+               taskId: draggedItem.id,
+               sourceCategoryIndex: draggedItem.sourceCatIdx,
+               sourceColumn: draggedItem.sourceColumn,
+               targetCategoryIndex: targetWeeklyIdx,
+               targetColumn,
+               targetTaskIndex: 0,
+               targetDueDate,
+               dailyCategories,
+               weeklyCategories: currentWeeklyCats,
+            });
+
+            setDailyCategories(res.dailyCategories);
+            setWeeklyCategories(res.weeklyCategories);
+
+            if (res.movedTask && res.targetCategoryId) {
+               const isMovedComplete = Boolean(
+                  res.movedTask.completed ?? res.movedTask.isComplete
+               );
+               const movedStatus =
+                  (res.movedTask.status as TaskStatus) ||
+                  (isMovedComplete ? "COMPLETED" : "TODO");
+
+               commitTaskMove({
+                  task: res.movedTask,
+                  targetCategoryId: res.targetCategoryId,
+                  targetTaskType: res.targetTaskType,
+                  targetDueDate: res.movedTask.dueDate ?? targetDueDate ?? null,
+                  sortOrder: 0,
+                  action: "MOVE",
+                  payload: {
+                     taskId: res.movedTask.id,
+                     categoryId: res.targetCategoryId,
+                     taskType: res.targetTaskType,
+                     sortOrder: 0,
+                     dueDate: res.movedTask.dueDate ?? targetDueDate ?? null,
+                  },
+                  isComplete: isMovedComplete,
+                  status: movedStatus,
+                  challengeId: null,
+               });
             }
          } else if (targetCategories.length > 0) {
             const lastCatIdx = targetCategories.length - 1;

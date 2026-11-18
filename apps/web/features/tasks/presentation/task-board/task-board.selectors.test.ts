@@ -224,6 +224,29 @@ describe("applyPendingTasks", () => {
       expect(result.dailyCategories[1].tasks.map((t) => t.id)).toEqual(["a"]);
    });
 
+   it("keeps a queued IndexedDB placement instead of the in-memory snapshot", () => {
+      const board = {
+         dailyCategories: [
+            category("cx", "X", [task({ id: "a", syncState: "pending" })]),
+            category("cy", "Y", []),
+         ],
+         weeklyCategories: [],
+      };
+      const current = {
+         dailyCategories: [
+            category("cx", "X", []),
+            category("cy", "Y", [task({ id: "a" })]),
+         ],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(board, current, new Set(["a"]));
+
+      // The queued record outranks the (older) server snapshot.
+      expect(result.dailyCategories[0].tasks.map((t) => t.id)).toEqual(["a"]);
+      expect(result.dailyCategories[1].tasks).toHaveLength(0);
+   });
+
    it("keeps a pending task in its newer column", () => {
       const board = {
          dailyCategories: [category("d1", "Daily", [task({ id: "a" })])],

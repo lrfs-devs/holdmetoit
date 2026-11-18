@@ -278,11 +278,23 @@ function TaskRowComponent({
                <div
                   role="checkbox"
                   aria-checked={status === "COMPLETED"}
-                  onClick={(e) =>
-                     actions.onToggleStatus(catIdx, task.id, variant, e)
+                  aria-disabled={isResultsLocked || undefined}
+                  onClick={
+                     isResultsLocked
+                        ? undefined
+                        : (e) =>
+                             actions.onToggleStatus(catIdx, task.id, variant, e)
                   }
-                  className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer"
-                  title={STATUS_HINT[status]}
+                  className={`flex items-start gap-3 flex-1 min-w-0 ${
+                     isResultsLocked
+                        ? "cursor-not-allowed opacity-70"
+                        : "cursor-pointer"
+                  }`}
+                  title={
+                     isResultsLocked
+                        ? "Challenge results are locked — this goal is read-only"
+                        : STATUS_HINT[status]
+                  }
                >
                   <div
                      className={`h-5 w-5 rounded flex items-center justify-center border transition-all shrink-0 mt-0.5 ${

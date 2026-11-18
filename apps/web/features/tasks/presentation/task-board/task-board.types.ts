@@ -11,7 +11,10 @@ export interface BoardTask {
    status?: TaskStatus;
    dueDate?: string | null;
    createdAt?: string;
+   updatedAt?: string;
    challengeId?: string | null;
+   /** Local sync state; "synced" means the server snapshot is authoritative. */
+   syncState?: string;
 }
 
 /** Presentation view model for a category column on the board. */

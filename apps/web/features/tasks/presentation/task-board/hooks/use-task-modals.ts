@@ -26,6 +26,8 @@ export interface AddTaskModalState {
    challengeScope: TaskScope;
    categoryInputRef: RefObject<HTMLInputElement | null>;
    categorySelectRef: RefObject<HTMLButtonElement | null>;
+   errorMessage: string | null;
+   setSubmitError: (message: string | null) => void;
    setText: (value: string) => void;
    setSelectedCategory: (value: string) => void;
    setCustomCategory: (value: string) => void;
@@ -93,6 +95,8 @@ export function useTaskModals({
    const [status, setStatus] = useState<TaskStatus>("TODO");
    const [dateKey, setDateKey] = useState<string>("");
    const [challengeScope, setChallengeScope] = useState<TaskScope>("CHALLENGE");
+   // Set when persistence rejects; keeps the draft visible for a retry.
+   const [submitError, setSubmitError] = useState<string | null>(null);
 
    const categoryInputRef = useRef<HTMLInputElement>(null);
    const categorySelectRef = useRef<HTMLButtonElement>(null);
@@ -120,6 +124,7 @@ export function useTaskModals({
          : rawDateKey;
 
       setDateKey(initialDateKey);
+      setSubmitError(null);
       setText("");
       if (dailyCategoryOptions.length > 0) {
          setSelectedCategory(dailyCategoryOptions[0]);
@@ -135,6 +140,7 @@ export function useTaskModals({
 
    const openWeekly = () => {
       setChallengeScope(linkableChallengeId ? "CHALLENGE" : "PERSONAL");
+      setSubmitError(null);
       setText("");
       setStatus("TODO");
       setCustomCategory("");
@@ -179,6 +185,8 @@ export function useTaskModals({
          challengeScope,
          categoryInputRef,
          categorySelectRef,
+         errorMessage: submitError,
+         setSubmitError,
          setText,
          setSelectedCategory,
          setCustomCategory,

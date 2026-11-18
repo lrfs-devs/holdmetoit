@@ -299,6 +299,9 @@ function WeeklyTaskBoardComponent({ model }: WeeklyTaskBoardProps) {
                                     catType="weekly"
                                     dailyCategories={dailyCategories}
                                     weeklyCategories={weeklyCategories}
+                                    completedChallengeIdSet={
+                                       completedChallengeIdSet
+                                    }
                                     selectedDateKey={selectedDateKey}
                                     effectiveTodayDate={effectiveTodayDate}
                                     dayOptions={dayOptions}
@@ -336,6 +339,9 @@ function WeeklyTaskBoardComponent({ model }: WeeklyTaskBoardProps) {
                                     catType="weekly"
                                     dailyCategories={dailyCategories}
                                     weeklyCategories={weeklyCategories}
+                                    completedChallengeIdSet={
+                                       completedChallengeIdSet
+                                    }
                                     selectedDateKey={selectedDateKey}
                                     effectiveTodayDate={effectiveTodayDate}
                                     dayOptions={dayOptions}

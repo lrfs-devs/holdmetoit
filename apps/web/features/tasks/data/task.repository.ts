@@ -752,6 +752,17 @@ export async function deleteCategory(params: {
       });
       categoryTasks.forEach((task) => assertWeeklyTaskEditable(task));
 
+      // A results-locked goal is a permanent record: deleting its category
+      // must not remove it.
+      const lockedChallengeIds = new Set(
+         categoryTasks
+            .map((task) => task.challengeId)
+            .filter((id): id is string => Boolean(id))
+      );
+      for (const challengeId of lockedChallengeIds) {
+         await assertChallengeWritable(tx, challengeId);
+      }
+
       await tx.task.updateMany({
          where: {
             categoryId: params.categoryId,

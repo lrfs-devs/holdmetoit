@@ -187,14 +187,17 @@ visible so the board matches the card's `x/y Completed` counter and the user kee
 of what they committed to. `completedChallengeIds` is computed server-side from the task's
 challenge relation and passed to the cockpit; the client never infers it from task status.
 
-Visibility is not editability. A goal from a finished challenge is marked read-only: the
-row renders a lock beside its challenge badge and the task menu disables Edit, Goal Scope,
-and Delete with the message "This challenge's results are locked; goals can no longer be
-changed". Status toggles stay enabled because they record a fact, not a goal. Enforcement is
-server-side: `assertChallengeWritable` rejects goal writes when `resultsLockedAt != null`,
-and the 24-hour weekly grace lock still blocks rename/delete on older goals. The weekly
-board performs no local filtering, so displaying a row can never queue a delete or rewrite a
-challenge result.
+Visibility is not editability. A goal from a finished challenge is fully read-only: the row
+renders a lock beside its challenge badge, the checkbox is disabled, and the task menu
+disables Status, Edit, Goal Scope, and Delete with the message "This challenge's results are
+locked; goals can no longer be changed". Status is not exempt — the server rejects every
+mutation on a results-locked goal, so an enabled toggle would only bounce back.
+
+Enforcement is server-side. `assertChallengeWritable` rejects goal writes when
+`resultsLockedAt != null`, the category guards (`categoryHasLockedGoals`, `deleteCategory`)
+refuse to retype or remove a category holding a locked goal, and the 24-hour weekly grace
+lock still blocks rename/delete on older goals. The weekly board performs no local
+filtering, so displaying a row can never queue a delete or rewrite a challenge result.
 
 ---
 

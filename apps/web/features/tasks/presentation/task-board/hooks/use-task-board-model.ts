@@ -384,6 +384,8 @@ export function useTaskBoardModel({
          challengeScope: addTodoChallengeScope,
          categoryInputRef,
          categorySelectRef,
+         errorMessage: addSubmitError,
+         setSubmitError: setAddSubmitError,
          setText: setNewTodoText,
          setSelectedCategory,
          setCustomCategory,
@@ -568,6 +570,7 @@ export function useTaskBoardModel({
          collapsedCategoryIdsRef,
          getTaskDateKey,
          checkIsDayLocked,
+         completedChallengeIdSet,
       });
 
    const { total: totalDailyTasks, completed: completedDailyTasks } =
@@ -680,7 +683,7 @@ export function useTaskBoardModel({
          linkableChallengeId,
       ]
    );
-   const handleAddTodoSubmit = (e: React.FormEvent) => {
+   const handleAddTodoSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!newTodoText.trim()) return;
 
@@ -806,7 +809,7 @@ export function useTaskBoardModel({
             (c) => c.name === targetCategoryName
          );
          const existingInServer = userTasks?.categories?.find(
-            (c) => c.name === targetCategoryName
+            (c) => c.taskType === "WEEKLY" && c.name === targetCategoryName
          );
 
          targetCatId =
@@ -934,18 +937,51 @@ export function useTaskBoardModel({
          retryCount: 0,
       });
 
-      commitLocalBatch({
-         categories: localCategories,
-         tasks: localTasks,
-         mutations:
-            isLoggedIn && userId
-               ? mutations.map((mutation) => ({ ...mutation, userId }))
-               : [],
-      })
-         .then(() => scheduleSync(userId))
-         .catch(() => {});
+      try {
+         await commitLocalBatch({
+            categories: localCategories,
+            tasks: localTasks,
+            mutations:
+               isLoggedIn && userId
+                  ? mutations.map((mutation) => ({ ...mutation, userId }))
+                  : [],
+         });
+      } catch {
+         // Undo the optimistic insertion but keep the draft so the user can
+         // retry instead of losing the task silently.
+         const dropTask = (prev: BoardCategory[]) =>
+            prev
+               .map((category) =>
+                  category.id === targetCatId
+                     ? {
+                          ...category,
+                          tasks: category.tasks.filter(
+                             (task) => task.id !== newTask.id
+                          ),
+                       }
+                     : category
+               )
+               .filter(
+                  (category) =>
+                     !(
+                        isNew &&
+                        category.id === targetCatId &&
+                        category.tasks.length === 0
+                     )
+               );
+         if (addModalType === "daily") {
+            setDailyCategories(dropTask);
+         } else {
+            setWeeklyCategories(dropTask);
+         }
+         setAddSubmitError(
+            "Could not save this task on this device. Your draft is kept — try again."
+         );
+         return;
+      }
 
       if (isLoggedIn && userId) {
+         scheduleSync(userId);
          trackLogRocketEvent("TaskCreated", {
             taskType,
             isNewCategory: isNew,

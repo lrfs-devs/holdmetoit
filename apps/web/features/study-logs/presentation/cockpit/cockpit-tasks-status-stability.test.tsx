@@ -196,8 +196,10 @@ describe("CockpitTasksSection - Task Status Transition Stability & Anti-Flash", 
             title: "Read Chapter 4 Biology",
             taskType: "DAILY",
             sortOrder: 0,
-            isComplete: false,
-            status: "IN_PROGRESS", // Old status in IDB
+            // A queued TOGGLE always has its optimistic record persisted, so
+            // IndexedDB already reflects the completed status.
+            isComplete: true,
+            status: "COMPLETED",
             dueDate: todayDate,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),

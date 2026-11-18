@@ -35,6 +35,8 @@ export interface UseCategoryMutationsOptions {
    collapsedCategoryIdsRef: MutableRefObject<Set<string>>;
    getTaskDateKey: (task: BoardTask) => string;
    checkIsDayLocked: (dateKey: string) => boolean;
+   /** Challenges whose results are locked; their goals cannot be deleted. */
+   completedChallengeIdSet?: Set<string>;
 }
 
 export interface CategoryMutations {
@@ -61,6 +63,7 @@ export function useCategoryMutations({
    collapsedCategoryIdsRef,
    getTaskDateKey,
    checkIsDayLocked,
+   completedChallengeIdSet,
 }: UseCategoryMutationsOptions): CategoryMutations {
    const handleSaveEditCategory = (newName: string) => {
       if (!editCategoryModal || !newName.trim()) return;
@@ -157,7 +160,13 @@ export function useCategoryMutations({
          )
       );
 
-      if (hasLockedTasks || hasGraceLockedTasks) {
+      const hasResultsLockedTasks = Boolean(
+         weeklyTargetCat?.tasks.some(
+            (t) => t.challengeId && completedChallengeIdSet?.has(t.challengeId)
+         )
+      );
+
+      if (hasLockedTasks || hasGraceLockedTasks || hasResultsLockedTasks) {
          setDeleteCategoryModal(null);
          return;
       }

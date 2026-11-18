@@ -139,9 +139,18 @@ async function categoryHasLockedGoals(
 ): Promise<boolean> {
    const tasks = await tx.task.findMany({
       where: { categoryId, userId, isDeleted: false },
-      select: { taskType: true, challengeId: true, createdAt: true },
+      select: {
+         taskType: true,
+         challengeId: true,
+         createdAt: true,
+         challenge: { select: { resultsLockedAt: true } },
+      },
    });
-   return tasks.some((task) => isWeeklyTaskGraceExpired(task));
+   return tasks.some(
+      (task) =>
+         isWeeklyTaskGraceExpired(task) ||
+         task.challenge?.resultsLockedAt != null
+   );
 }
 
 async function applyCategoryMutation(
@@ -601,6 +610,9 @@ async function applyTaskMutation(
       taskType: TaskType;
       createdAt: Date;
    } | null = null;
+   // Resolved once and reused by the write block: the post-move column comes
+   // from the destination category.
+   let resolvedTargetCategory: { id: string; taskType: TaskType } | null = null;
 
    if (
       m.action === "UPDATE" ||
@@ -638,13 +650,28 @@ async function applyTaskMutation(
          }
       }
 
+      // Resolve the destination category before the lock checks. The task's
+      // post-move column is derived from it, so a category-only MOVE must face
+      // the same grace-lock rules as an explicit taskType change.
+      resolvedTargetCategory = categoryId
+         ? await tx.category.findFirst({
+              where: { id: categoryId, userId, isDeleted: false },
+              select: { id: true, taskType: true },
+           })
+         : null;
+      const nextTaskType: TaskType =
+         resolvedTargetCategory?.taskType ??
+         (payload.taskType
+            ? taskType
+            : (currentTaskGuard?.taskType ?? taskType));
+
       const changesLockedFields =
          m.action === "DELETE" ||
          ((m.action === "UPDATE" || m.action === "MOVE") &&
             (Boolean(title) ||
                payload.challengeId !== undefined ||
-               (Boolean(payload.taskType) &&
-                  taskType !== currentTaskGuard?.taskType)));
+               (currentTaskGuard != null &&
+                  nextTaskType !== currentTaskGuard.taskType)));
 
       if (
          currentTaskGuard &&
@@ -673,9 +700,7 @@ async function applyTaskMutation(
 
       if (title) dataToUpdate.title = title;
       if (categoryId) {
-         const targetCat = await tx.category.findFirst({
-            where: { id: categoryId, userId, isDeleted: false },
-         });
+         const targetCat = resolvedTargetCategory;
          if (targetCat) {
             dataToUpdate.categoryId = categoryId;
             // A task's board column follows the category it belongs to.

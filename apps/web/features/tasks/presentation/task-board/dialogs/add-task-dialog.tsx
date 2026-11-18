@@ -42,6 +42,7 @@ export interface AddTaskDialogProps {
    hasChallengeContext: boolean;
    categoryInputRef: RefObject<HTMLInputElement | null>;
    categorySelectRef: RefObject<HTMLButtonElement | null>;
+   errorMessage?: string | null;
    onTextChange: (value: string) => void;
    onSelectedCategoryChange: (value: string) => void;
    onCustomCategoryChange: (value: string) => void;
@@ -74,6 +75,7 @@ export function AddTaskDialog({
    hasChallengeContext,
    categoryInputRef,
    categorySelectRef,
+   errorMessage,
    onTextChange,
    onSelectedCategoryChange,
    onCustomCategoryChange,

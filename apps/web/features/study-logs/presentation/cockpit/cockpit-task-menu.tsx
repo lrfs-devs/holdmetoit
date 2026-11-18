@@ -6,6 +6,7 @@ import {
    RotateCcw,
    Calendar,
    ArrowRight,
+   Lock,
    Pencil,
    Trash2,
    Trophy,
@@ -131,104 +132,123 @@ export function TaskMenuItems({
 
    return (
       <>
-         {status === "COMPLETED" ? (
+         {isResultsLocked ? (
             <Item
-               onSelect={() => onSetStatus("TODO")}
-               onClick={() => onSetStatus("TODO")}
-               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-text-secondary rounded-lg hover:bg-surface-nested transition-colors text-left"
+               disabled
+               title={readOnlyReason}
+               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-text-tertiary cursor-not-allowed text-left opacity-50"
             >
-               <RotateCcw className="h-3.5 w-3.5 text-text-tertiary" />
-               <span>Reset to To-Do</span>
+               <Lock className="h-3.5 w-3.5 text-text-tertiary" />
+               <span>Status (Locked)</span>
             </Item>
          ) : (
-            <Item
-               onSelect={() => onSetStatus("COMPLETED")}
-               onClick={() => onSetStatus("COMPLETED")}
-               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-emerald-300 rounded-lg hover:bg-emerald-500/10 transition-colors text-left"
-            >
-               <Check className="h-3.5 w-3.5 text-emerald-400" />
-               <span>Mark as Completed</span>
-            </Item>
-         )}
+            <>
+               {status === "COMPLETED" ? (
+                  <Item
+                     onSelect={() => onSetStatus("TODO")}
+                     onClick={() => onSetStatus("TODO")}
+                     className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-text-secondary rounded-lg hover:bg-surface-nested transition-colors text-left"
+                  >
+                     <RotateCcw className="h-3.5 w-3.5 text-text-tertiary" />
+                     <span>Reset to To-Do</span>
+                  </Item>
+               ) : (
+                  <Item
+                     onSelect={() => onSetStatus("COMPLETED")}
+                     onClick={() => onSetStatus("COMPLETED")}
+                     className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-emerald-300 rounded-lg hover:bg-emerald-500/10 transition-colors text-left"
+                  >
+                     <Check className="h-3.5 w-3.5 text-emerald-400" />
+                     <span>Mark as Completed</span>
+                  </Item>
+               )}
 
-         <Separator />
-         <Label>Status</Label>
+               <Separator />
+               <Label>Status</Label>
 
-         <Item
-            onSelect={() => onSetStatus("IN_PROGRESS")}
-            onClick={() => onSetStatus("IN_PROGRESS")}
-            className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-left ${
-               status === "IN_PROGRESS"
-                  ? "text-white bg-surface-nested"
-                  : "text-text-tertiary hover:bg-surface-nested hover:text-text-secondary"
-            }`}
-         >
-            <div className="flex items-center gap-2">
-               <span
-                  className={`h-2 w-2 rounded-full ${
-                     status === "IN_PROGRESS" ? "bg-amber-400" : "bg-input-bg"
+               <Item
+                  onSelect={() => onSetStatus("IN_PROGRESS")}
+                  onClick={() => onSetStatus("IN_PROGRESS")}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-left ${
+                     status === "IN_PROGRESS"
+                        ? "text-white bg-surface-nested"
+                        : "text-text-tertiary hover:bg-surface-nested hover:text-text-secondary"
                   }`}
-               />
-               <span>In Progress</span>
-            </div>
-            {status === "IN_PROGRESS" && (
-               <Check className="h-3 w-3 text-amber-400" />
-            )}
-         </Item>
+               >
+                  <div className="flex items-center gap-2">
+                     <span
+                        className={`h-2 w-2 rounded-full ${
+                           status === "IN_PROGRESS"
+                              ? "bg-amber-400"
+                              : "bg-input-bg"
+                        }`}
+                     />
+                     <span>In Progress</span>
+                  </div>
+                  {status === "IN_PROGRESS" && (
+                     <Check className="h-3 w-3 text-amber-400" />
+                  )}
+               </Item>
 
-         <Item
-            onSelect={() => onSetStatus("COMPLETED")}
-            onClick={() => onSetStatus("COMPLETED")}
-            className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-left ${
-               status === "COMPLETED"
-                  ? "text-white bg-surface-nested"
-                  : "text-text-tertiary hover:bg-surface-nested hover:text-text-secondary"
-            }`}
-         >
-            <div className="flex items-center gap-2">
-               <span
-                  className={`h-2 w-2 rounded-full ${
-                     status === "COMPLETED" ? "bg-emerald-400" : "bg-input-bg"
+               <Item
+                  onSelect={() => onSetStatus("COMPLETED")}
+                  onClick={() => onSetStatus("COMPLETED")}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-left ${
+                     status === "COMPLETED"
+                        ? "text-white bg-surface-nested"
+                        : "text-text-tertiary hover:bg-surface-nested hover:text-text-secondary"
                   }`}
-               />
-               <span>Completed</span>
-            </div>
-            {status === "COMPLETED" && (
-               <Check className="h-3 w-3 text-emerald-400" />
-            )}
-         </Item>
+               >
+                  <div className="flex items-center gap-2">
+                     <span
+                        className={`h-2 w-2 rounded-full ${
+                           status === "COMPLETED"
+                              ? "bg-emerald-400"
+                              : "bg-input-bg"
+                        }`}
+                     />
+                     <span>Completed</span>
+                  </div>
+                  {status === "COMPLETED" && (
+                     <Check className="h-3 w-3 text-emerald-400" />
+                  )}
+               </Item>
 
-         <Item
-            onSelect={() => onSetStatus("CROSSED_OUT")}
-            onClick={() => onSetStatus("CROSSED_OUT")}
-            className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-left ${
-               status === "CROSSED_OUT"
-                  ? "text-white bg-surface-nested"
-                  : "text-text-tertiary hover:bg-surface-nested hover:text-text-secondary"
-            }`}
-         >
-            <div className="flex items-center gap-2">
-               <span
-                  className={`h-2 w-2 rounded-full ${
-                     status === "CROSSED_OUT" ? "bg-rose-400" : "bg-input-bg"
+               <Item
+                  onSelect={() => onSetStatus("CROSSED_OUT")}
+                  onClick={() => onSetStatus("CROSSED_OUT")}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-left ${
+                     status === "CROSSED_OUT"
+                        ? "text-white bg-surface-nested"
+                        : "text-text-tertiary hover:bg-surface-nested hover:text-text-secondary"
                   }`}
-               />
-               <span>Crossed Out</span>
-            </div>
-            {status === "CROSSED_OUT" && (
-               <Check className="h-3 w-3 text-rose-400" />
-            )}
-         </Item>
+               >
+                  <div className="flex items-center gap-2">
+                     <span
+                        className={`h-2 w-2 rounded-full ${
+                           status === "CROSSED_OUT"
+                              ? "bg-rose-400"
+                              : "bg-input-bg"
+                        }`}
+                     />
+                     <span>Crossed Out</span>
+                  </div>
+                  {status === "CROSSED_OUT" && (
+                     <Check className="h-3 w-3 text-rose-400" />
+                  )}
+               </Item>
 
-         {status !== "TODO" && (
-            <Item
-               onSelect={() => onSetStatus("TODO")}
-               onClick={() => onSetStatus("TODO")}
-               className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-text-tertiary hover:bg-surface-nested hover:text-text-secondary rounded-lg transition-colors text-left"
-            >
-               <RotateCcw className="h-3 w-3 text-text-tertiary" />
-               <span>Reset to To-Do</span>
-            </Item>
+               {status !== "TODO" && (
+                  <Item
+                     onSelect={() => onSetStatus("TODO")}
+                     onClick={() => onSetStatus("TODO")}
+                     className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-text-tertiary hover:bg-surface-nested hover:text-text-secondary rounded-lg transition-colors text-left"
+                  >
+                     <RotateCcw className="h-3 w-3 text-text-tertiary" />
+                     <span>Reset to To-Do</span>
+                  </Item>
+               )}
+            </>
          )}
 
          {moveDaysConfig && (
@@ -369,6 +389,8 @@ interface CategoryMenuItemsProps {
    effectiveTodayDate: string;
    dayOptions: ChallengeDayOption[];
    isChallengeActive?: boolean;
+   /** Challenges whose results are locked; their goals cannot be deleted. */
+   completedChallengeIdSet?: Set<string>;
    onMoveCategoryToDay: (targetDateKey: string) => void;
    onRenameCategory: () => void;
    onDeleteCategory: () => void;
@@ -386,6 +408,7 @@ export function CategoryMenuItems({
    effectiveTodayDate,
    dayOptions,
    isChallengeActive = true,
+   completedChallengeIdSet,
    onMoveCategoryToDay,
    onRenameCategory,
    onDeleteCategory,
@@ -414,9 +437,17 @@ export function CategoryMenuItems({
          })
       )
    );
+   // Mirrors the server guard: a results-locked goal cannot be removed with
+   // its category, even while it is still inside the 24h grace window.
+   const hasResultsLockedTasks = Boolean(
+      weeklyTargetCat?.tasks.some(
+         (t) => t.challengeId && completedChallengeIdSet?.has(t.challengeId)
+      )
+   );
+   const isCategoryDeleteLocked = hasGraceLockedTasks || hasResultsLockedTasks;
 
    const eligibleDays =
-      catIdx === -1 || (!isDaily && hasGraceLockedTasks)
+      catIdx === -1 || (!isDaily && isCategoryDeleteLocked)
          ? []
          : dayOptions.filter((opt) => {
               if (isDaily) {
@@ -505,14 +536,16 @@ export function CategoryMenuItems({
             <span>Rename Category</span>
          </Item>
 
-         {hasPastTasks || hasGraceLockedTasks ? (
+         {hasPastTasks || isCategoryDeleteLocked ? (
             <Item
                disabled
                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-text-tertiary cursor-not-allowed text-left opacity-50"
                title={
-                  hasGraceLockedTasks
-                     ? "Categories containing locked weekly goals cannot be deleted"
-                     : "Categories containing tasks on past challenge days cannot be deleted"
+                  hasResultsLockedTasks
+                     ? "This challenge's results are locked; its goals cannot be deleted"
+                     : hasGraceLockedTasks
+                       ? "Categories containing locked weekly goals cannot be deleted"
+                       : "Categories containing tasks on past challenge days cannot be deleted"
                }
             >
                <Trash2 className="h-3.5 w-3.5 text-text-tertiary" />

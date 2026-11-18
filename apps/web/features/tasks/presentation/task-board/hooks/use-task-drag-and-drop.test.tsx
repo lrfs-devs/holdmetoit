@@ -5,6 +5,18 @@ import { useState } from "react";
 import { useTaskDragAndDrop } from "./use-task-drag-and-drop";
 import type { BoardCategory } from "../task-board.types";
 
+const { commitLocalBatchMock } = vi.hoisted(() => ({
+   commitLocalBatchMock: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/features/tasks/data/local/task-idb", async (importOriginal) => {
+   const actual =
+      await importOriginal<
+         typeof import("@/features/tasks/data/local/task-idb")
+      >();
+   return { ...actual, commitLocalBatch: commitLocalBatchMock };
+});
+
 const userCategories: BoardCategory[] = [
    {
       id: "cat_x",
@@ -31,12 +43,18 @@ beforeEach(() => {
    persistTask.mockReset().mockResolvedValue(undefined);
    persistTasks.mockReset().mockResolvedValue(undefined);
    persistCategory.mockReset().mockResolvedValue(undefined);
+   commitLocalBatchMock.mockReset().mockResolvedValue(undefined);
 });
 
-function useHarness(initialCategories: BoardCategory[]) {
+function useHarness(
+   initialCategories: BoardCategory[],
+   initialDailyCategories: BoardCategory[] = []
+) {
    const [weeklyCategories, setWeeklyCategories] =
       useState<BoardCategory[]>(initialCategories);
-   const [dailyCategories, setDailyCategories] = useState<BoardCategory[]>([]);
+   const [dailyCategories, setDailyCategories] = useState<BoardCategory[]>(
+      initialDailyCategories
+   );
 
    const dnd = useTaskDragAndDrop({
       userId: "u_1",
@@ -137,5 +155,80 @@ describe("useTaskDragAndDrop — intra-category ordering", () => {
 
       const tasks = result.current.weeklyCategories[0].tasks.map((t) => t.id);
       expect(tasks).toEqual(["b", "a"]);
+   });
+});
+
+describe("useTaskDragAndDrop — column and header drops", () => {
+   it("persists the whole destination order for a category-header drop", () => {
+      const { result } = renderHook(() => useHarness(userCategories));
+
+      act(() => {
+         result.current.dnd.handleTaskDragStart(dragEvent(), "c", 1, "weekly");
+      });
+      act(() => {
+         result.current.dnd.handleCategoryDrop(dragEvent(), 0, "weekly");
+      });
+
+      // The moved task is first and the siblings keep distinct slots.
+      const reorderCall = persistTasks.mock.calls.find(
+         ([, mutation]) => mutation.action === "REORDER"
+      );
+      expect(reorderCall?.[1].payload.taskIds).toEqual(["c", "a", "b"]);
+   });
+
+   it("creates a weekly category when a daily task is dropped on an empty column", () => {
+      const daily: BoardCategory[] = [
+         {
+            id: "cat_d",
+            name: "Daily",
+            isCollapsed: false,
+            tasks: [{ id: "d1", text: "D1", completed: false, status: "TODO" }],
+         },
+      ];
+      const { result } = renderHook(() => useHarness([], daily));
+
+      act(() => {
+         result.current.dnd.handleTaskDragStart(dragEvent(), "d1", 0, "daily");
+      });
+      act(() => {
+         result.current.dnd.handleColumnDrop(dragEvent(), "weekly");
+      });
+
+      const createCall = persistCategory.mock.calls.find(
+         ([, mutation]) => mutation.action === "CREATE"
+      );
+      expect(createCall?.[1].payload).toMatchObject({ taskType: "WEEKLY" });
+      expect(result.current.weeklyCategories[0].tasks.map((t) => t.id)).toEqual(
+         ["d1"]
+      );
+   });
+
+   it("sends the viewed week with members moved to the weekly column", () => {
+      const daily: BoardCategory[] = [
+         {
+            id: "cat_d",
+            name: "Daily",
+            isCollapsed: false,
+            tasks: [{ id: "d1", text: "D1", completed: false, status: "TODO" }],
+         },
+      ];
+      const { result } = renderHook(() => useHarness([], daily));
+
+      act(() => {
+         result.current.dnd.handleCategoryDragStart(dragEvent(), 0, "daily");
+      });
+      act(() => {
+         result.current.dnd.handleCategoryDrop(dragEvent(), 0, "weekly");
+      });
+
+      const batch = commitLocalBatchMock.mock.calls[0]?.[0];
+      const moveCall = (batch?.mutations ?? []).find(
+         (mutation: { action: string; entityType: string }) =>
+            mutation.action === "MOVE" && mutation.entityType === "TASK"
+      );
+      expect(moveCall?.payload).toMatchObject({
+         taskType: "WEEKLY",
+         dueDate: "2026-11-17",
+      });
    });
 });

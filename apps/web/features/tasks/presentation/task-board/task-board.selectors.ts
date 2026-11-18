@@ -453,7 +453,9 @@ export function mapLocalRecordsToBoard(
          status: effectiveStatus,
          dueDate: effectiveDueDate,
          createdAt: t.createdAt,
+         updatedAt: t.updatedAt,
          challengeId: t.challengeId ?? null,
+         syncState: t.syncState,
       };
    };
 
@@ -513,15 +515,33 @@ export function applyPendingTasks(
 ): BoardSnapshot {
    if (pendingTaskIds.size === 0) return board;
 
+   // IndexedDB is authoritative for rows that are still pending. Overlaying
+   // the in-memory snapshot would replace a queued offline edit with the older
+   // server copy. Only rows whose stored record is already synced get the
+   // in-memory overlay (a move that exists only in React state).
+   const storedTasks = new Map<string, BoardTask>();
+   for (const category of [
+      ...board.dailyCategories,
+      ...board.weeklyCategories,
+   ]) {
+      for (const task of category.tasks) {
+         storedTasks.set(task.id, task);
+      }
+   }
+
    const currentTasks = new Map<string, BoardTask>();
    for (const category of [
       ...current.dailyCategories,
       ...current.weeklyCategories,
    ]) {
       for (const task of category.tasks) {
-         if (pendingTaskIds.has(task.id)) {
-            currentTasks.set(task.id, task);
-         }
+         if (!pendingTaskIds.has(task.id)) continue;
+         const stored = storedTasks.get(task.id);
+         // A queued record outranks the server snapshot: it holds the user's
+         // offline edit, which the snapshot predates. Legacy records without a
+         // syncState keep the previous overlay behaviour.
+         if (stored?.syncState && stored.syncState !== "synced") continue;
+         currentTasks.set(task.id, task);
       }
    }
 
@@ -530,7 +550,7 @@ export function applyPendingTasks(
    const strip = (categories: BoardCategory[]): BoardCategory[] =>
       categories.map((category) => ({
          ...category,
-         tasks: category.tasks.filter((task) => !pendingTaskIds.has(task.id)),
+         tasks: category.tasks.filter((task) => !currentTasks.has(task.id)),
       }));
 
    const insertInto = (

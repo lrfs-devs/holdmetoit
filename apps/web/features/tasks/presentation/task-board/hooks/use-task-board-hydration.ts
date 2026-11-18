@@ -160,34 +160,16 @@ export function useTaskBoardHydration({
                      userId
                   );
 
-                  const existingCats = await getAllLocalCategories(
-                     userId ?? null
-                  );
-                  const existingTasks = await getAllLocalTasks(userId ?? null);
-
-                  const pendingCatIds = new Set(
-                     existingCats
-                        .filter((c) => c.syncState && c.syncState !== "synced")
-                        .map((c) => c.id)
-                  );
-                  const pendingTaskIdsToKeep = new Set(
-                     existingTasks
-                        .filter((t) => t.syncState && t.syncState !== "synced")
-                        .map((t) => t.id)
-                  );
-
-                  const catsToSeed = seedCats.filter(
-                     (c) => !pendingCatIds.has(c.id)
-                  );
-                  const tasksToSeed = seedTasks.filter(
-                     (t) => !pendingTaskIdsToKeep.has(t.id)
-                  );
-
-                  if (catsToSeed.length > 0) {
-                     await putLocalCategories(catsToSeed);
+                  // The pending check runs inside each write transaction: a
+                  // local edit committed while the categories were being
+                  // written must not be replaced by server fields.
+                  if (seedCats.length > 0) {
+                     await putLocalCategories(seedCats, {
+                        skipIfPending: true,
+                     });
                   }
-                  if (tasksToSeed.length > 0) {
-                     await putLocalTasks(tasksToSeed);
+                  if (seedTasks.length > 0) {
+                     await putLocalTasks(seedTasks, { skipIfPending: true });
                   }
                }
                return;

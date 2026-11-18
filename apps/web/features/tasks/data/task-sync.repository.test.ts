@@ -1084,6 +1084,82 @@ describe("processBatchSync (task-sync.repository)", () => {
          expect(prisma.task.updateMany).toHaveBeenCalled();
       });
 
+      it("rejects a category-only move that would retype a locked goal", async () => {
+         // The payload carries no taskType: only the destination category's
+         // DAILY type would reclassify (and unlink) the weekly goal.
+         vi.mocked(prisma.task.findFirst)
+            .mockResolvedValueOnce(lockedGuard as never)
+            .mockResolvedValueOnce(lockedRow as never);
+         vi.mocked(prisma.category.findFirst).mockResolvedValueOnce({
+            id: "cat_daily",
+            userId,
+            name: "Daily",
+            taskType: "DAILY",
+            isDeleted: false,
+         } as never);
+
+         const res = await processBatchSync(userId, [
+            {
+               id: "mut-grace-move",
+               entityType: "TASK",
+               action: "MOVE",
+               payload: { taskId: "t_weekly", categoryId: "cat_daily" },
+               createdAt: Date.now(),
+               retryCount: 0,
+            },
+         ]);
+
+         expect(res.mutationResults?.[0]).toMatchObject({
+            id: "mut-grace-move",
+            status: "conflict",
+            reason: "task_locked",
+         });
+         expect(prisma.task.updateMany).not.toHaveBeenCalled();
+      });
+
+      it("rejects a category type change when a child goal's results are locked", async () => {
+         vi.mocked(prisma.category.findUnique).mockResolvedValueOnce({
+            id: "cat_1",
+            userId,
+            name: "Chemistry",
+            taskType: "WEEKLY",
+            sortOrder: 0,
+            isDeleted: false,
+            deletionTime: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            revision: 1,
+         } as never);
+         vi.mocked(prisma.category.findFirst).mockResolvedValueOnce(null);
+         // Inside the grace window, so only the results lock can reject it.
+         vi.mocked(prisma.task.findMany).mockResolvedValue([
+            {
+               ...lockedGuard,
+               createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+               challenge: { resultsLockedAt: new Date() },
+            },
+         ] as never);
+
+         const res = await processBatchSync(userId, [
+            {
+               id: "mut-results-cat",
+               entityType: "CATEGORY",
+               action: "UPDATE",
+               payload: { categoryId: "cat_1", taskType: "DAILY" },
+               createdAt: Date.now(),
+               retryCount: 0,
+            },
+         ]);
+
+         expect(res.mutationResults?.[0]).toMatchObject({
+            id: "mut-results-cat",
+            status: "conflict",
+            reason: "task_locked",
+         });
+         expect(prisma.category.updateMany).not.toHaveBeenCalled();
+         expect(prisma.task.updateMany).not.toHaveBeenCalled();
+      });
+
       it("deletes a weekly goal inside the grace period", async () => {
          vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
             ...lockedGuard,

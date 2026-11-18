@@ -98,6 +98,33 @@ describe("CockpitTaskMenu (KAN-18 / Issue #100)", () => {
       expect(html).not.toContain("Delete Task (Locked)");
    });
 
+   it("locks every status action when the challenge results are locked", () => {
+      const html = renderToStaticMarkup(
+         createElement(TaskMenuItems, {
+            task: mockTask,
+            catIdx: 0,
+            taskType: "weekly",
+            effectiveTodayDate: "2026-10-02",
+            dayOptions: mockDayOptions,
+            selectedDateKey: "2026-10-02",
+            isResultsLocked: true,
+            onSetStatus: vi.fn(),
+            onMoveToDay: vi.fn(),
+            onEditTask: vi.fn(),
+            onDeleteTask: vi.fn(),
+            Item: MockItem,
+            Separator: MockSeparator,
+            Label: MockLabel,
+         })
+      );
+
+      expect(html).toContain("Status (Locked)");
+      expect(html).not.toContain("Mark as Completed");
+      expect(html).not.toContain("In Progress");
+      expect(html).toContain("Edit Task (Locked)");
+      expect(html).toContain("Delete Task (Locked)");
+   });
+
    it("renders TaskMenuItems with completed task options", () => {
       const completedTask: BoardTask = {
          ...mockTask,
