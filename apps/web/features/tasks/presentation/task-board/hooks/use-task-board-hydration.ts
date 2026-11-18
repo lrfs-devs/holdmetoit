@@ -30,13 +30,18 @@ import type {
    LocalCategoryRecord,
    LocalTaskRecord,
 } from "@/features/tasks/domain/task-sync.types";
-import { mapLocalRecordsToBoard } from "../task-board.selectors";
+import {
+   applyPendingTasks,
+   mapLocalRecordsToBoard,
+} from "../task-board.selectors";
 import type { BoardCategory } from "../task-board.types";
 
 export interface UseTaskBoardHydrationOptions {
    userId?: string | null;
    userTasks?: UserCategorizedTasks | null;
    collapsedCategoryIdsRef: MutableRefObject<Set<string>>;
+   dailyCategoriesRef: MutableRefObject<BoardCategory[]>;
+   weeklyCategoriesRef: MutableRefObject<BoardCategory[]>;
    setDailyCategories: Dispatch<SetStateAction<BoardCategory[]>>;
    setWeeklyCategories: Dispatch<SetStateAction<BoardCategory[]>>;
 }
@@ -95,6 +100,8 @@ export function useTaskBoardHydration({
    userId,
    userTasks,
    collapsedCategoryIdsRef,
+   dailyCategoriesRef,
+   weeklyCategoriesRef,
    setDailyCategories,
    setWeeklyCategories,
 }: UseTaskBoardHydrationOptions): void {
@@ -212,54 +219,18 @@ export function useTaskBoardHydration({
                   putLocalTasks(tasksToHeal).catch(() => {});
                }
 
-               setDailyCategories((currentCategories) => {
-                  if (pendingTaskIds.size === 0) return dailyCategories;
-                  return dailyCategories.map((cat) => ({
-                     ...cat,
-                     tasks: cat.tasks.map((task) => {
-                        if (pendingTaskIds.has(task.id)) {
-                           const currentCat = currentCategories.find((c) =>
-                              c.tasks.some((t) => t.id === task.id)
-                           );
-                           const currentTask = currentCat?.tasks.find(
-                              (t) => t.id === task.id
-                           );
-                           if (currentTask) {
-                              return {
-                                 ...task,
-                                 completed: currentTask.completed,
-                                 status: currentTask.status,
-                              };
-                           }
-                        }
-                        return task;
-                     }),
-                  }));
-               });
-               setWeeklyCategories((currentCategories) => {
-                  if (pendingTaskIds.size === 0) return weeklyCategories;
-                  return weeklyCategories.map((cat) => ({
-                     ...cat,
-                     tasks: cat.tasks.map((task) => {
-                        if (pendingTaskIds.has(task.id)) {
-                           const currentCat = currentCategories.find((c) =>
-                              c.tasks.some((t) => t.id === task.id)
-                           );
-                           const currentTask = currentCat?.tasks.find(
-                              (t) => t.id === task.id
-                           );
-                           if (currentTask) {
-                              return {
-                                 ...task,
-                                 completed: currentTask.completed,
-                                 status: currentTask.status,
-                              };
-                           }
-                        }
-                        return task;
-                     }),
-                  }));
-               });
+               // Re-apply optimistic placements so a background sync cannot
+               // undo an unacknowledged move (category, column, or day).
+               const merged = applyPendingTasks(
+                  { dailyCategories, weeklyCategories },
+                  {
+                     dailyCategories: dailyCategoriesRef.current,
+                     weeklyCategories: weeklyCategoriesRef.current,
+                  },
+                  pendingTaskIds
+               );
+               setDailyCategories(merged.dailyCategories);
+               setWeeklyCategories(merged.weeklyCategories);
             } else if (userTasks && userTasks.categories.length > 0) {
                logTaskSync("Seeding IndexedDB from server userTasks...");
                const { seedCats, seedTasks } = buildSeedRecords(
@@ -288,6 +259,8 @@ export function useTaskBoardHydration({
       userId,
       userTasks,
       collapsedCategoryIdsRef,
+      dailyCategoriesRef,
+      weeklyCategoriesRef,
       setDailyCategories,
       setWeeklyCategories,
    ]);

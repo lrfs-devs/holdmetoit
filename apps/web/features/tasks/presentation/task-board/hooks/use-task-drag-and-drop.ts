@@ -43,6 +43,7 @@ export interface UseTaskDragAndDropOptions {
    setDailyCategories: Dispatch<SetStateAction<BoardCategory[]>>;
    setWeeklyCategories: Dispatch<SetStateAction<BoardCategory[]>>;
    selectedDateKey: string;
+   activeWeeklyAnchorDateKey: string;
    effectiveTodayDate: string;
    hasChallengeContext: boolean;
    isPastDayLocked: boolean;
@@ -116,6 +117,7 @@ export function useTaskDragAndDrop({
    setDailyCategories,
    setWeeklyCategories,
    selectedDateKey,
+   activeWeeklyAnchorDateKey,
    effectiveTodayDate,
    hasChallengeContext,
    isPastDayLocked,
@@ -129,6 +131,21 @@ export function useTaskDragAndDrop({
    persistTasks,
    persistCategory,
 }: UseTaskDragAndDropOptions): TaskDragAndDrop {
+   /** Week/day stamp a task receives when it changes column. */
+   const resolveTargetDueDate = (
+      sourceColumn: "daily" | "weekly",
+      targetColumn: "daily" | "weekly"
+   ): string | null | undefined => {
+      if (sourceColumn === "weekly" && targetColumn === "daily") {
+         return selectedDateKey;
+      }
+      if (sourceColumn === "daily" && targetColumn === "weekly") {
+         // Stamp the week shown on the weekly board; leaving it null buckets
+         // the task under its createdAt week and it disappears from view.
+         return activeWeeklyAnchorDateKey;
+      }
+      return undefined;
+   };
    const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
    const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
 
@@ -513,20 +530,35 @@ export function useTaskDragAndDrop({
       const targetIndexInCat = targetCat.tasks.findIndex(
          (t) => t.id === targetTaskId
       );
-      const destIdx =
-         dragOverInfo?.position === "below"
-            ? targetIndexInCat + 1
-            : targetIndexInCat;
+      const sourceIndexInCat = targetCat.tasks.findIndex(
+         (t) => t.id === draggedItem.id
+      );
+      const dropPosition =
+         dragOverInfo?.position === "below" ? "below" : "above";
 
-      const isMovingWeeklyToDaily =
-         draggedItem.sourceColumn === "weekly" && targetColumn === "daily";
-      const isMovingDailyToWeekly =
-         draggedItem.sourceColumn === "daily" && targetColumn === "weekly";
-      const targetDueDate = isMovingWeeklyToDaily
-         ? selectedDateKey
-         : isMovingDailyToWeekly
-           ? null
-           : undefined;
+      // Only a same-list move shifts the destination index when the source is
+      // removed; cross-category drops insert into a different array.
+      const isSameCategory =
+         draggedItem.sourceColumn === targetColumn &&
+         draggedItem.sourceCatIdx === targetCatIdx;
+
+      const destIdx =
+         isSameCategory && sourceIndexInCat !== -1 && targetIndexInCat !== -1
+            ? calculateReorderIndex(
+                 sourceIndexInCat,
+                 targetIndexInCat,
+                 dropPosition
+              )
+            : targetIndexInCat === -1
+              ? targetCat.tasks.length
+              : dropPosition === "below"
+                ? targetIndexInCat + 1
+                : targetIndexInCat;
+
+      const targetDueDate = resolveTargetDueDate(
+         draggedItem.sourceColumn,
+         targetColumn
+      );
 
       const res = moveTaskBetweenCategories({
          taskId: draggedItem.id,
@@ -706,15 +738,10 @@ export function useTaskDragAndDrop({
                   : targetCatIdx;
          }
 
-         const isMovingWeeklyToDaily =
-            draggedItem.sourceColumn === "weekly" && targetColumn === "daily";
-         const isMovingDailyToWeekly =
-            draggedItem.sourceColumn === "daily" && targetColumn === "weekly";
-         const targetDueDate = isMovingWeeklyToDaily
-            ? selectedDateKey
-            : isMovingDailyToWeekly
-              ? null
-              : undefined;
+         const targetDueDate = resolveTargetDueDate(
+            draggedItem.sourceColumn,
+            targetColumn
+         );
 
          const res = moveCategoryBetweenColumns({
             categoryIndex: draggedItem.sourceCatIdx,
@@ -888,15 +915,10 @@ export function useTaskDragAndDrop({
          }
       } else if (draggedItem.type === "task" && draggedItem.id) {
          // Dropping a task into a category header
-         const isMovingWeeklyToDaily =
-            draggedItem.sourceColumn === "weekly" && targetColumn === "daily";
-         const isMovingDailyToWeekly =
-            draggedItem.sourceColumn === "daily" && targetColumn === "weekly";
-         const targetDueDate = isMovingWeeklyToDaily
-            ? selectedDateKey
-            : isMovingDailyToWeekly
-              ? null
-              : undefined;
+         const targetDueDate = resolveTargetDueDate(
+            draggedItem.sourceColumn,
+            targetColumn
+         );
 
          const res = moveTaskBetweenCategories({
             taskId: draggedItem.id,
@@ -969,15 +991,10 @@ export function useTaskDragAndDrop({
 
       if (draggedItem.type === "category") {
          const destIndex = targetCategories.length;
-         const isMovingWeeklyToDaily =
-            draggedItem.sourceColumn === "weekly" && targetColumn === "daily";
-         const isMovingDailyToWeekly =
-            draggedItem.sourceColumn === "daily" && targetColumn === "weekly";
-         const targetDueDate = isMovingWeeklyToDaily
-            ? selectedDateKey
-            : isMovingDailyToWeekly
-              ? null
-              : undefined;
+         const targetDueDate = resolveTargetDueDate(
+            draggedItem.sourceColumn,
+            targetColumn
+         );
 
          const res = moveCategoryBetweenColumns({
             categoryIndex: draggedItem.sourceCatIdx,
@@ -1213,17 +1230,10 @@ export function useTaskDragAndDrop({
             }
          } else if (targetCategories.length > 0) {
             const lastCatIdx = targetCategories.length - 1;
-            const isMovingWeeklyToDaily =
-               draggedItem.sourceColumn === "weekly" &&
-               targetColumn === "daily";
-            const isMovingDailyToWeekly =
-               draggedItem.sourceColumn === "daily" &&
-               targetColumn === "weekly";
-            const targetDueDate = isMovingWeeklyToDaily
-               ? selectedDateKey
-               : isMovingDailyToWeekly
-                 ? null
-                 : undefined;
+            const targetDueDate = resolveTargetDueDate(
+               draggedItem.sourceColumn,
+               targetColumn
+            );
 
             const res = moveTaskBetweenCategories({
                taskId: draggedItem.id,

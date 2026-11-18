@@ -46,6 +46,7 @@ function useHarness(initialCategories: BoardCategory[]) {
       setDailyCategories,
       setWeeklyCategories,
       selectedDateKey: "2026-11-17",
+      activeWeeklyAnchorDateKey: "2026-11-17",
       effectiveTodayDate: "2026-11-17",
       hasChallengeContext: false,
       isPastDayLocked: false,
@@ -60,14 +61,17 @@ function useHarness(initialCategories: BoardCategory[]) {
       persistCategory,
    });
 
-   return { dnd };
+   return { dnd, weeklyCategories };
 }
 
 function dragEvent() {
    return {
       preventDefault: vi.fn(),
       stopPropagation: vi.fn(),
-      currentTarget: document.createElement("div"),
+      currentTarget: Object.assign(document.createElement("div"), {
+         getBoundingClientRect: () => ({ top: 0, height: 20 }),
+      }),
+      clientY: 15,
       dataTransfer: { effectAllowed: "", dropEffect: "", setData: vi.fn() },
    } as unknown as React.DragEvent;
 }
@@ -114,5 +118,24 @@ describe("useTaskDragAndDrop — cross-category drop", () => {
       expect(persistTask).not.toHaveBeenCalled();
       expect(persistTasks).toHaveBeenCalledTimes(1);
       expect(persistTasks.mock.calls[0][1].action).toBe("REORDER");
+   });
+});
+
+describe("useTaskDragAndDrop — intra-category ordering", () => {
+   it("drops a task one slot down instead of two", () => {
+      const { result } = renderHook(() => useHarness(userCategories));
+
+      act(() => {
+         result.current.dnd.handleTaskDragStart(dragEvent(), "a", 0, "weekly");
+      });
+      act(() => {
+         result.current.dnd.handleTaskDragOver(dragEvent(), "b", 0, "weekly");
+      });
+      act(() => {
+         result.current.dnd.handleTaskDrop(dragEvent(), "b", 0, "weekly");
+      });
+
+      const tasks = result.current.weeklyCategories[0].tasks.map((t) => t.id);
+      expect(tasks).toEqual(["b", "a"]);
    });
 });

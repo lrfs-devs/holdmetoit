@@ -87,6 +87,9 @@ export const taskDeletePayloadSchema = z.object({
 
 export const taskReorderPayloadSchema = z.object({
    taskIds: z.array(syncIdSchema).min(1),
+   baseRevisions: z
+      .record(z.string(), z.number().int().nonnegative())
+      .optional(),
 });
 
 export const taskRolloverPayloadSchema = z.object({
@@ -114,6 +117,9 @@ export const categoryDeletePayloadSchema = z.object({
 
 export const categoryReorderPayloadSchema = z.object({
    categoryIds: z.array(syncIdSchema).min(1),
+   baseRevisions: z
+      .record(z.string(), z.number().int().nonnegative())
+      .optional(),
 });
 
 /**

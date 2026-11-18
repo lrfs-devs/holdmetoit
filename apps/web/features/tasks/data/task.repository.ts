@@ -211,6 +211,9 @@ export async function getUserCategorizedTasksFromDatabase(
 
    const categoryItems: CategoryItem[] = categories.map(toCategoryItem);
 
+   // Grouping stays task-driven so legacy mixed categories remain visible while
+   // the repair script has not run yet. New mixed categories can no longer be
+   // created, and a category move now cascades its type to every task.
    const dailyCategories: CategoryGroup[] = categories
       .filter((c) => {
          const hasDailyTasks = c.tasks.some((t) => t.taskType === "DAILY");

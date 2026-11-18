@@ -267,6 +267,8 @@ export function useTaskBoardModel({
       collapsedCategoryIds,
       setCollapsedCategoryIds,
       collapsedCategoryIdsRef,
+      dailyCategoriesRef,
+      weeklyCategoriesRef,
       toggleDailyCollapse,
       toggleWeeklyCollapse,
       isRolloverSnoozed,
@@ -456,6 +458,7 @@ export function useTaskBoardModel({
       setDailyCategories,
       setWeeklyCategories,
       selectedDateKey,
+      activeWeeklyAnchorDateKey,
       effectiveTodayDate,
       hasChallengeContext,
       isPastDayLocked,
@@ -483,6 +486,8 @@ export function useTaskBoardModel({
       userId,
       userTasks,
       collapsedCategoryIdsRef,
+      dailyCategoriesRef,
+      weeklyCategoriesRef,
       setDailyCategories,
       setWeeklyCategories,
    });
@@ -686,24 +691,42 @@ export function useTaskBoardModel({
       if (!newTodoText.trim()) return;
 
       const trimmedCustom = customCategory.trim();
-      // If user typed a custom name that matches an existing weekly category, link to that parent category
-      const matchingWeekly = trimmedCustom
-         ? weeklyCategories.find(
-              (c) => c.name.toLowerCase() === trimmedCustom.toLowerCase()
-           ) ||
-           userTasks?.categories?.find(
-              (c) =>
-                 c.taskType === "WEEKLY" &&
-                 c.name.toLowerCase() === trimmedCustom.toLowerCase()
-           )
-         : undefined;
+      // A weekly task may reuse an existing weekly category by name. A daily
+      // task never does: categories are single-column, so the same name must
+      // resolve to a DAILY category (created when absent).
+      const matchingWeekly =
+         addModalType === "weekly" && trimmedCustom
+            ? weeklyCategories.find(
+                 (c) => c.name.toLowerCase() === trimmedCustom.toLowerCase()
+              ) ||
+              userTasks?.categories?.find(
+                 (c) =>
+                    c.taskType === "WEEKLY" &&
+                    c.name.toLowerCase() === trimmedCustom.toLowerCase()
+              )
+            : undefined;
+
+      const matchingDaily =
+         addModalType === "daily" && trimmedCustom
+            ? dailyCategories.find(
+                 (c) => c.name.toLowerCase() === trimmedCustom.toLowerCase()
+              ) ||
+              userTasks?.categories?.find(
+                 (c) =>
+                    c.taskType === "DAILY" &&
+                    c.name.toLowerCase() === trimmedCustom.toLowerCase()
+              )
+            : undefined;
 
       const isNew = Boolean(
-         isCreatingCategory && trimmedCustom && !matchingWeekly
+         isCreatingCategory &&
+         trimmedCustom &&
+         !matchingWeekly &&
+         !matchingDaily
       );
       const targetCategoryName =
          (isCreatingCategory && trimmedCustom
-            ? matchingWeekly?.name || trimmedCustom
+            ? matchingWeekly?.name || matchingDaily?.name || trimmedCustom
             : selectedCategory) || "General";
       const taskType = addModalType === "daily" ? "DAILY" : "WEEKLY";
       const resolvedDueDate =
@@ -745,21 +768,16 @@ export function useTaskBoardModel({
          const existingInDaily = dailyCategories.find(
             (c) => c.name === targetCategoryName
          );
-         const existingInWeekly = weeklyCategories.find(
-            (c) => c.name === targetCategoryName
-         );
          const existingInServer = userTasks?.categories?.find(
-            (c) => c.name === targetCategoryName
+            (c) => c.taskType === "DAILY" && c.name === targetCategoryName
          );
 
          targetCatId =
             existingInDaily?.id ||
-            existingInWeekly?.id ||
             existingInServer?.id ||
             (isNew
                ? crypto.randomUUID()
                : dailyCategoryNameToId.get(targetCategoryName) ||
-                 weeklyCategoryNameToId.get(targetCategoryName) ||
                  crypto.randomUUID());
 
          setDailyCategories((prev) => {
@@ -1002,34 +1020,83 @@ export function useTaskBoardModel({
          });
 
          const nowIso = new Date().toISOString();
-         if (!existingCat) {
-            putLocalCategory({
-               id: targetCatId,
-               userId: userId ?? null,
-               name: targetCategoryName,
-               taskType: "DAILY",
-               sortOrder: 0,
-               createdAt: nowIso,
-               updatedAt: nowIso,
-               syncState: "pending",
-            }).catch(() => {});
-         }
+         const sortOrder = existingCat?.tasks.length ?? 0;
 
-         putLocalTask(
+         const localCategories: LocalCategoryRecord[] = existingCat
+            ? []
+            : [
+                 {
+                    id: targetCatId,
+                    userId: userId ?? null,
+                    name: targetCategoryName,
+                    taskType: "DAILY",
+                    sortOrder: 0,
+                    createdAt: nowIso,
+                    updatedAt: nowIso,
+                    syncState: "pending",
+                 },
+              ];
+
+         const localTasks: LocalTaskRecord[] = [
             buildBoardTaskRecord({
                task: newTask,
                userId: userId ?? null,
                categoryId: targetCatId,
                taskType: "DAILY",
-               sortOrder: existingCat?.tasks.length ?? 0,
+               sortOrder,
                dueDate: targetDateKey,
                title: trimmed,
                challengeId: null,
                nowIso,
-            })
-         ).catch(() => {});
+            }),
+         ];
+
+         const mutations: Array<Omit<QueuedMutation, "userId">> = [];
+         if (!existingCat) {
+            mutations.push({
+               id: crypto.randomUUID(),
+               entityType: "CATEGORY",
+               action: "CREATE",
+               payload: {
+                  id: targetCatId,
+                  name: targetCategoryName,
+                  taskType: "DAILY",
+                  sortOrder: 0,
+               },
+               createdAt: Date.now(),
+               retryCount: 0,
+            });
+         }
+         mutations.push({
+            id: crypto.randomUUID(),
+            entityType: "TASK",
+            action: "CREATE",
+            payload: {
+               id: newTaskId,
+               categoryId: targetCatId,
+               title: trimmed,
+               taskType: "DAILY",
+               sortOrder,
+               isComplete: false,
+               status: "TODO",
+               dueDate: targetDateKey,
+            },
+            createdAt: Date.now() + 1,
+            retryCount: 0,
+         });
+
+         commitLocalBatch({
+            categories: localCategories,
+            tasks: localTasks,
+            mutations:
+               isLoggedIn && userId
+                  ? mutations.map((mutation) => ({ ...mutation, userId }))
+                  : [],
+         })
+            .then(() => scheduleSync(userId))
+            .catch(() => {});
       },
-      [selectedDateKey, effectiveTodayDate, dailyCategories, userId]
+      [selectedDateKey, effectiveTodayDate, dailyCategories, userId, isLoggedIn]
    );
 
    useEffect(() => {

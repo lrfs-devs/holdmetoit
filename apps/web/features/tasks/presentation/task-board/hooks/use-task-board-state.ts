@@ -29,6 +29,8 @@ export interface TaskBoardState {
    setDailyCategories: React.Dispatch<React.SetStateAction<BoardCategory[]>>;
    weeklyCategories: BoardCategory[];
    setWeeklyCategories: React.Dispatch<React.SetStateAction<BoardCategory[]>>;
+   dailyCategoriesRef: React.MutableRefObject<BoardCategory[]>;
+   weeklyCategoriesRef: React.MutableRefObject<BoardCategory[]>;
    expandedTaskIds: Set<string>;
    setExpandedTaskIds: React.Dispatch<React.SetStateAction<Set<string>>>;
    toggleTaskExpand: (taskId: string, e?: React.MouseEvent) => void;
@@ -170,6 +172,11 @@ export function useTaskBoardState({
       () => mapServerCategories(userTasks?.weeklyCategories)
    );
 
+   const dailyCategoriesRef = useRef<BoardCategory[]>(dailyCategories);
+   dailyCategoriesRef.current = dailyCategories;
+   const weeklyCategoriesRef = useRef<BoardCategory[]>(weeklyCategories);
+   weeklyCategoriesRef.current = weeklyCategories;
+
    const [isRolloverSnoozed, setIsRolloverSnoozed] = useState<boolean>(
       Boolean(initialIsRolloverSnoozed)
    );
@@ -226,6 +233,8 @@ export function useTaskBoardState({
       setDailyCategories,
       weeklyCategories,
       setWeeklyCategories,
+      dailyCategoriesRef,
+      weeklyCategoriesRef,
       expandedTaskIds,
       setExpandedTaskIds,
       toggleTaskExpand,

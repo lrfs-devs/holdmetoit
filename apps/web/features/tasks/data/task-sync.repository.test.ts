@@ -799,6 +799,85 @@ describe("processBatchSync (task-sync.repository)", () => {
       });
    });
 
+   it("applies a reorder when every base revision matches", async () => {
+      vi.mocked(prisma.task.findMany).mockResolvedValueOnce([
+         { id: "t_a", revision: 2, categoryId: "c1" },
+         { id: "t_b", revision: 5, categoryId: "c1" },
+      ] as never);
+
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-reorder-ok",
+            entityType: "TASK",
+            action: "REORDER",
+            payload: {
+               taskIds: ["t_a", "t_b"],
+               baseRevisions: { t_a: 2, t_b: 5 },
+            },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      expect(res.mutationResults?.[0]).toMatchObject({ status: "applied" });
+      expect(prisma.task.updateMany).toHaveBeenCalledTimes(2);
+   });
+
+   it("rejects a reorder when any base revision drifted", async () => {
+      vi.mocked(prisma.task.findMany).mockResolvedValueOnce([
+         { id: "t_a", revision: 3, categoryId: "c1" },
+         { id: "t_b", revision: 5, categoryId: "c1" },
+      ] as never);
+      vi.mocked(prisma.task.findFirst).mockResolvedValueOnce({
+         id: "t_a",
+         userId,
+         categoryId: "c1",
+         title: "A",
+         taskType: "DAILY",
+         isComplete: false,
+         isDeleted: false,
+         createdAt: new Date(),
+         updatedAt: new Date(),
+         completedAt: null,
+         revision: 3,
+      } as never);
+
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-reorder-stale",
+            entityType: "TASK",
+            action: "REORDER",
+            payload: {
+               taskIds: ["t_a", "t_b"],
+               baseRevisions: { t_a: 2, t_b: 5 },
+            },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      const result = res.mutationResults?.[0];
+      expect(result?.status).toBe("conflict");
+      expect(result?.reason).toBe("zero_rows");
+      expect(prisma.task.updateMany).not.toHaveBeenCalled();
+   });
+
+   it("applies a legacy reorder without base revisions", async () => {
+      const res = await processBatchSync(userId, [
+         {
+            id: "mut-reorder-legacy",
+            entityType: "TASK",
+            action: "REORDER",
+            payload: { taskIds: ["t_a"] },
+            createdAt: Date.now(),
+            retryCount: 0,
+         },
+      ]);
+
+      expect(res.mutationResults?.[0]).toMatchObject({ status: "applied" });
+      expect(prisma.task.updateMany).toHaveBeenCalledTimes(1);
+   });
+
    it("writes a category update with the base revision", async () => {
       vi.mocked(prisma.category.updateMany).mockResolvedValueOnce({
          count: 1,

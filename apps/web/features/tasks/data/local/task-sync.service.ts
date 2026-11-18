@@ -298,16 +298,36 @@ async function runSync(
             return m;
          }
 
-         if (m.action === "REORDER" || m.action === "ROLLOVER") {
+         if (m.action === "REORDER") {
             const payload = m.payload as {
                taskIds?: string[];
                categoryIds?: string[];
             };
             const affected =
-               m.action === "ROLLOVER" || m.entityType === "TASK"
+               m.entityType === "TASK"
                   ? (payload.taskIds ?? [])
                   : (payload.categoryIds ?? []);
+
+            // Send the expected revision per row so a stale batch is rejected
+            // instead of overwriting a newer order.
+            const baseRevisions: Record<string, number> = {};
             for (const affectedId of affected) {
+               const revision = tracked.get(affectedId);
+               if (typeof revision === "number") {
+                  baseRevisions[affectedId] = revision;
+                  tracked.set(affectedId, revision + 1);
+               }
+            }
+
+            return {
+               ...m,
+               payload: { ...m.payload, baseRevisions },
+            };
+         }
+
+         if (m.action === "ROLLOVER") {
+            const payload = m.payload as { taskIds?: string[] };
+            for (const affectedId of payload.taskIds ?? []) {
                const revision = tracked.get(affectedId);
                if (typeof revision === "number") {
                   tracked.set(affectedId, revision + 1);

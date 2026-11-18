@@ -376,7 +376,33 @@ async function applyCategoryMutation(
    }
 
    if (m.action === "REORDER") {
-      const categoryIds = (payload.categoryIds as string[]) || [];
+      const parsed = categoryReorderPayloadSchema.safeParse(payload);
+      if (!parsed.success) return INVALID;
+      const { categoryIds, baseRevisions } = parsed.data;
+
+      // Optimistic concurrency: a stale batch must not clobber a newer order.
+      if (baseRevisions) {
+         const current = await tx.category.findMany({
+            where: { id: { in: categoryIds }, userId },
+            select: { id: true, revision: true },
+         });
+         const drifted = current.find(
+            (category) =>
+               baseRevisions[category.id] !== undefined &&
+               category.revision !== baseRevisions[category.id]
+         );
+         if (drifted) {
+            const row = await tx.category.findFirst({
+               where: { id: drifted.id, userId, isDeleted: false },
+            });
+            return {
+               status: "conflict",
+               reason: "zero_rows",
+               currentCategory: row ? toCategoryItem(row) : null,
+            };
+         }
+      }
+
       for (let i = 0; i < categoryIds.length; i++) {
          await tx.category.updateMany({
             where: { id: categoryIds[i], userId },
@@ -742,7 +768,33 @@ async function applyTaskMutation(
    }
 
    if (m.action === "REORDER") {
-      const taskIds = (payload.taskIds as string[]) || [];
+      const parsed = taskReorderPayloadSchema.safeParse(payload);
+      if (!parsed.success) return INVALID;
+      const { taskIds, baseRevisions } = parsed.data;
+
+      // Optimistic concurrency: a stale batch must not clobber a newer order.
+      if (baseRevisions) {
+         const current = await tx.task.findMany({
+            where: { id: { in: taskIds }, userId, isDeleted: false },
+            select: { id: true, revision: true, categoryId: true },
+         });
+         const drifted = current.find(
+            (task) =>
+               baseRevisions[task.id] !== undefined &&
+               task.revision !== baseRevisions[task.id]
+         );
+         if (drifted) {
+            const row = await tx.task.findFirst({
+               where: { id: drifted.id, userId, isDeleted: false },
+            });
+            return {
+               status: "conflict",
+               reason: "zero_rows",
+               currentTask: row ? toTaskItem(row, row.taskType) : null,
+            };
+         }
+      }
+
       for (let i = 0; i < taskIds.length; i++) {
          await tx.task.updateMany({
             where: { id: taskIds[i], userId, isDeleted: false },

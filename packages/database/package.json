@@ -21,7 +21,9 @@
       "db:migrate:dev": "prisma migrate dev",
       "db:migrate:status": "prisma migrate status",
       "db:seed": "prisma db seed",
-      "db:seed:flags": "tsx --env-file=.env prisma/run-seed-feature-flags.ts"
+      "db:seed:flags": "tsx --env-file=.env prisma/run-seed-feature-flags.ts",
+      "db:purge-tasks": "tsx --env-file=.env prisma/purge-tasks.ts",
+      "db:copy-user": "tsx prisma/copy-user-data.ts"
    },
    "dependencies": {
       "@prisma/adapter-pg": "7.10.1",

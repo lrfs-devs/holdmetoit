@@ -13,6 +13,7 @@ import {
    selectVisibleWeeklyCategories,
    selectWeekScopedTotals,
    selectWeeklyCategoryOptions,
+   applyPendingTasks,
 } from "./task-board.selectors";
 
 function task(overrides: Partial<BoardTask> = {}): BoardTask {
@@ -158,7 +159,7 @@ describe("task-board selectors", () => {
       expect(counts.get("2026-11-18")).toEqual({ total: 1, completed: 1 });
    });
 
-   it("preserves weekly categories as daily parent options", () => {
+   it("keeps daily and weekly category options separate", () => {
       const categories = [
          categoryItem("c_w", "Sprint", "WEEKLY"),
          categoryItem("c_d", "Morning", "DAILY"),
@@ -177,6 +178,99 @@ describe("task-board selectors", () => {
 
       expect(weeklyOptions).toEqual(["Sprint"]);
       expect(independentDaily).toEqual(["Morning"]);
-      expect(dailyOptions).toEqual(["Sprint", "Morning"]);
+      // A category belongs to exactly one board, so weekly names are not
+      // offered as daily options.
+      expect(dailyOptions).toEqual(["Morning"]);
+   });
+});
+
+describe("applyPendingTasks", () => {
+   function category(
+      id: string,
+      name: string,
+      tasks: BoardTask[]
+   ): BoardCategory {
+      return { id, name, isCollapsed: false, tasks };
+   }
+
+   it("returns the same board reference when nothing is pending", () => {
+      const board = {
+         dailyCategories: [category("d1", "Daily", [task({ id: "a" })])],
+         weeklyCategories: [],
+      };
+      const result = applyPendingTasks(board, board, new Set());
+      expect(result).toBe(board);
+   });
+
+   it("keeps a pending task in its newer category", () => {
+      const board = {
+         dailyCategories: [
+            category("cx", "X", [task({ id: "a" })]),
+            category("cy", "Y", []),
+         ],
+         weeklyCategories: [],
+      };
+      const current = {
+         dailyCategories: [
+            category("cx", "X", []),
+            category("cy", "Y", [task({ id: "a" })]),
+         ],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(board, current, new Set(["a"]));
+
+      expect(result.dailyCategories[0].tasks).toHaveLength(0);
+      expect(result.dailyCategories[1].tasks.map((t) => t.id)).toEqual(["a"]);
+   });
+
+   it("keeps a pending task in its newer column", () => {
+      const board = {
+         dailyCategories: [category("d1", "Daily", [task({ id: "a" })])],
+         weeklyCategories: [category("w1", "Weekly", [])],
+      };
+      const current = {
+         dailyCategories: [category("d1", "Daily", [])],
+         weeklyCategories: [category("w1", "Weekly", [task({ id: "a" })])],
+      };
+
+      const result = applyPendingTasks(board, current, new Set(["a"]));
+
+      expect(result.dailyCategories[0].tasks).toHaveLength(0);
+      expect(result.weeklyCategories[0].tasks.map((t) => t.id)).toEqual(["a"]);
+   });
+
+   it("adds a pending task that is absent from the snapshot", () => {
+      const board = {
+         dailyCategories: [category("d1", "Daily", [])],
+         weeklyCategories: [],
+      };
+      const current = {
+         dailyCategories: [category("d1", "Daily", [task({ id: "new" })])],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(board, current, new Set(["new"]));
+
+      expect(result.dailyCategories[0].tasks).toHaveLength(1);
+   });
+
+   it("lets the snapshot win for non-pending tasks", () => {
+      const board = {
+         dailyCategories: [
+            category("d1", "Daily", [task({ id: "a", text: "from server" })]),
+         ],
+         weeklyCategories: [],
+      };
+      const current = {
+         dailyCategories: [
+            category("d1", "Daily", [task({ id: "a", text: "stale local" })]),
+         ],
+         weeklyCategories: [],
+      };
+
+      const result = applyPendingTasks(board, current, new Set());
+
+      expect(result.dailyCategories[0].tasks[0].text).toBe("from server");
    });
 });

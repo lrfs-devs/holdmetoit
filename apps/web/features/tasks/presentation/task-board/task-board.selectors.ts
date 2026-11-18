@@ -271,30 +271,30 @@ export function selectWeeklyCategoryOptions(
    );
 }
 
+/**
+ * Daily categories are their own set: a category is never shared with the
+ * weekly column, so weekly names are not offered here.
+ */
 export function selectIndependentDailyCategoryOptions(
    categories: CategoryItem[] | undefined,
    dailyCategories: BoardCategory[],
-   weeklyCategoryOptions: string[]
+   _weeklyCategoryOptions?: string[]
 ): string[] {
    return Array.from(
       new Set([
          ...(categories
             ?.filter((c) => c.taskType === "DAILY")
             .map((c) => c.name) ?? []),
-         ...dailyCategories
-            .map((c) => c.name)
-            .filter((name) => !weeklyCategoryOptions.includes(name)),
+         ...dailyCategories.map((c) => c.name),
       ])
-   ).filter((name) => !weeklyCategoryOptions.includes(name));
+   );
 }
 
 export function selectDailyCategoryOptions(
-   weeklyCategoryOptions: string[],
+   _weeklyCategoryOptions: string[],
    independentDailyCategoryOptions: string[]
 ): string[] {
-   return Array.from(
-      new Set([...weeklyCategoryOptions, ...independentDailyCategoryOptions])
-   );
+   return Array.from(new Set([...independentDailyCategoryOptions]));
 }
 
 export function selectWeeklyCategoryNameToId(
@@ -492,4 +492,103 @@ export function mapLocalRecordsToBoard(
       }));
 
    return { dailyCategories, weeklyCategories, tasksToHeal };
+}
+
+export interface BoardSnapshot {
+   dailyCategories: BoardCategory[];
+   weeklyCategories: BoardCategory[];
+}
+
+/**
+ * Re-applies optimistic task placements on top of a freshly hydrated board.
+ *
+ * Pending tasks are removed from wherever the snapshot put them and re-inserted
+ * into the category they currently occupy in memory, so an unacknowledged move
+ * (category, column, or day) is not undone by a background sync.
+ */
+export function applyPendingTasks(
+   board: BoardSnapshot,
+   current: BoardSnapshot,
+   pendingTaskIds: Set<string>
+): BoardSnapshot {
+   if (pendingTaskIds.size === 0) return board;
+
+   const currentTasks = new Map<string, BoardTask>();
+   for (const category of [
+      ...current.dailyCategories,
+      ...current.weeklyCategories,
+   ]) {
+      for (const task of category.tasks) {
+         if (pendingTaskIds.has(task.id)) {
+            currentTasks.set(task.id, task);
+         }
+      }
+   }
+
+   if (currentTasks.size === 0) return board;
+
+   const strip = (categories: BoardCategory[]): BoardCategory[] =>
+      categories.map((category) => ({
+         ...category,
+         tasks: category.tasks.filter((task) => !pendingTaskIds.has(task.id)),
+      }));
+
+   const insertInto = (
+      categories: BoardCategory[],
+      categoryId: string | undefined,
+      categoryName: string,
+      task: BoardTask
+   ): boolean => {
+      const index = categories.findIndex(
+         (category) =>
+            (categoryId && category.id === categoryId) ||
+            category.name === categoryName
+      );
+      if (index === -1) return false;
+
+      const target = categories[index];
+      categories[index] = {
+         ...target,
+         tasks: [...target.tasks, task].sort((a, b) =>
+            (a.text || "").localeCompare(b.text || "")
+         ),
+      };
+      return true;
+   };
+
+   const nextDaily = strip(board.dailyCategories);
+   const nextWeekly = strip(board.weeklyCategories);
+
+   for (const [taskId, task] of currentTasks) {
+      const currentCategory = [
+         ...current.dailyCategories,
+         ...current.weeklyCategories,
+      ].find((category) => category.tasks.some((t) => t.id === taskId));
+      if (!currentCategory) continue;
+
+      const isDaily = current.dailyCategories.some((category) =>
+         category.tasks.some((t) => t.id === taskId)
+      );
+      const targetBoard = isDaily ? nextDaily : nextWeekly;
+
+      if (
+         !insertInto(
+            targetBoard,
+            currentCategory.id,
+            currentCategory.name,
+            task
+         )
+      ) {
+         // The category is not in the snapshot (created locally, not yet
+         // synced): keep the whole current category.
+         const exists = targetBoard.some(
+            (category) =>
+               (currentCategory.id && category.id === currentCategory.id) ||
+               category.name === currentCategory.name
+         );
+         if (!exists) targetBoard.push(currentCategory);
+      }
+   }
+
+   return { dailyCategories: nextDaily, weeklyCategories: nextWeekly };
 }

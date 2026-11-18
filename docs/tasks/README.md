@@ -164,12 +164,15 @@ The upgrade only adds the new index/store; existing rows are preserved.
 - `challengeId` is only valid on `taskType = "WEEKLY"`. Daily tasks never auto-link to the
   current challenge; an explicit daily `challengeId` is ignored (and logged), and a legacy
   daily link can be cleared with a `null` challengeId.
-- A task’s `taskType` is its own board column. A category may contain tasks of either type
-  (a weekly parent can hold daily tasks); task type is immutable on update/move, and a
-  category type change does not rewrite child task types.
+- A category belongs to exactly one board. A task's `taskType` always equals its category's
+  `taskType`: a task move adopts the target category's type, and a category move cascades its
+  type to every member task. New tasks resolve to a category in their own column, so a daily
+  task named like a weekly category gets (or reuses) a **daily** category of that name.
+  Legacy mixed categories are still readable and are reassigned by
+  `packages/database/scripts/repair-mixed-categories.ts`.
 - `getUserCategorizedTasksFromDatabase` groups tasks by their own `taskType`: a task is always
   visible in its own column, and a category appears in the columns where it has tasks. Empty
-  categories stay in their own column.
+  categories stay in their own column. This tolerance exists only for un-repaired legacy rows.
 - The results-lock guard applies only to weekly tasks. Legacy daily tasks with a challenge
   link remain editable; the repair script unlinks them.
 - Historical task data repairs were performed via `repair-task-invariants.ts` (archived in git history). Routine operations preserve invariant guarantees via standard Prisma repositories and transactions.
